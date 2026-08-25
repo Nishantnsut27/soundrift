@@ -99,7 +99,7 @@ export function TrackListModern({
   useEffect(() => {
     const handleOutsideTap = (e: MouseEvent | TouchEvent) => {
       const target = e.target as HTMLElement | null;
-      if (!target && !target.closest('.track-list-container-modern')) {
+      if (!target || !target.closest('.track-list-container-modern')) {
         setHoveredTrack(null);
         setHoveredIndex(null);
       }

@@ -23,6 +23,9 @@ interface PlayerStore extends PlayerState {
   clearQueue: () => void;
   setBuffering: (buffering: boolean) => void;
   setPlaybackError: (error: string | null) => void;
+  shuffleOrder: number[];
+  shufflePosition: number;
+  volumeBeforeMute: number;
 }
 
 interface SearchStore extends SearchState {
@@ -551,7 +554,10 @@ export const usePlayerStore = create<AppStore>()(
       if (typeof candidate.name !== 'string' || !Array.isArray(candidate.tracks)) {
         throw new Error('Invalid playlist file.');
       }
-      const validTracks = (candidate.tracks as unknown[]).filter(isValidTrack).slice(0, 500);
+      const validTracks = (candidate.tracks as unknown[])
+        .filter(isValidTrack)
+        .slice(0, 500)
+        .map(t => ({ ...t, addedAt: Date.now() })) as PlaylistTrack[];
 
       const state = get();
 
