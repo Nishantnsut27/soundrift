@@ -141,6 +141,10 @@ export class UserService {
     return { trackId };
   }
 
+  public static async clearFavorites(userId: string) {
+    await Favorite.deleteMany({ user: userId });
+  }
+
   // =========================================================================
   // Playlist Management Service (Ownership Enforced)
   // =========================================================================

@@ -340,7 +340,25 @@ export const usePlayerStore = create<AppStore>()(
     }),
     seekTo: (time: number) => set({ currentTime: time }),
 
-    toggleShuffle: () => set((state) => ({ isShuffling: !state.isShuffling })),
+    toggleShuffle: () => set((state) => {
+      if (state.isShuffling) {
+        return { isShuffling: false, shuffleOrder: [], shufflePosition: 0 };
+      } else {
+        const shuffleOrder = Array.from({ length: state.queue.length }, (_, i) => i);
+        for (let i = shuffleOrder.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [shuffleOrder[i], shuffleOrder[j]] = [shuffleOrder[j], shuffleOrder[i]];
+        }
+        let shufflePosition = 0;
+        if (state.currentIndex >= 0 && state.currentIndex < state.queue.length) {
+          const pos = shuffleOrder.indexOf(state.currentIndex);
+          if (pos > 0) {
+            shuffleOrder = [...shuffleOrder.slice(pos), ...shuffleOrder.slice(0, pos)];
+          }
+        }
+        return { isShuffling: true, shuffleOrder, shufflePosition };
+      }
+    }),
 
     setRepeatMode: (mode: 'none' | 'one' | 'all') => set({ repeatMode: mode }),
 
@@ -424,9 +442,17 @@ export const usePlayerStore = create<AppStore>()(
       if (useAuthStore.getState().isAuthenticated) {
         userApi.createPlaylist(uniqueName).then((remote) => {
           if (remote && remote.id) {
-            const updated = get().playlists.map((p) => (p.id === tempId ? { ...p, id: remote.id } : p));
+            const currentState = get();
+            const currentPlaylist = currentState.playlists.find(p => p.id === tempId);
+            const updated = currentState.playlists.map((p) => (p.id === tempId ? { ...p, id: remote.id } : p));
             set({ playlists: updated });
             saveToLocalStorage(STORAGE_KEYS.PLAYLISTS, updated);
+
+            if (currentPlaylist && currentPlaylist.tracks.length > 0) {
+              currentPlaylist.tracks.forEach(track => {
+                userApi.addTrackToPlaylist(remote.id, track).catch(() => { });
+              });
+            }
           }
         }).catch(() => { });
       }
@@ -536,7 +562,7 @@ export const usePlayerStore = create<AppStore>()(
       saveToLocalStorage(STORAGE_KEYS.FAVORITES, []);
       if (useAuthStore.getState().isAuthenticated) {
         import('../services/userApi').then(({ userApi }) => {
-          userApi.removeFavorite('all').catch(() => { });
+          userApi.clearFavorites().catch(() => { });
         });
       }
     },

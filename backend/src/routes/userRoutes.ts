@@ -22,6 +22,7 @@ userRouter.delete('/search-history', UserController.clearSearchHistory as Reques
 // Favorites
 userRouter.get('/favorites', UserController.getFavorites as RequestHandler);
 userRouter.post('/favorites', UserController.addFavorite as RequestHandler);
+userRouter.delete('/favorites', UserController.clearFavorites as RequestHandler);
 userRouter.delete('/favorites/:trackId', UserController.removeFavorite as RequestHandler);
 
 // Playlists

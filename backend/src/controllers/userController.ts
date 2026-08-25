@@ -117,6 +117,18 @@ export class UserController {
     }
   }
 
+  public static async clearFavorites(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      await UserService.clearFavorites(req.user!._id.toString());
+      res.status(200).json({
+        success: true,
+        message: 'All favorites removed successfully',
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   // =========================================================================
   // Playlist Handlers
   // =========================================================================
