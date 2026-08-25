@@ -562,6 +562,20 @@ export const usePlayerStore = create<AppStore>()(
       saveToLocalStorage(STORAGE_KEYS.PLAYLISTS, newPlaylists);
 
       if (useAuthStore.getState().isAuthenticated) {
+        const isTempId = playlistId.startsWith('pl_') || playlistId.startsWith('default-playlist-');
+        if (isTempId) {
+          const pendingKey = `pending_tracks_${playlistId}`;
+          const pendingTracks: Track[] = JSON.parse(localStorage.getItem(pendingKey) || '[]');
+          const remainingPendingTracks = pendingTracks.filter(track => track.id !== trackId);
+
+          if (remainingPendingTracks.length > 0) {
+            localStorage.setItem(pendingKey, JSON.stringify(remainingPendingTracks));
+          } else {
+            localStorage.removeItem(pendingKey);
+          }
+          return;
+        }
+
         userApi.removeTrackFromPlaylist(playlistId, trackId).catch(() => { });
       }
     },
