@@ -4,6 +4,10 @@ import { formatDuration, getArtistUrl } from '../utils/formatters';
 import { AudioVisualizer } from './AudioVisualizer';
 import { useAuthStore } from '../store/authStore';
 
+function getTrackArtwork(track: Track): string {
+  return track.album_image || track.image || '';
+}
+
 interface TrackItemModernProps {
   track: Track;
   index: number;
@@ -86,11 +90,12 @@ export const TrackItemModern = memo(function TrackItemModern({
     >
       <div className="track-artwork-modern">
         <img
-          src={track.image || track.album_image}
+          src={getTrackArtwork(track)}
           alt={`${track.name} by ${track.artist_name}`}
           loading="lazy"
           onError={(e) => {
-            e.currentTarget.src = '/placeholder-album.svg';
+            e.currentTarget.src = '/Favicon.png';
+            e.currentTarget.onerror = null;
           }}
         />
 

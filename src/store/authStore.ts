@@ -93,7 +93,6 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       await authApi.logout();
     } catch {
-      // Ignore network errors on logout
     } finally {
       removeStoredToken();
       set({
@@ -123,7 +122,6 @@ export const useAuthStore = create<AuthState>((set) => ({
           localStorage.removeItem('playlists');
           localStorage.removeItem('favorites');
         } catch {
-          // Ignore storage access errors during logout cleanup.
         }
         sessionStorage.removeItem('player-playback');
         window.dispatchEvent(new CustomEvent('reset-search-state'));
@@ -161,3 +159,9 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   clearError: () => set({ error: null }),
 }));
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('auth:session-expired', () => {
+    useAuthStore.setState({ user: null, token: null, isAuthenticated: false });
+  });
+}

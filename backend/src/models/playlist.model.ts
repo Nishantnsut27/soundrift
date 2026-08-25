@@ -8,8 +8,18 @@ export interface ISongSubDoc {
   artist_id?: string;
   album_name?: string;
   album_id?: string;
+  album_image?: string;
   image?: string;
   audio?: string;
+  audiodownload?: string;
+  license_ccurl?: string;
+  musicinfo?: {
+    tags?: {
+      genres?: string[];
+      instruments?: string[];
+      vartags?: string[];
+    };
+  };
   provider?: 'jiosaavn' | 'jamendo';
 }
 
@@ -33,8 +43,30 @@ export const songSubSchema = new Schema<ISongSubDoc>(
     artist_id: { type: String, default: '' },
     album_name: { type: String, default: '' },
     album_id: { type: String, default: '' },
+    album_image: { type: String, default: '' },
     image: { type: String, default: '' },
     audio: { type: String, default: '' },
+    audiodownload: { type: String, default: '' },
+    license_ccurl: { type: String, default: '' },
+    musicinfo: {
+      type: new Schema(
+        {
+          tags: {
+            type: new Schema(
+              {
+                genres: { type: [String], default: [] },
+                instruments: { type: [String], default: [] },
+                vartags: { type: [String], default: [] },
+              },
+              { _id: false }
+            ),
+            default: undefined,
+          },
+        },
+        { _id: false }
+      ),
+      default: undefined,
+    },
     provider: { type: String, enum: ['jiosaavn', 'jamendo'], default: 'jamendo' },
   },
   { _id: false }

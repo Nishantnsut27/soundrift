@@ -23,6 +23,9 @@ export class CacheService {
       return null;
     }
 
+    this.cache.delete(key);
+    this.cache.set(key, entry);
+
     return entry.data as T;
   }
 
@@ -55,7 +58,13 @@ export class CacheService {
     const promise = (async () => {
       try {
         const result = await fetchFn();
-        this.set(key, result, customTtlMs);
+        const isEmpty =
+          result === null ||
+          result === undefined ||
+          (Array.isArray(result) && result.length === 0);
+        if (!isEmpty) {
+          this.set(key, result, customTtlMs);
+        }
         return result;
       } finally {
         this.inFlightMap.delete(key);

@@ -4,26 +4,24 @@ import { seekAudio } from './usePlayer';
 
 export function useKeyboardShortcuts() {
   useEffect(() => {
-    if (typeof window === 'undefined' || window.innerWidth <= 768) return;
+    if (typeof window === 'undefined') return;
+    const isCoarsePointer = window.matchMedia('(pointer: coarse)').matches;
+    if (isCoarsePointer) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
 
-      // Ignore keyboard shortcuts while user is typing in text inputs or textareas
-      if (
-        target &&
-        (target.tagName === 'INPUT' ||
-          target.tagName === 'TEXTAREA' ||
-          target.tagName === 'SELECT' ||
-          target.isContentEditable)
-      ) {
-        return;
+      if (!target) return;
+      if (target.isContentEditable) return;
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
+
+      if (target.closest('.volume-slider, .volume, [role="slider"]')) {
+        if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) return;
       }
 
       const store = usePlayerStore.getState();
       const key = event.key;
       const code = event.code;
 
-      // Space: Toggle Play / Pause
       if (key === ' ' || code === 'Space') {
         event.preventDefault();
         if (store.currentTrack) {
@@ -32,7 +30,6 @@ export function useKeyboardShortcuts() {
         return;
       }
 
-      // ArrowLeft: Seek -5 seconds (Clamped to 0)
       if (key === 'ArrowLeft') {
         event.preventDefault();
         if (store.currentTrack) {
@@ -41,7 +38,6 @@ export function useKeyboardShortcuts() {
         return;
       }
 
-      // ArrowRight: Seek +5 seconds (Clamped to duration or triggers nextTrack)
       if (key === 'ArrowRight') {
         event.preventDefault();
         if (store.currentTrack) {
@@ -61,35 +57,30 @@ export function useKeyboardShortcuts() {
         return;
       }
 
-      // ArrowUp: Volume +10%
       if (key === 'ArrowUp') {
         event.preventDefault();
         store.setVolume(Math.min(100, store.volume + 10));
         return;
       }
 
-      // ArrowDown: Volume -10%
       if (key === 'ArrowDown') {
         event.preventDefault();
         store.setVolume(Math.max(0, store.volume - 10));
         return;
       }
 
-      // 'm' or 'M': Toggle Mute
       if (key === 'm' || key === 'M' || code === 'KeyM') {
         event.preventDefault();
         store.toggleMute();
         return;
       }
 
-      // 's' or 'S': Toggle Shuffle
       if (key === 's' || key === 'S' || code === 'KeyS') {
         event.preventDefault();
         store.toggleShuffle();
         return;
       }
 
-      // 'r' or 'R': Cycle Repeat Mode ('none' -> 'all' -> 'one' -> 'none')
       if (key === 'r' || key === 'R' || code === 'KeyR') {
         event.preventDefault();
         const nextRepeat = store.repeatMode === 'none' ? 'all' : store.repeatMode === 'all' ? 'one' : 'none';

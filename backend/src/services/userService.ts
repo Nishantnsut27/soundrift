@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { User } from '../models/user.model.js';
 import { PlaylistModel, ISongSubDoc } from '../models/playlist.model.js';
 import { Favorite } from '../models/favorite.model.js';
@@ -6,6 +7,81 @@ import { ListeningHistory } from '../models/listeningHistory.model.js';
 import { SearchHistory } from '../models/searchHistory.model.js';
 import { CloudinaryService } from './cloudinaryService.js';
 import { AppError } from '../utils/AppError.js';
+
+const MAX_PLAYLIST_TRACKS = 500;
+const MAX_PLAYLIST_NAME_LENGTH = 100;
+const MAX_PLAYLIST_DESCRIPTION_LENGTH = 500;
+
+const toStringArray = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === 'string').slice(0, 20);
+};
+
+const getTrackId = (raw: unknown): string => {
+  const id = (raw as Record<string, unknown> | null | undefined)?.id;
+  return id === undefined || id === null ? '' : String(id).trim();
+};
+
+const normalizeTrackData = (raw: Record<string, unknown>): ISongSubDoc => {
+  const trackId = getTrackId(raw);
+  if (!trackId) {
+    throw new AppError('Invalid track data: a track id is required.', 400);
+  }
+
+  const duration = Number(raw.duration);
+  const tags = (raw.musicinfo as { tags?: Record<string, unknown> } | undefined)?.tags;
+
+  const normalized: ISongSubDoc = {
+    id: trackId,
+    name: String(raw.name || 'Untitled Track').slice(0, 300),
+    duration: Number.isFinite(duration) ? Math.max(0, duration) : 0,
+    artist_name: String(raw.artist_name || 'Unknown Artist').slice(0, 300),
+    artist_id: String(raw.artist_id || ''),
+    album_name: String(raw.album_name || '').slice(0, 300),
+    album_id: String(raw.album_id || ''),
+    album_image: String(raw.album_image || ''),
+    image: String(raw.image || ''),
+    audio: String(raw.audio || ''),
+    audiodownload: String(raw.audiodownload || ''),
+    license_ccurl: String(raw.license_ccurl || ''),
+    provider: raw.provider === 'jiosaavn' ? 'jiosaavn' : 'jamendo',
+  };
+
+  if (tags) {
+    normalized.musicinfo = {
+      tags: {
+        genres: toStringArray(tags.genres),
+        instruments: toStringArray(tags.instruments),
+        vartags: toStringArray(tags.vartags),
+      },
+    };
+  }
+
+  return normalized;
+};
+
+const normalizePlaylistName = (value: unknown): string => {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new AppError('A playlist name is required.', 400);
+  }
+  const trimmed = value.trim();
+  if (trimmed.length > MAX_PLAYLIST_NAME_LENGTH) {
+    throw new AppError(`Playlist name cannot exceed ${MAX_PLAYLIST_NAME_LENGTH} characters.`, 400);
+  }
+  return trimmed;
+};
+
+const normalizePlaylistDescription = (value: unknown): string => {
+  if (value === undefined || value === null) return '';
+  if (typeof value !== 'string') {
+    throw new AppError('Playlist description must be text.', 400);
+  }
+  const trimmed = value.trim();
+  if (trimmed.length > MAX_PLAYLIST_DESCRIPTION_LENGTH) {
+    throw new AppError(`Playlist description cannot exceed ${MAX_PLAYLIST_DESCRIPTION_LENGTH} characters.`, 400);
+  }
+  return trimmed;
+};
 
 export class UserService {
   public static async getSearchHistory(userId: string, limit = 10) {
@@ -44,29 +120,14 @@ export class UserService {
   }
 
   public static async addFavorite(userId: string, trackData: Record<string, unknown>) {
-    const trackId = String(trackData?.id || '');
-    if (!trackId) {
-      throw new AppError('Invalid track data', 400);
-    }
+    const normalized = normalizeTrackData(trackData);
 
-    const d = trackData;
     const favorite = await Favorite.findOneAndUpdate(
-      { user: userId, trackId },
+      { user: userId, trackId: normalized.id },
       {
         user: userId,
-        trackId,
-        trackData: {
-          id: trackId,
-          name: String(d.name || 'Untitled Track'),
-          duration: Number(d.duration || 0),
-          artist_name: String(d.artist_name || 'Unknown Artist'),
-          artist_id: String(d.artist_id || ''),
-          album_name: String(d.album_name || ''),
-          album_id: String(d.album_id || ''),
-          image: String(d.image || ''),
-          audio: String(d.audio || ''),
-          provider: String(d.provider || 'jamendo') as ISongSubDoc['provider'],
-        },
+        trackId: normalized.id,
+        trackData: normalized,
         addedAt: new Date(),
       },
       { upsert: true, new: true, runValidators: true }
@@ -101,10 +162,10 @@ export class UserService {
 
   public static async createPlaylist(userId: string, name: string, description = '', isPublic = false) {
     const playlist = await PlaylistModel.create({
-      name: name.trim(),
-      description: description.trim(),
+      name: normalizePlaylistName(name),
+      description: normalizePlaylistDescription(description),
       owner: userId,
-      isPublic,
+      isPublic: isPublic === true,
       tracks: [],
     });
 
@@ -126,9 +187,9 @@ export class UserService {
       throw new AppError('Playlist not found or access denied', 404);
     }
 
-    if (data.name !== undefined) playlist.name = data.name.trim();
-    if (data.description !== undefined) playlist.description = data.description.trim();
-    if (data.isPublic !== undefined) playlist.isPublic = data.isPublic;
+    if (data.name !== undefined) playlist.name = normalizePlaylistName(data.name);
+    if (data.description !== undefined) playlist.description = normalizePlaylistDescription(data.description);
+    if (data.isPublic !== undefined) playlist.isPublic = data.isPublic === true;
 
     await playlist.save();
 
@@ -158,19 +219,18 @@ export class UserService {
       throw new AppError('Playlist not found or access denied', 404);
     }
 
-    const d = trackData;
-    const newTrack = {
-      id: String(d.id || ''),
-      name: String(d.name || 'Untitled Track'),
-      duration: Number(d.duration || 0),
-      artist_name: String(d.artist_name || 'Unknown Artist'),
-      artist_id: String(d.artist_id || ''),
-      album_name: String(d.album_name || ''),
-      album_id: String(d.album_id || ''),
-      image: String(d.image || ''),
-      audio: String(d.audio || ''),
-      provider: String(d.provider || 'jamendo') as ISongSubDoc['provider'],
-    };
+    const newTrack = normalizeTrackData(trackData);
+
+    if (playlist.tracks.some((t) => t.id === newTrack.id)) {
+      return {
+        id: playlist._id.toString(),
+        tracks: playlist.tracks,
+      };
+    }
+
+    if (playlist.tracks.length >= MAX_PLAYLIST_TRACKS) {
+      throw new AppError(`A playlist cannot hold more than ${MAX_PLAYLIST_TRACKS} tracks.`, 400);
+    }
 
     playlist.tracks.push(newTrack);
     await playlist.save();
@@ -196,13 +256,42 @@ export class UserService {
     };
   }
 
-  public static async reorderPlaylistTracks(userId: string, playlistId: string, tracks: ISongSubDoc[]) {
+  public static async reorderPlaylistTracks(userId: string, playlistId: string, tracks: unknown) {
     const playlist = await PlaylistModel.findOne({ _id: playlistId, owner: userId });
     if (!playlist) {
       throw new AppError('Playlist not found or access denied', 404);
     }
 
-    playlist.tracks = tracks;
+    if (!Array.isArray(tracks)) {
+      throw new AppError('A track order array is required.', 400);
+    }
+
+    const requestedIds = tracks.map((entry) =>
+      typeof entry === 'string' ? entry.trim() : getTrackId(entry)
+    );
+
+    if (requestedIds.some((id) => !id)) {
+      throw new AppError('Every entry in the track order must include a track id.', 400);
+    }
+
+    if (new Set(requestedIds).size !== requestedIds.length) {
+      throw new AppError('The track order contains duplicate track ids.', 400);
+    }
+
+    if (requestedIds.length !== playlist.tracks.length) {
+      throw new AppError('The track order must contain every track already in the playlist.', 400);
+    }
+
+    const existingById = new Map(playlist.tracks.map((track) => [track.id, track]));
+    const reordered = requestedIds.map((id) => {
+      const existing = existingById.get(id);
+      if (!existing) {
+        throw new AppError('The track order references a track that is not in this playlist.', 400);
+      }
+      return existing;
+    });
+
+    playlist.tracks = reordered;
     await playlist.save();
 
     return {
@@ -216,27 +305,15 @@ export class UserService {
   // =========================================================================
 
   public static async addRecentlyPlayed(userId: string, trackData: Record<string, unknown>) {
-    const trackId = String(trackData?.id || '');
-    if (!trackId) return;
+    if (!getTrackId(trackData)) return;
 
-    const d = trackData;
+    const normalized = normalizeTrackData(trackData);
     await RecentlyPlayed.findOneAndUpdate(
-      { user: userId, trackId },
+      { user: userId, trackId: normalized.id },
       {
         user: userId,
-        trackId,
-        trackData: {
-          id: trackId,
-          name: String(d.name || 'Untitled Track'),
-          duration: Number(d.duration || 0),
-          artist_name: String(d.artist_name || 'Unknown Artist'),
-          artist_id: String(d.artist_id || ''),
-          album_name: String(d.album_name || ''),
-          album_id: String(d.album_id || ''),
-          image: String(d.image || ''),
-          audio: String(d.audio || ''),
-          provider: String(d.provider || 'jamendo') as ISongSubDoc['provider'],
-        },
+        trackId: normalized.id,
+        trackData: normalized,
         playedAt: new Date(),
       },
       { upsert: true, new: true }
@@ -256,27 +333,17 @@ export class UserService {
   }
 
   public static async recordListeningHistory(userId: string, trackData: Record<string, unknown>, playDurationSeconds = 0, completed = false) {
-    const trackId = String(trackData?.id || '');
-    if (!trackId) return;
+    if (!getTrackId(trackData)) return;
 
-    const d = trackData;
+    const normalized = normalizeTrackData(trackData);
+    const duration = Number(playDurationSeconds);
+
     await ListeningHistory.create({
       user: userId,
-      trackId,
-      trackData: {
-        id: trackId,
-        name: String(d.name || 'Untitled Track'),
-        duration: Number(d.duration || 0),
-        artist_name: String(d.artist_name || 'Unknown Artist'),
-        artist_id: String(d.artist_id || ''),
-        album_name: String(d.album_name || ''),
-        album_id: String(d.album_id || ''),
-        image: String(d.image || ''),
-        audio: String(d.audio || ''),
-        provider: String(d.provider || 'jamendo') as ISongSubDoc['provider'],
-      },
-      playDurationSeconds,
-      completed,
+      trackId: normalized.id,
+      trackData: normalized,
+      playDurationSeconds: Number.isFinite(duration) ? Math.max(0, duration) : 0,
+      completed: completed === true,
       playedAt: new Date(),
     });
   }
@@ -365,22 +432,35 @@ export class UserService {
       throw new AppError('User account not found', 404);
     }
 
-    // Delete Cloudinary avatar if present
-    if (user.avatarPublicId) {
-      await CloudinaryService.deleteAvatar(user.avatarPublicId);
+    const { email, avatarPublicId } = user;
+
+    const cascadeDelete = async (session?: mongoose.ClientSession) => {
+      const options = session ? { session } : {};
+      await PlaylistModel.deleteMany({ owner: userId }, options);
+      await Favorite.deleteMany({ user: userId }, options);
+      await RecentlyPlayed.deleteMany({ user: userId }, options);
+      await ListeningHistory.deleteMany({ user: userId }, options);
+      await SearchHistory.deleteMany({ user: userId }, options);
+      await User.deleteOne({ _id: userId }, options);
+    };
+
+    let session: mongoose.ClientSession | null = null;
+    try {
+      session = await mongoose.startSession();
+      await session.withTransaction(() => cascadeDelete(session as mongoose.ClientSession));
+    } catch {
+      await cascadeDelete();
+    } finally {
+      if (session) {
+        await session.endSession().catch(() => {});
+      }
     }
 
-    // Cascade delete user documents
-    await Promise.all([
-      PlaylistModel.deleteMany({ owner: userId }),
-      Favorite.deleteMany({ user: userId }),
-      RecentlyPlayed.deleteMany({ user: userId }),
-      ListeningHistory.deleteMany({ user: userId }),
-      SearchHistory.deleteMany({ user: userId }),
-      User.deleteOne({ _id: userId }),
-    ]);
+    if (avatarPublicId) {
+      await CloudinaryService.deleteAvatar(avatarPublicId).catch(() => {});
+    }
 
-    console.log(`🗑️ [Account] Deleted user account & associated data: ${user.email} (${userId})`);
+    console.log(`🗑️ [Account] Deleted user account & associated data: ${email} (${userId})`);
     return { success: true };
   }
 }

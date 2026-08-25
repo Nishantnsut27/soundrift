@@ -145,9 +145,10 @@ export class MusicService {
         return { artist, songs: curated };
       }));
 
-      const merged = this.interleaveByArtist(buckets).slice(0, limit);
+      const merged = this.interleaveByArtist(buckets);
       const deduped = deduplicateSongs(merged);
       const finalSongs = this.shuffleArray(deduped).slice(0, limit);
+
       const provider = finalSongs.some(song => song.provider === 'jamendo') ? 'jiosaavn,jamendo' : 'jiosaavn';
 
       logger.info('MusicService', 'Generated trending selection', {

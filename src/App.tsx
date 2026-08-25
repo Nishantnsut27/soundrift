@@ -114,7 +114,6 @@ function App() {
         try {
           window.history.replaceState(null, '', '/');
         } catch {
-          // Ignore state error
         }
         return;
       }
@@ -135,7 +134,6 @@ function App() {
     return () => window.removeEventListener('popstate', handleUrlRouting);
   }, []);
 
-  // Protected Route Guard Effect: Redirect guest users attempting to view protected views
   useEffect(() => {
     const protectedViews = ['favorites', 'playlists', 'recent'];
     if (!isAuthenticated && protectedViews.includes(currentView)) {
@@ -286,13 +284,14 @@ function App() {
     loadTrending();
   }, [trending.length, setTrending, setLoading, setError]);
 
+  const theme = usePlayerStore(state => state.theme);
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', 'dark');
-    document.documentElement.style.setProperty('--bg', '#000000', 'important');
-    document.documentElement.style.setProperty('--text', '#ffffff', 'important');
-    document.body.style.backgroundColor = '#000000';
-    document.body.style.color = '#ffffff';
-  }, []);
+    document.documentElement.setAttribute('data-theme', theme);
+    document.documentElement.style.setProperty('--bg', theme === 'dark' ? '#000000' : '#ffffff', 'important');
+    document.documentElement.style.setProperty('--text', theme === 'dark' ? '#ffffff' : '#000000', 'important');
+    document.body.style.backgroundColor = theme === 'dark' ? '#000000' : '#ffffff';
+    document.body.style.color = theme === 'dark' ? '#ffffff' : '#000000';
+  }, [theme]);
 
   useEffect(() => {
     if (window.innerWidth <= 768) {
@@ -454,6 +453,7 @@ function App() {
         );
 
       case 'recent':
+      case 'recently-played':
         return (
           <div className="view-container">
             <div className="page-header">
@@ -475,8 +475,30 @@ function App() {
           </div>
         );
 
+      case 'history':
+        return (
+          <div className="view-container">
+            <div className="page-header">
+              <h1 className="page-title">Listening History</h1>
+              <p className="page-subtitle">
+                {usePlayerStore.getState().listeningHistory.length} tracks in history
+              </p>
+            </div>
+            <TrackListModern
+              tracks={usePlayerStore.getState().listeningHistory}
+              showAddToPlaylist={true}
+            />
+          </div>
+        );
+
       default:
-        return null;
+        return (
+          <div className="view-container">
+            <Suspense fallback={null}>
+              {isAuthenticated ? <PersonalizedHome /> : <GuestHome />}
+            </Suspense>
+          </div>
+        );
     }
   };
 

@@ -34,56 +34,39 @@ export const verifyRefreshToken = (token: string): TokenPayload => {
 // Backward-compatible alias
 export const verifyAuthToken = verifyAccessToken;
 
-export const setAuthCookies = (res: Response, accessToken: string, refreshToken: string): void => {
-  const isProd = config.nodeEnv === 'production';
+export const ACCESS_TOKEN_COOKIE_PATH = '/';
+export const REFRESH_TOKEN_COOKIE_PATH = '/api/auth';
+const LEGACY_REFRESH_TOKEN_COOKIE_PATH = '/api/auth/refresh';
 
-  // Access Token Cookie (15 min)
-  res.cookie('auth_token', accessToken, {
+const baseCookieOptions = () => {
+  const isProd = config.nodeEnv === 'production';
+  return {
     httpOnly: true,
     secure: isProd,
-    sameSite: 'lax',
+    sameSite: (isProd ? 'none' : 'lax') as 'none' | 'lax',
+  };
+};
+
+export const setAuthCookies = (res: Response, accessToken: string, refreshToken: string): void => {
+  const options = baseCookieOptions();
+
+  res.cookie('auth_token', accessToken, {
+    ...options,
     maxAge: 15 * 60 * 1000,
-    path: '/',
+    path: ACCESS_TOKEN_COOKIE_PATH,
   });
 
-  // Refresh Token Cookie (7 days)
   res.cookie('refresh_token', refreshToken, {
-    httpOnly: true,
-    secure: isProd,
-    sameSite: 'lax',
+    ...options,
     maxAge: 7 * 24 * 60 * 60 * 1000,
-    path: '/api/auth/refresh',
+    path: REFRESH_TOKEN_COOKIE_PATH,
   });
 };
 
 export const clearAuthCookies = (res: Response): void => {
-  const isProd = config.nodeEnv === 'production';
+  const options = baseCookieOptions();
 
-  res.clearCookie('auth_token', {
-    httpOnly: true,
-    secure: isProd,
-    sameSite: 'lax',
-    path: '/',
-  });
-
-  res.clearCookie('refresh_token', {
-    httpOnly: true,
-    secure: isProd,
-    sameSite: 'lax',
-    path: '/api/auth/refresh',
-  });
+  res.clearCookie('auth_token', { ...options, path: ACCESS_TOKEN_COOKIE_PATH });
+  res.clearCookie('refresh_token', { ...options, path: REFRESH_TOKEN_COOKIE_PATH });
+  res.clearCookie('refresh_token', { ...options, path: LEGACY_REFRESH_TOKEN_COOKIE_PATH });
 };
-
-// Backward-compatible alias
-export const setAuthCookie = (res: Response, token: string): void => {
-  const isProd = config.nodeEnv === 'production';
-  res.cookie('auth_token', token, {
-    httpOnly: true,
-    secure: isProd,
-    sameSite: 'lax',
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-    path: '/',
-  });
-};
-
-export const clearAuthCookie = clearAuthCookies;
