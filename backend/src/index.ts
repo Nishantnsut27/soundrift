@@ -35,7 +35,10 @@ const isOriginAllowed = (origin: string): boolean => {
     if (wildcardIndex === -1) return false;
     const scheme = allowed.slice(0, wildcardIndex + 3);
     const domainSuffix = allowed.slice(wildcardIndex + 4);
-    return origin.startsWith(scheme) && origin.endsWith(domainSuffix);
+    const originSchemeEnd = origin.indexOf('://');
+    if (originSchemeEnd === -1) return false;
+    const originHost = origin.slice(originSchemeEnd + 3);
+    return origin.startsWith(scheme) && (originHost === domainSuffix || originHost.endsWith('.' + domainSuffix));
   });
 };
 

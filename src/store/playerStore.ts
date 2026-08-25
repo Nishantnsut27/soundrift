@@ -299,13 +299,29 @@ export const usePlayerStore = create<AppStore>()(
       const state = get();
       if (state.queue.length === 0) return;
 
-      let prevIndex = state.currentIndex - 1;
+      let prevIndex: number;
 
-      if (prevIndex < 0) {
-        if (state.repeatMode === 'all') {
-          prevIndex = state.queue.length - 1;
+      if (state.isShuffling && state.shuffleOrder.length === state.queue.length) {
+        const prevPos = state.shufflePosition - 1;
+        if (prevPos < 0) {
+          if (state.repeatMode === 'all') {
+            prevIndex = state.shuffleOrder[state.shuffleOrder.length - 1];
+            set({ shufflePosition: state.shuffleOrder.length - 1 });
+          } else {
+            return;
+          }
         } else {
-          return;
+          prevIndex = state.shuffleOrder[prevPos];
+          set({ shufflePosition: prevPos });
+        }
+      } else {
+        prevIndex = state.currentIndex - 1;
+        if (prevIndex < 0) {
+          if (state.repeatMode === 'all') {
+            prevIndex = state.queue.length - 1;
+          } else {
+            return;
+          }
         }
       }
 
@@ -344,12 +360,12 @@ export const usePlayerStore = create<AppStore>()(
       if (state.isShuffling) {
         return { isShuffling: false, shuffleOrder: [], shufflePosition: 0 };
       } else {
-        const shuffleOrder = Array.from({ length: state.queue.length }, (_, i) => i);
+        let shuffleOrder = Array.from({ length: state.queue.length }, (_, i) => i);
         for (let i = shuffleOrder.length - 1; i > 0; i--) {
           const j = Math.floor(Math.random() * (i + 1));
           [shuffleOrder[i], shuffleOrder[j]] = [shuffleOrder[j], shuffleOrder[i]];
         }
-        let shufflePosition = 0;
+        const shufflePosition = 0;
         if (state.currentIndex >= 0 && state.currentIndex < state.queue.length) {
           const pos = shuffleOrder.indexOf(state.currentIndex);
           if (pos > 0) {
@@ -424,14 +440,14 @@ export const usePlayerStore = create<AppStore>()(
       }
     },
 
-    createPlaylist: (name: string) => {
+    createPlaylist: (name: string, initialTracks?: Track[]) => {
       const state = get();
       const uniqueName = getUniquePlaylistName(name, state.playlists);
       const tempId = newId();
       const newPlaylist: Playlist = {
         id: tempId,
         name: uniqueName,
-        tracks: [],
+        tracks: initialTracks ? initialTracks.map(t => ({ ...t, addedAt: Date.now() })) : [],
         createdAt: Date.now(),
         updatedAt: Date.now()
       };
@@ -447,6 +463,15 @@ export const usePlayerStore = create<AppStore>()(
             const updated = currentState.playlists.map((p) => (p.id === tempId ? { ...p, id: remote.id } : p));
             set({ playlists: updated });
             saveToLocalStorage(STORAGE_KEYS.PLAYLISTS, updated);
+
+            const pendingKey = `pending_tracks_${tempId}`;
+            const pendingTracks = JSON.parse(localStorage.getItem(pendingKey) || '[]');
+            if (pendingTracks.length > 0) {
+              pendingTracks.forEach((track: Track) => {
+                userApi.addTrackToPlaylist(remote.id, track).catch(() => { });
+              });
+              localStorage.removeItem(pendingKey);
+            }
 
             if (currentPlaylist && currentPlaylist.tracks.length > 0) {
               currentPlaylist.tracks.forEach(track => {
@@ -510,7 +535,15 @@ export const usePlayerStore = create<AppStore>()(
       saveToLocalStorage(STORAGE_KEYS.PLAYLISTS, newPlaylists);
 
       if (useAuthStore.getState().isAuthenticated) {
-        userApi.addTrackToPlaylist(playlistId, track).catch(() => { });
+        const isTempId = playlistId.startsWith('pl_') || playlistId.startsWith('default-playlist-');
+        if (isTempId) {
+          const pendingKey = `pending_tracks_${playlistId}`;
+          const existing = JSON.parse(localStorage.getItem(pendingKey) || '[]');
+          existing.push({ ...track, addedAt: Date.now() });
+          localStorage.setItem(pendingKey, JSON.stringify(existing));
+        } else {
+          userApi.addTrackToPlaylist(playlistId, track).catch(() => { });
+        }
       }
     },
 
