@@ -56,7 +56,7 @@ export function TrackListModern({
 
   const playContext = playQueue || tracks;
 
-  const handlePlayTrack = (track: Track, index: number) => {
+  const handlePlayTrack = (track: Track, _renderIndex: number) => {
     if (currentTrack?.id === track.id) {
       if (isPlaying) {
         pauseTrack();
@@ -64,7 +64,8 @@ export function TrackListModern({
         setIsPlaying(true);
       }
     } else {
-      playTrack(track, playContext, index);
+      const queueIndex = playContext.findIndex(t => String(t.id) === String(track.id));
+      playTrack(track, playContext, queueIndex >= 0 ? queueIndex : undefined);
     }
   };
 
@@ -98,7 +99,7 @@ export function TrackListModern({
   useEffect(() => {
     const handleOutsideTap = (e: MouseEvent | TouchEvent) => {
       const target = e.target as HTMLElement | null;
-      if (target && !target.closest('.track-list-container-modern')) {
+      if (!target || !target.closest('.track-list-container-modern')) {
         setHoveredTrack(null);
         setHoveredIndex(null);
       }
@@ -360,5 +361,3 @@ export function TrackListModern({
     </div>
   );
 }
-
-

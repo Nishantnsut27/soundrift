@@ -9,7 +9,7 @@ import { musicRouter } from './routes/musicRoutes.js';
 import { authRouter } from './routes/authRoutes.js';
 import { userRouter } from './routes/userRoutes.js';
 import { healthLimiter } from './middleware/rateLimit.middleware.js';
-import { botProtectionMiddleware } from './middleware/security.middleware.js';
+import { botProtectionMiddleware, recordIpViolation } from './middleware/security.middleware.js';
 import { errorHandlerMiddleware } from './middleware/error.middleware.js';
 
 // Validate required environment variables on startup
@@ -28,11 +28,32 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' }
 }));
 
+const isOriginAllowed = (origin: string): boolean => {
+  return config.allowedOrigins.some((allowed) => {
+    if (allowed === origin) return true;
+    const wildcardIndex = allowed.indexOf('://*.');
+    if (wildcardIndex === -1) return false;
+    const scheme = allowed.slice(0, wildcardIndex + 3);
+    const domainSuffix = allowed.slice(wildcardIndex + 4);
+    const originSchemeEnd = origin.indexOf('://');
+    if (originSchemeEnd === -1) return false;
+    const originHost = origin.slice(originSchemeEnd + 3);
+    return origin.startsWith(scheme) && (originHost === domainSuffix || originHost.endsWith('.' + domainSuffix));
+  });
+};
+
 const corsOptions: cors.CorsOptions = {
-  origin: true, // Reflect the request origin — allows all origins while supporting credentials
+  origin: (origin, callback) => {
+    if (!origin || isOriginAllowed(origin)) {
+      callback(null, true);
+      return;
+    }
+    callback(new Error('Origin not permitted by CORS policy.'));
+  },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  maxAge: 86400,
 };
 
 app.use(cors(corsOptions));
@@ -68,7 +89,8 @@ app.use('/api/auth', authRouter);
 app.use('/api/user', userRouter);
 app.use('/api/music', musicRouter);
 
-app.use((_req, res) => {
+app.use((req, res) => {
+  recordIpViolation(req.ip || req.socket.remoteAddress || 'unknown');
   res.status(404).json({
     success: false,
     error: 'Endpoint not found.'

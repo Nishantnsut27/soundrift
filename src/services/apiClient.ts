@@ -43,9 +43,11 @@ async function refreshAccessToken(): Promise<boolean> {
         return true;
       }
       removeStoredToken();
+      window.dispatchEvent(new Event('auth:session-expired'));
       return false;
     } catch {
       removeStoredToken();
+      window.dispatchEvent(new Event('auth:session-expired'));
       return false;
     } finally {
       isRefreshing = false;
@@ -75,15 +77,14 @@ export async function fetchJson<T>(
     }
 
     const response = await fetch(url, {
-      credentials: 'include', // Send HTTP-only cookies cross-origin
-      headers,
       ...options,
+      credentials: 'include',
+      headers,
     });
 
     const data = await response.json().catch(() => null);
 
     if (!response.ok) {
-      // Handle automatic token renewal on 401 Unauthorized
       if (response.status === 401 && !hasRefreshedToken && !url.includes('/api/auth/refresh')) {
         const refreshed = await refreshAccessToken();
         if (refreshed) {
@@ -120,7 +121,8 @@ export async function fetchJson<T>(
     if (error instanceof ApiError) {
       throw error;
     }
-    if (retries > 0 && options?.method === 'GET') {
+    const method = options?.method?.toUpperCase() || 'GET';
+    if (retries > 0 && method === 'GET') {
       await new Promise((res) => setTimeout(res, delay));
       return fetchJson<T>(url, options, retries - 1, delay * 2, hasRefreshedToken);
     }

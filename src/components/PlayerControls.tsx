@@ -223,7 +223,9 @@ export function PlayerControls() {
   };
 
   const handleClosePlayer = () => {
-    usePlayerStore.setState({ queue: [], currentIndex: -1, currentTrack: null, isPlaying: false, isBuffering: false, playbackError: null });
+    const store = usePlayerStore.getState();
+    store.pauseTrack();
+    store.clearQueue();
   };
 
   const getVolumeIcon = () => {
@@ -437,6 +439,7 @@ export function PlayerControls() {
             aria-valuemax={100}
             tabIndex={0}
             onKeyDown={(e) => {
+              e.stopPropagation();
               if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
                 changeVolume(Math.min(100, volume + 5));
               } else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {

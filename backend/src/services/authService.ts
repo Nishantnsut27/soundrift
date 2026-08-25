@@ -30,11 +30,12 @@ export interface SanitizedUser {
 }
 
 function generateOtp(): string {
-  return String(Math.floor(100000 + Math.random() * 900000));
+  return String(crypto.randomInt(100000, 1000000));
 }
 
 const OTP_MAX_ATTEMPTS = 5;
 const OTP_EXPIRY_MS = 10 * 60 * 1000;
+const RESET_TOKEN_EXPIRY_MS = 15 * 60 * 1000;
 
 export class AuthService {
   public static sanitizeUser(user: IUser): SanitizedUser {
@@ -56,7 +57,7 @@ export class AuthService {
     const normalizedEmail = data.email.toLowerCase().trim();
 
     const existingUser = await User.findOne({ email: normalizedEmail });
-    if (existingUser) {
+    if (existingUser && existingUser.isEmailVerified) {
       throw new AppError('An account with this email address is already registered.', 400);
     }
 
@@ -155,17 +156,27 @@ export class AuthService {
     const normalizedEmail = data.email.toLowerCase().trim();
 
     const user = await User.findOne({ email: normalizedEmail }).select('+password');
-    if (!user) {
+    if (!user || !user.password) {
       throw new AppError('Please complete email verification first.', 400);
     }
     if (!user.isEmailVerified) {
       throw new AppError('Email is not verified. Please verify your email first.', 400);
     }
 
+    const isPasswordValid = await comparePassword(data.password, user.password);
+    if (!isPasswordValid) {
+      throw new AppError('Invalid email or password.', 401);
+    }
+
+    if (user.accountStatus !== 'active') {
+      throw new AppError('Your account is currently suspended or inactive.', 403);
+    }
+
     const accessToken = generateAccessToken(user._id.toString(), user.role);
     const refreshToken = generateRefreshToken(user._id.toString(), user.role);
 
     user.refreshTokenHash = await hashPassword(refreshToken);
+    user.lastLoginAt = new Date();
     await user.save();
 
     return {
@@ -242,6 +253,16 @@ export class AuthService {
     await User.findByIdAndUpdate(userId, { $unset: { refreshTokenHash: 1 } });
   }
 
+  public static async revokeRefreshTokenByToken(token: string): Promise<void> {
+    let payload;
+    try {
+      payload = verifyRefreshToken(token);
+    } catch {
+      return;
+    }
+    await User.findByIdAndUpdate(payload.userId, { $unset: { refreshTokenHash: 1 } });
+  }
+
   public static async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<void> {
     const user = await User.findById(userId).select('+password');
     if (!user || !user.password) {
@@ -253,7 +274,13 @@ export class AuthService {
       throw new AppError('Current password is incorrect.', 400);
     }
 
+    const isSameAsCurrent = await comparePassword(newPassword, user.password);
+    if (isSameAsCurrent) {
+      throw new AppError('New password must be different from your current password.', 400);
+    }
+
     user.password = await hashPassword(newPassword);
+    user.refreshTokenHash = undefined;
     await user.save();
   }
 
@@ -324,7 +351,7 @@ export class AuthService {
     const hashedResetToken = crypto.createHash('sha256').update(resetToken).digest('hex');
     
     user.passwordResetToken = hashedResetToken;
-    user.passwordResetExpires = new Date(Date.now() + 15 * 60 * 1000); // 15 mins
+    user.passwordResetExpires = new Date(Date.now() + RESET_TOKEN_EXPIRY_MS);
 
     await user.save();
 
@@ -336,7 +363,7 @@ export class AuthService {
 
     const user = await User.findOne({ email: normalizedEmail });
     if (!user) {
-      throw new AppError('No account found with this email.', 400);
+      return;
     }
 
     const otp = generateOtp();
@@ -399,44 +426,10 @@ export class AuthService {
     const hashedResetToken = crypto.createHash('sha256').update(resetToken).digest('hex');
 
     user.passwordResetToken = hashedResetToken;
-    user.passwordResetExpires = new Date(Date.now() + 60 * 60 * 1000);
+    user.passwordResetExpires = new Date(Date.now() + RESET_TOKEN_EXPIRY_MS);
     await user.save();
 
     return { resetToken };
-  }
-
-  public static async resetPasswordWithToken(resetToken: string, newPassword: string): Promise<void> {
-    const hashedResetToken = crypto.createHash('sha256').update(resetToken).digest('hex');
-
-    const user = await User.findOne({
-      passwordResetToken: hashedResetToken,
-      passwordResetExpires: { $gt: new Date() },
-    }).select('+passwordResetToken +passwordResetExpires');
-
-    if (!user) {
-      throw new AppError('Password reset token is invalid or has expired.', 400);
-    }
-
-    user.password = await hashPassword(newPassword);
-    user.passwordResetToken = undefined;
-    user.passwordResetExpires = undefined;
-    await user.save();
-  }
-
-  public static async sendVerificationToken(userId: string): Promise<{ verificationToken: string }> {
-    const user = await User.findById(userId);
-    if (!user) {
-      throw new AppError('User not found', 404);
-    }
-
-    const verificationToken = crypto.randomBytes(32).toString('hex');
-    const hashedToken = crypto.createHash('sha256').update(verificationToken).digest('hex');
-
-    user.emailVerificationToken = hashedToken;
-    user.emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    await user.save();
-
-    return { verificationToken };
   }
 
   public static async verifyEmail(token: string): Promise<SanitizedUser> {

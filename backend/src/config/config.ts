@@ -20,7 +20,7 @@ export const config = {
   jamendoApiUrl: process.env.JAMENDO_API_URL || 'https://api.jamendo.com/v3.0',
   jamendoClientId: process.env.JAMENDO_CLIENT_ID || '',
   requestTimeoutMs: parseInt(process.env.REQUEST_TIMEOUT_MS || '8000', 10),
-  allowedOrigins: (process.env.ALLOWED_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000,http://localhost:5000,http://127.0.0.1:5000,https://notify-music.vercel.app').split(',').map(origin => origin.trim()),
+  allowedOrigins: (process.env.ALLOWED_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000,http://localhost:5000,http://127.0.0.1:5000,https://notify-music.vercel.app').split(',').map(origin => origin.trim()).filter(Boolean),
   rateLimitSearchWindowMs: parseInt(process.env.RATE_LIMIT_SEARCH_WINDOW_MS || '60000', 10),
   rateLimitSearchMax: parseInt(process.env.RATE_LIMIT_SEARCH_MAX || '300', 10),
   rateLimitMetadataWindowMs: parseInt(process.env.RATE_LIMIT_METADATA_WINDOW_MS || '60000', 10),
@@ -52,7 +52,36 @@ export const validateConfig = (): void => {
   if (!config.jwtSecret) {
     throw new Error('❌ Startup Error: JWT_SECRET environment variable is missing.');
   }
+  if (!config.refreshTokenSecret) {
+    throw new Error('❌ Startup Error: REFRESH_TOKEN_SECRET environment variable is missing.');
+  }
+  if (config.jwtSecret === config.refreshTokenSecret) {
+    throw new Error('❌ Startup Error: JWT_SECRET and REFRESH_TOKEN_SECRET must be different values.');
+  }
+  if (!config.cookieSecret) {
+    throw new Error('❌ Startup Error: COOKIE_SECRET environment variable is missing.');
+  }
   if (!config.cloudinaryCloudName || !config.cloudinaryApiKey || !config.cloudinaryApiSecret) {
     throw new Error('❌ Startup Error: Cloudinary environment variables are missing.');
+  }
+  if (config.nodeEnv === 'production') {
+    const weakSecrets = (
+      [
+        ['JWT_SECRET', config.jwtSecret],
+        ['REFRESH_TOKEN_SECRET', config.refreshTokenSecret],
+        ['COOKIE_SECRET', config.cookieSecret],
+      ] as const
+    ).filter(([, value]) => value.length < 32);
+
+    if (weakSecrets.length > 0) {
+      throw new Error(
+        `❌ Startup Error: ${weakSecrets
+          .map(([name]) => name)
+          .join(', ')} must be at least 32 characters in production.`
+      );
+    }
+    if (config.allowedOrigins.length === 0) {
+      throw new Error('❌ Startup Error: ALLOWED_ORIGINS must list at least one origin in production.');
+    }
   }
 };

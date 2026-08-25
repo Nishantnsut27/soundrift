@@ -23,10 +23,12 @@ interface PlayerStore extends PlayerState {
   clearQueue: () => void;
   setBuffering: (buffering: boolean) => void;
   setPlaybackError: (error: string | null) => void;
+  shuffleOrder: number[];
+  shufflePosition: number;
+  volumeBeforeMute: number;
 }
 
 interface SearchStore extends SearchState {
-
   setQuery: (query: string) => void;
   setResults: (results: Track[]) => void;
   setLoading: (loading: boolean) => void;
@@ -111,10 +113,22 @@ const getUniquePlaylistName = (baseName: string, existingPlaylists: Playlist[], 
 };
 
 const areTracksIdentical = (tracksA: PlaylistTrack[] | Track[], tracksB: PlaylistTrack[] | Track[]): boolean => {
+  if (tracksA.length === 0 || tracksB.length === 0) return false;
   if (tracksA.length !== tracksB.length) return false;
   const idsA = tracksA.map(t => String(t.id)).join(',');
   const idsB = tracksB.map(t => String(t.id)).join(',');
   return idsA === idsB;
+};
+
+const newId = (): string =>
+  typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `pl_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+
+const isValidTrack = (t: unknown): t is Track => {
+  if (!t || typeof t !== 'object') return false;
+  const c = t as Record<string, unknown>;
+  return (typeof c.id === 'string' || typeof c.id === 'number') && typeof c.name === 'string';
 };
 
 const DEFAULT_PLAYLISTS: Playlist[] = [
@@ -152,9 +166,12 @@ export const usePlayerStore = create<AppStore>()(
     duration: 0,
     volume: loadFromLocalStorage(STORAGE_KEYS.VOLUME, PLAYER_DEFAULTS.DEFAULT_VOLUME),
     isMuted: false,
+    volumeBeforeMute: PLAYER_DEFAULTS.DEFAULT_VOLUME,
     queue: [],
     currentIndex: -1,
     isShuffling: false,
+    shuffleOrder: [] as number[],
+    shufflePosition: 0,
     repeatMode: 'none',
 
     query: '',
@@ -180,20 +197,45 @@ export const usePlayerStore = create<AppStore>()(
 
     playTrack: (track: Track, queue?: Track[], index?: number) => {
       const state = get();
-      const newQueue = queue || (state.queue.length > 0 ? state.queue : [track]);
-      const newIndex = index !== undefined ? index : newQueue.findIndex(t => t.id === track.id);
+      let newQueue = queue || (state.queue.length > 0 ? state.queue : [track]);
+      let newIndex = index;
+
+      if (newIndex === undefined) {
+        newIndex = newQueue.findIndex(t => String(t.id) === String(track.id));
+      }
+      if (newIndex === undefined || newIndex < 0) {
+        newQueue = [...newQueue, track];
+        newIndex = newQueue.length - 1;
+      }
 
       const updatedRecentlyPlayed = [track, ...state.recentlyPlayed.filter(t => t.id !== track.id)].slice(0, 30);
+
+      let shuffleOrder: number[] = [];
+      let shufflePosition = 0;
+      if (state.isShuffling) {
+        shuffleOrder = Array.from({ length: newQueue.length }, (_, i) => i);
+        for (let i = shuffleOrder.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [shuffleOrder[i], shuffleOrder[j]] = [shuffleOrder[j], shuffleOrder[i]];
+        }
+        const pos = shuffleOrder.indexOf(newIndex);
+        if (pos > 0) {
+          shuffleOrder = [...shuffleOrder.slice(pos), ...shuffleOrder.slice(0, pos)];
+        }
+        shufflePosition = 0;
+      }
 
       set({
         currentTrack: track,
         isPlaying: true,
         queue: newQueue,
-        currentIndex: newIndex >= 0 ? newIndex : 0,
+        currentIndex: newIndex,
         currentTime: 0,
         duration: track.duration || 0,
         recentlyPlayed: updatedRecentlyPlayed,
         listeningHistory: [track, ...state.listeningHistory].slice(0, 50),
+        shuffleOrder,
+        shufflePosition,
       });
 
       if (useAuthStore.getState().isAuthenticated) {
@@ -208,16 +250,36 @@ export const usePlayerStore = create<AppStore>()(
       const state = get();
       if (state.queue.length === 0) return;
 
-      let nextIndex = state.currentIndex + 1;
+      let nextIndex: number;
 
-      if (state.isShuffling) {
-        nextIndex = Math.floor(Math.random() * state.queue.length);
-      } else if (nextIndex >= state.queue.length) {
-        if (state.repeatMode === 'all') {
-          nextIndex = 0;
+      if (state.isShuffling && state.shuffleOrder.length === state.queue.length) {
+        const nextPos = state.shufflePosition + 1;
+        if (nextPos >= state.shuffleOrder.length) {
+          if (state.repeatMode === 'all') {
+            const newOrder = Array.from({ length: state.queue.length }, (_, i) => i);
+            for (let i = newOrder.length - 1; i > 0; i--) {
+              const j = Math.floor(Math.random() * (i + 1));
+              [newOrder[i], newOrder[j]] = [newOrder[j], newOrder[i]];
+            }
+            set({ shuffleOrder: newOrder, shufflePosition: 0 });
+            nextIndex = newOrder[0];
+          } else {
+            set({ isPlaying: false });
+            return;
+          }
         } else {
-          set({ isPlaying: false });
-          return;
+          nextIndex = state.shuffleOrder[nextPos];
+          set({ shufflePosition: nextPos });
+        }
+      } else {
+        nextIndex = state.currentIndex + 1;
+        if (nextIndex >= state.queue.length) {
+          if (state.repeatMode === 'all') {
+            nextIndex = 0;
+          } else {
+            set({ isPlaying: false });
+            return;
+          }
         }
       }
 
@@ -237,13 +299,29 @@ export const usePlayerStore = create<AppStore>()(
       const state = get();
       if (state.queue.length === 0) return;
 
-      let prevIndex = state.currentIndex - 1;
+      let prevIndex: number;
 
-      if (prevIndex < 0) {
-        if (state.repeatMode === 'all') {
-          prevIndex = state.queue.length - 1;
+      if (state.isShuffling && state.shuffleOrder.length === state.queue.length) {
+        const prevPos = state.shufflePosition - 1;
+        if (prevPos < 0) {
+          if (state.repeatMode === 'all') {
+            prevIndex = state.shuffleOrder[state.shuffleOrder.length - 1];
+            set({ shufflePosition: state.shuffleOrder.length - 1 });
+          } else {
+            return;
+          }
         } else {
-          return;
+          prevIndex = state.shuffleOrder[prevPos];
+          set({ shufflePosition: prevPos });
+        }
+      } else {
+        prevIndex = state.currentIndex - 1;
+        if (prevIndex < 0) {
+          if (state.repeatMode === 'all') {
+            prevIndex = state.queue.length - 1;
+          } else {
+            return;
+          }
         }
       }
 
@@ -269,10 +347,34 @@ export const usePlayerStore = create<AppStore>()(
       saveToLocalStorage(STORAGE_KEYS.VOLUME, clamped);
     },
 
-    toggleMute: () => set((state) => ({ isMuted: !state.isMuted })),
+    toggleMute: () => set((state) => {
+      if (state.isMuted) {
+        const restored = state.volumeBeforeMute > 0 ? state.volumeBeforeMute : PLAYER_DEFAULTS.DEFAULT_VOLUME;
+        return { isMuted: false, volume: restored };
+      }
+      return { isMuted: true, volumeBeforeMute: state.volume };
+    }),
     seekTo: (time: number) => set({ currentTime: time }),
 
-    toggleShuffle: () => set((state) => ({ isShuffling: !state.isShuffling })),
+    toggleShuffle: () => set((state) => {
+      if (state.isShuffling) {
+        return { isShuffling: false, shuffleOrder: [], shufflePosition: 0 };
+      } else {
+        let shuffleOrder = Array.from({ length: state.queue.length }, (_, i) => i);
+        for (let i = shuffleOrder.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [shuffleOrder[i], shuffleOrder[j]] = [shuffleOrder[j], shuffleOrder[i]];
+        }
+        const shufflePosition = 0;
+        if (state.currentIndex >= 0 && state.currentIndex < state.queue.length) {
+          const pos = shuffleOrder.indexOf(state.currentIndex);
+          if (pos > 0) {
+            shuffleOrder = [...shuffleOrder.slice(pos), ...shuffleOrder.slice(0, pos)];
+          }
+        }
+        return { isShuffling: true, shuffleOrder, shufflePosition };
+      }
+    }),
 
     setRepeatMode: (mode: 'none' | 'one' | 'all') => set({ repeatMode: mode }),
 
@@ -284,6 +386,12 @@ export const usePlayerStore = create<AppStore>()(
     removeFromQueue: (index: number) => {
       const state = get();
       const newQueue = state.queue.filter((_, i) => i !== index);
+
+      if (newQueue.length === 0) {
+        set({ queue: [], currentIndex: -1, currentTrack: null, isPlaying: false });
+        return;
+      }
+
       let newCurrentIndex = state.currentIndex;
 
       if (index < state.currentIndex) {
@@ -316,8 +424,6 @@ export const usePlayerStore = create<AppStore>()(
           userApi.getPlaylists().catch(() => null),
           userApi.getRecentlyPlayed().catch(() => null),
         ]);
-        // null  → API/network failure; preserve existing local data
-        // []    → cloud success, account genuinely has no items; clear local data
         if (cloudFavorites !== null) {
           set({ favorites: cloudFavorites });
           saveToLocalStorage(STORAGE_KEYS.FAVORITES, cloudFavorites);
@@ -334,13 +440,14 @@ export const usePlayerStore = create<AppStore>()(
       }
     },
 
-    createPlaylist: (name: string) => {
+    createPlaylist: (name: string, initialTracks?: Track[]) => {
       const state = get();
       const uniqueName = getUniquePlaylistName(name, state.playlists);
+      const tempId = newId();
       const newPlaylist: Playlist = {
-        id: Date.now().toString(),
+        id: tempId,
         name: uniqueName,
-        tracks: [],
+        tracks: initialTracks ? initialTracks.map(t => ({ ...t, addedAt: Date.now() })) : [],
         createdAt: Date.now(),
         updatedAt: Date.now()
       };
@@ -351,9 +458,26 @@ export const usePlayerStore = create<AppStore>()(
       if (useAuthStore.getState().isAuthenticated) {
         userApi.createPlaylist(uniqueName).then((remote) => {
           if (remote && remote.id) {
-            const updated = get().playlists.map((p) => (p.id === newPlaylist.id ? { ...p, id: remote.id } : p));
+            const currentState = get();
+            const currentPlaylist = currentState.playlists.find(p => p.id === tempId);
+            const updated = currentState.playlists.map((p) => (p.id === tempId ? { ...p, id: remote.id } : p));
             set({ playlists: updated });
             saveToLocalStorage(STORAGE_KEYS.PLAYLISTS, updated);
+
+            const pendingKey = `pending_tracks_${tempId}`;
+            const pendingTracks = JSON.parse(localStorage.getItem(pendingKey) || '[]');
+            if (pendingTracks.length > 0) {
+              pendingTracks.forEach((track: Track) => {
+                userApi.addTrackToPlaylist(remote.id, track).catch(() => { });
+              });
+              localStorage.removeItem(pendingKey);
+            }
+
+            if (currentPlaylist && currentPlaylist.tracks.length > 0) {
+              currentPlaylist.tracks.forEach(track => {
+                userApi.addTrackToPlaylist(remote.id, track).catch(() => { });
+              });
+            }
           }
         }).catch(() => { });
       }
@@ -411,7 +535,15 @@ export const usePlayerStore = create<AppStore>()(
       saveToLocalStorage(STORAGE_KEYS.PLAYLISTS, newPlaylists);
 
       if (useAuthStore.getState().isAuthenticated) {
-        userApi.addTrackToPlaylist(playlistId, track).catch(() => { });
+        const isTempId = playlistId.startsWith('pl_') || playlistId.startsWith('default-playlist-');
+        if (isTempId) {
+          const pendingKey = `pending_tracks_${playlistId}`;
+          const existing = JSON.parse(localStorage.getItem(pendingKey) || '[]');
+          existing.push({ ...track, addedAt: Date.now() });
+          localStorage.setItem(pendingKey, JSON.stringify(existing));
+        } else {
+          userApi.addTrackToPlaylist(playlistId, track).catch(() => { });
+        }
       }
     },
 
@@ -461,6 +593,11 @@ export const usePlayerStore = create<AppStore>()(
     clearFavorites: () => {
       set({ favorites: [] });
       saveToLocalStorage(STORAGE_KEYS.FAVORITES, []);
+      if (useAuthStore.getState().isAuthenticated) {
+        import('../services/userApi').then(({ userApi }) => {
+          userApi.clearFavorites().catch(() => { });
+        });
+      }
     },
 
     exportPlaylist: (id: string) => {
@@ -470,28 +607,50 @@ export const usePlayerStore = create<AppStore>()(
     },
 
     importPlaylist: (data: string) => {
-      const playlist = JSON.parse(data);
-      if (!playlist || typeof playlist !== 'object' || typeof playlist.name !== 'string' || !Array.isArray(playlist.tracks)) {
-        throw new Error('Invalid playlist file structure');
+      const parsed = JSON.parse(data) as unknown;
+      if (!parsed || typeof parsed !== 'object') throw new Error('Invalid playlist file.');
+      const candidate = parsed as Record<string, unknown>;
+      if (typeof candidate.name !== 'string' || !Array.isArray(candidate.tracks)) {
+        throw new Error('Invalid playlist file.');
       }
+      const validTracks = (candidate.tracks as unknown[])
+        .filter(isValidTrack)
+        .slice(0, 500)
+        .map(t => ({ ...t, addedAt: Date.now() })) as PlaylistTrack[];
+
       const state = get();
 
-      const hasExactSameTracks = state.playlists.some(p => areTracksIdentical(p.tracks, playlist.tracks));
+      const hasExactSameTracks = state.playlists.some(p => areTracksIdentical(p.tracks, validTracks));
       if (hasExactSameTracks) {
         throw new Error('Playlist already exists.');
       }
 
-      const uniqueName = getUniquePlaylistName(playlist.name, state.playlists);
+      const uniqueName = getUniquePlaylistName(candidate.name, state.playlists);
       const importedPlaylist: Playlist = {
-        ...playlist,
-        id: Date.now().toString(),
+        id: newId(),
         name: uniqueName,
-        createdAt: playlist.createdAt || Date.now(),
+        tracks: validTracks,
+        createdAt: typeof candidate.createdAt === 'number' ? candidate.createdAt : Date.now(),
         updatedAt: Date.now()
       };
       const newPlaylists = [...state.playlists, importedPlaylist];
       set({ playlists: newPlaylists });
       saveToLocalStorage(STORAGE_KEYS.PLAYLISTS, newPlaylists);
+
+      if (useAuthStore.getState().isAuthenticated) {
+        userApi.createPlaylist(uniqueName).then((remote) => {
+          if (remote && remote.id) {
+            const updated = get().playlists.map((p) =>
+              p.id === importedPlaylist.id ? { ...p, id: remote.id } : p
+            );
+            set({ playlists: updated });
+            saveToLocalStorage(STORAGE_KEYS.PLAYLISTS, updated);
+            validTracks.forEach(track => {
+              userApi.addTrackToPlaylist(remote.id, track).catch(() => { });
+            });
+          }
+        }).catch(() => { });
+      }
     },
 
     toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),

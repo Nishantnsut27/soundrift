@@ -5,6 +5,7 @@ import { formatDuration, getTrackUrl, getArtistUrl } from '../utils/formatters';
 
 const searchCache = new Map<string, { timestamp: number; tracks: Track[] }>();
 const CACHE_TTL_MS = 300000;
+const CACHE_MAX_ENTRIES = 200;
 
 export class MusicAPI {
   static async searchTracks(query: string, limit: number = PLAYER_DEFAULTS.DEFAULT_SEARCH_LIMIT, signal?: AbortSignal): Promise<Track[]> {
@@ -25,6 +26,10 @@ export class MusicAPI {
       }
 
       searchCache.set(cacheKey, { timestamp: Date.now(), tracks: body.data });
+      if (searchCache.size > CACHE_MAX_ENTRIES) {
+        const oldestKey = searchCache.keys().next().value;
+        if (oldestKey) searchCache.delete(oldestKey);
+      }
       return body.data;
     } catch (error: unknown) {
       if (error instanceof DOMException && error.name === 'AbortError') {
@@ -109,6 +114,10 @@ export class MusicAPI {
     const tracks = await this.searchTracks(artistName, limit);
     const filtered = tracks.filter(t => (t.artist_name || '').toLowerCase() === artistName.toLowerCase());
     searchCache.set(cacheKey, { timestamp: Date.now(), tracks: filtered });
+    if (searchCache.size > CACHE_MAX_ENTRIES) {
+      const oldestKey = searchCache.keys().next().value;
+      if (oldestKey) searchCache.delete(oldestKey);
+    }
     return filtered;
   }
 
@@ -163,18 +172,19 @@ export class MusicAPI {
     if (genres.length > 0) {
       searches.push(this.getTracksByGenre(genres[0], limit));
     }
-    searches.push(this.getArtistTracks(track.artist_name, limit / 2));
+    searches.push(this.getArtistTracks(track.artist_name, Math.ceil(limit / 2)));
     searches.push(this.searchTracks(`${track.artist_name} ${track.album_name}`, limit));
 
-    const results = await Promise.all(searches);
+    const settled = await Promise.allSettled(searches);
     const seen = new Set<string>([track.id, ...excludeIds]);
     const combined: Track[] = [];
 
-    for (const batch of results) {
-      for (const t of batch) {
+    for (const result of settled) {
+      if (result.status !== 'fulfilled') continue;
+      for (const t of result.value) {
         if (!t) continue;
-        if (!seen.has(t.id) && t.audio) {
-          seen.add(t.id);
+        if (!seen.has(String(t.id)) && t.audio) {
+          seen.add(String(t.id));
           combined.push(t);
         }
       }
@@ -189,7 +199,6 @@ export class MusicAPI {
   }
 }
 
-// Backward compatibility exports
 export const JamendoAPI = MusicAPI;
 export { formatDuration, getTrackUrl, getArtistUrl };
 export const getJamendoTrackUrl = getTrackUrl;

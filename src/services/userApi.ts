@@ -28,6 +28,12 @@ export const userApi = {
     });
   },
 
+  async clearFavorites(): Promise<void> {
+    await fetchJson(`${USER_BASE_URL}/favorites`, {
+      method: 'DELETE',
+    });
+  },
+
   // Playlists
   async getPlaylists(): Promise<Playlist[]> {
     const res = await fetchJson<{ success: boolean; data: Playlist[] }>(`${USER_BASE_URL}/playlists`);

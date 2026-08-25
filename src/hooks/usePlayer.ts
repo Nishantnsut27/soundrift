@@ -29,7 +29,7 @@ export function seekAudio(targetTime: number) {
   const max = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : state.duration || state.currentTrack?.duration || 0;
   const time = Math.max(0, max ? Math.min(targetTime, max) : targetTime);
   if (!Number.isFinite(time) || !state.currentTrack) return;
-  try { audio.currentTime = time; state.setCurrentTime(time); } catch { /* Media is not seekable yet. */ }
+  try { audio.currentTime = time; state.setCurrentTime(time); } catch { }
 }
 
 function persistPlayback() {
@@ -57,7 +57,7 @@ function attachAudioListeners(audio: HTMLAudioElement) {
       lastReportedTime = audio.currentTime;
       store().setCurrentTime(audio.currentTime);
       if ('mediaSession' in navigator && Number.isFinite(audio.duration) && audio.duration > 0) {
-        try { navigator.mediaSession.setPositionState({ duration: audio.duration, position: Math.min(audio.currentTime, audio.duration) }); } catch { /* Unsupported media-session state. */ }
+        try { navigator.mediaSession.setPositionState({ duration: audio.duration, position: Math.min(audio.currentTime, audio.duration) }); } catch { }
       }
       persistPlayback();
     }
@@ -119,14 +119,16 @@ export function usePlayer() {
   const state = usePlayerStore();
   const { currentTrack, isPlaying, volume, isMuted, queue, currentIndex, isShuffling, repeatMode, playTrack, pauseTrack, nextTrack, previousTrack, setIsPlaying, setVolume, toggleMute, setBuffering, setPlaybackError } = state;
 
-  useEffect(() => { attachAudioListeners(audio); }, [audio]);
+  useEffect(() => {
+    attachAudioListeners(audio);
+  }, []);
   useEffect(() => {
     if (restored.current || currentTrack || typeof sessionStorage === 'undefined') return;
     restored.current = true;
     try {
       const saved = JSON.parse(sessionStorage.getItem(STORAGE_KEYS.PLAYBACK) || '');
       if (saved?.track?.id) usePlayerStore.setState({ currentTrack: saved.track, currentTime: Number(saved.position) || 0, duration: saved.track.duration || 0, isPlaying: false });
-    } catch { /* Nothing to restore. */ }
+    } catch { }
   }, [currentTrack]);
 
   useEffect(() => {
