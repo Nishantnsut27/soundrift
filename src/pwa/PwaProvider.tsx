@@ -27,7 +27,7 @@ export function PwaProvider() {
     };
 
     const handleAppInstalled = () => {
-      toast('Notify Music installed', {
+      toast('Soundrift installed', {
         description: 'You can now launch it from your home screen.',
         icon: <CheckCircle size={18} />,
         duration: 5000,

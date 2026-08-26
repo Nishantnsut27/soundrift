@@ -247,7 +247,12 @@ function App() {
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (showPlaylistActions && !(event.target as Element).closest('.playlist-card-actions')) {
+      const target = event.target as Element;
+      if (
+        showPlaylistActions &&
+        !target.closest('.playlist-card-actions') &&
+        !target.closest('.playlist-mobile-actions-overlay')
+      ) {
         setShowPlaylistActions(null);
       }
     };
@@ -525,7 +530,7 @@ function App() {
           </button>
 
           <h1 className="app-title" style={{ color: '#ffffff !important' }}>
-            Notify Music
+            Soundrift
           </h1>
 
           <div className="header-search-container">

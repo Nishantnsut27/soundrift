@@ -30,7 +30,7 @@ export function OfflinePage() {
           </button>
         </div>
       </div>
-      <p className="offline-brand">Notify Music &mdash; Where Music Finds You</p>
+      <p className="offline-brand">Soundrift &mdash; Drift Into Your Next Favorite.</p>
     </div>
   );
 }

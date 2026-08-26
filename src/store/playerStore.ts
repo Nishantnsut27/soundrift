@@ -122,7 +122,7 @@ const areTracksIdentical = (tracksA: PlaylistTrack[] | Track[], tracksB: Playlis
 
 const newId = (): string =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto
-    ? crypto.randomUUID()
+    ? `pl_${crypto.randomUUID()}`
     : `pl_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
 const isValidTrack = (t: unknown): t is Track => {
@@ -562,6 +562,20 @@ export const usePlayerStore = create<AppStore>()(
       saveToLocalStorage(STORAGE_KEYS.PLAYLISTS, newPlaylists);
 
       if (useAuthStore.getState().isAuthenticated) {
+        const isTempId = playlistId.startsWith('pl_') || playlistId.startsWith('default-playlist-');
+        if (isTempId) {
+          const pendingKey = `pending_tracks_${playlistId}`;
+          const pendingTracks: Track[] = JSON.parse(localStorage.getItem(pendingKey) || '[]');
+          const remainingPendingTracks = pendingTracks.filter(track => track.id !== trackId);
+
+          if (remainingPendingTracks.length > 0) {
+            localStorage.setItem(pendingKey, JSON.stringify(remainingPendingTracks));
+          } else {
+            localStorage.removeItem(pendingKey);
+          }
+          return;
+        }
+
         userApi.removeTrackFromPlaylist(playlistId, trackId).catch(() => { });
       }
     },

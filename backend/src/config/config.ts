@@ -32,7 +32,7 @@ export const config = {
   // Brevo Email Configuration
   brevoApiKey: process.env.BREVO_API_KEY || '',
   emailFrom: process.env.EMAIL_FROM || 'notifymusicplayer@gmail.com',
-  emailFromName: process.env.EMAIL_FROM_NAME || 'Notify Music',
+  emailFromName: process.env.EMAIL_FROM_NAME || 'Soundrift',
 };
 
 // Configure Cloudinary SDK

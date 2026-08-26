@@ -67,8 +67,8 @@ export function InstallButton() {
     <button
       className="pwa-install-btn"
       onClick={handleInstall}
-      title="Install Notify Music"
-      aria-label="Install Notify Music"
+      title="Install Soundrift"
+      aria-label="Install Soundrift"
     >
       <Download size={18} />
       <span>Install App</span>
