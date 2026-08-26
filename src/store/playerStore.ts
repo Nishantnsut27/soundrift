@@ -120,9 +120,6 @@ const areTracksIdentical = (tracksA: PlaylistTrack[] | Track[], tracksB: Playlis
   return idsA === idsB;
 };
 
-// Client-generated playlist IDs must retain this prefix until the server
-// replaces them. Pending playlist mutations use it to avoid API calls with a
-// local-only ID while creation is still in flight.
 const newId = (): string =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto
     ? `pl_${crypto.randomUUID()}`
