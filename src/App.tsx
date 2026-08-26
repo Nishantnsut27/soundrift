@@ -525,7 +525,7 @@ function App() {
           </button>
 
           <h1 className="app-title" style={{ color: '#ffffff !important' }}>
-            Notify Music
+            Soundrift
           </h1>
 
           <div className="header-search-container">

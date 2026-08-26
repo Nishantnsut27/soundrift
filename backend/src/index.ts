@@ -72,7 +72,7 @@ app.get('/health', healthLimiter, (_req, res) => {
 
   res.status(isOk ? 200 : 503).json({
     status: isOk ? 'ok' : 'degraded',
-    service: 'Notify Music Player Backend',
+    service: 'Soundrift Backend',
     database: {
       status: dbState.state,
       connected: dbState.connected,
@@ -104,7 +104,7 @@ const startServer = async () => {
   try {
     await connectDatabase();
     app.listen(config.port, () => {
-      console.log(`🚀 Notify Music Player Backend running on http://localhost:${config.port}`);
+      console.log(`🚀 Soundrift Backend running on http://localhost:${config.port}`);
     });
   } catch (err) {
     console.error('💥 Fatal Startup Failure:', err);
