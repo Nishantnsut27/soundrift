@@ -7,6 +7,7 @@ import { SearchBar } from './SearchBar';
 import { SearchResults } from './SearchResults';
 import { RelatedMusic } from './RelatedMusic';
 import { ErrorDisplay } from './ErrorDisplay';
+import { CuratedSections } from './CuratedSections';
 
 export function GuestHome() {
   const { results, query, isLoading, error } = usePlayerStore();
@@ -80,6 +81,8 @@ export function GuestHome() {
         <SearchResults tracks={results} query={query} isLoading={isLoading} />
       ) : (
         <>
+          <CuratedSections />
+
           {recommended.length > 0 && (
             <section className="home-section">
               <div className="section-header-row">

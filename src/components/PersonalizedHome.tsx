@@ -6,6 +6,7 @@ import { TrackListModern } from './TrackListModern';
 import { MusicAPI } from '../services/musicApi';
 import { SearchBar } from './SearchBar';
 import { SearchResults } from './SearchResults';
+import { CuratedSections } from './CuratedSections';
 
 function getPersonalizedGreeting(): string {
   const baseMessages = [
@@ -294,6 +295,8 @@ export function PersonalizedHome() {
           </div>
         </section>
       )}
+
+      {!isSearching && <CuratedSections />}
 
       {/* Trending & Recommended / Search Results Shelf */}
       <section className="home-section" ref={sectionRef}>

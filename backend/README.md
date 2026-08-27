@@ -54,7 +54,7 @@ npm run dev             # http://localhost:5000
 | `REFRESH_TOKEN_EXPIRES_IN` | `7d` | Refresh token TTL |
 | `COOKIE_SECRET` | — | Cookie signing secret |
 | `BREVO_API_KEY` | — | Brevo transactional email API key |
-| `EMAIL_FROM` | `notifymusicplayer@gmail.com` | Sender email |
+| `EMAIL_FROM` | `contactsoundrift@gmail.com` | Sender email |
 | `EMAIL_FROM_NAME` | `Soundrift` | Sender name |
 | `CLOUDINARY_CLOUD_NAME` | — | Cloudinary cloud name |
 | `CLOUDINARY_API_KEY` | — | Cloudinary API key |

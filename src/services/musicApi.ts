@@ -1,4 +1,4 @@
-import type { Track, Artist, Album, RelatedMusic } from '../types/types';
+import type { Track, Artist, Album, CuratedSection, RelatedMusic } from '../types/types';
 import { API_ENDPOINTS, PLAYER_DEFAULTS } from '../config/constants';
 import { fetchJson, type ApiResponse } from './apiClient';
 import { formatDuration, getTrackUrl, getArtistUrl } from '../utils/formatters';
@@ -61,6 +61,14 @@ export class MusicAPI {
       console.error('[MusicAPI] Get trending tracks error:', error);
       throw new Error('🎵 Trending music is temporarily unavailable. Please try searching for your favorite tracks instead.');
     }
+  }
+
+  static async getCuratedSections(): Promise<CuratedSection[]> {
+    const body = await fetchJson<ApiResponse<CuratedSection[]>>(API_ENDPOINTS.CURATED);
+    if (!body.success || !Array.isArray(body.data)) {
+      throw new Error('Invalid curated sections response from music backend.');
+    }
+    return body.data;
   }
 
   static async getTrackById(id: string): Promise<Track | null> {

@@ -1,8 +1,8 @@
 import { config } from '../config/config.js';
 import { DiscoverySnapshot, DiscoverySections, type DiscoverySectionKey } from '../models/discoverySnapshot.model.js';
 import { MusicService } from './musicService.js';
-import { AiDiscoveryService } from './aiDiscoveryService.js';
-import { findBestSongMatch, type SongCandidate } from '../utils/songMatcher.js';
+import { AiDiscoveryService, type DiscoveryCandidate } from './aiDiscoveryService.js';
+import { findBestSongMatch } from '../utils/songMatcher.js';
 import { logger, serializeError } from '../utils/logger.js';
 
 export const SECTION_ORDER: DiscoverySectionKey[] = ['trending', 'popularThisWeek', 'editorsPicks', 'freshReleases'];
@@ -55,10 +55,15 @@ export class DiscoveryRefreshService {
     if (!active || new Date(active.expiresAt).getTime() <= Date.now()) void this.refreshDiscoverySections();
   }
 
-  private async resolveCandidate(candidate: SongCandidate, usedIds: Set<string>) {
+  private async resolveCandidate(candidate: DiscoveryCandidate, usedIds: Set<string>) {
     try {
       const { songs } = await this.music.search(`${candidate.title} ${candidate.artist}`, 10);
-      const match = findBestSongMatch(candidate, songs.filter(song => song.provider === 'jiosaavn'));
+      const match = findBestSongMatch(
+        candidate.title,
+        candidate.artist,
+        songs.filter(song => song.provider === 'jiosaavn'),
+        config.discoveryMatchThreshold
+      );
       if (!match || match.confidence < config.discoveryMatchThreshold || usedIds.has(match.song.id)) return null;
       return match.song;
     } catch (error) {

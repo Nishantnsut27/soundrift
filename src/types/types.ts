@@ -50,6 +50,16 @@ export interface RelatedMusic {
   moreFromAlbum: Track[];
 }
 
+export interface CuratedSection {
+  sectionId: string;
+  title: string;
+  tracks: Track[];
+  totalTracks: number;
+  initialVisibleCount: number;
+  generatedAt: string;
+  updatedAt: string;
+}
+
 export interface RecommendationContext {
   trackId: string;
   artistName: string;

@@ -1,28 +1,68 @@
 import { Song } from '../models/music.model.js';
 import { normalizeStringForSearch } from './musicSearch.js';
 
-export interface SongCandidate { title: string; artist: string; reason: string }
-export interface SongMatch { song: Song; confidence: number }
+export interface SongMatch {
+  song: Song;
+  confidence: number;
+}
 
-const similarity = (left: string, right: string): number => {
-  if (!left || !right) return 0;
-  if (left === right) return 1;
-  if (left.includes(right) || right.includes(left)) return 0.82;
-  const leftTerms = new Set(left.match(/[a-z0-9]+/g) || []);
-  const rightTerms = new Set(right.match(/[a-z0-9]+/g) || []);
-  const shared = [...leftTerms].filter(term => rightTerms.has(term)).length;
-  return shared / Math.max(leftTerms.size, rightTerms.size, 1);
-};
+function similarity(a: string, b: string): number {
+  if (!a || !b) return 0;
+  if (a === b) return 1;
 
-export function findBestSongMatch(candidate: SongCandidate, songs: Song[]): SongMatch | null {
-  const title = normalizeStringForSearch(candidate.title);
-  const artist = normalizeStringForSearch(candidate.artist);
-  let best: SongMatch | null = null;
-  for (const song of songs) {
-    const titleScore = similarity(title, normalizeStringForSearch(song.name));
-    const artistScore = similarity(artist, normalizeStringForSearch(song.artist_name));
-    const confidence = titleScore * 0.7 + artistScore * 0.3 + (song.provider === 'jiosaavn' ? 0.02 : 0);
-    if ((!best || confidence > best.confidence) && song.audio) best = { song, confidence: Math.min(confidence, 1) };
+  if (a.includes(b) || b.includes(a)) {
+    const shorter = Math.min(a.length, b.length);
+    const longer = Math.max(a.length, b.length);
+    return 0.82 * (shorter / longer) + 0.1;
   }
+
+  const aTokens = new Set(a.match(/.{1,4}/g) || []);
+  const bTokens = new Set(b.match(/.{1,4}/g) || []);
+  if (aTokens.size === 0 || bTokens.size === 0) return 0;
+
+  let shared = 0;
+  for (const token of aTokens) {
+    if (bTokens.has(token)) shared++;
+  }
+
+  return shared / Math.max(aTokens.size, bTokens.size);
+}
+
+export function findBestSongMatch(
+  candidateTitle: string,
+  candidateArtist: string,
+  results: Song[],
+  minConfidence: number
+): SongMatch | null {
+  const targetTitle = normalizeStringForSearch(candidateTitle) || candidateTitle.toLowerCase().replace(/\s+/g, '');
+  const targetArtist = normalizeStringForSearch(candidateArtist) || candidateArtist.toLowerCase().replace(/\s+/g, '');
+
+  let best: SongMatch | null = null;
+
+  for (const song of results) {
+    if (!song || !song.id || !song.audio) continue;
+
+    const songTitle = normalizeStringForSearch(song.name) || (song.name || '').toLowerCase().replace(/\s+/g, '');
+    const songArtist =
+      normalizeStringForSearch(song.artist_name) || (song.artist_name || '').toLowerCase().replace(/\s+/g, '');
+
+    const titleScore = similarity(targetTitle, songTitle);
+    const artistScore = similarity(targetArtist, songArtist);
+
+    let confidence = titleScore * 0.7 + artistScore * 0.3;
+
+    if (song.provider === 'jiosaavn') {
+      confidence += 0.02;
+    }
+
+    if (!best || confidence > best.confidence) {
+      best = { song, confidence };
+    }
+  }
+
+  if (!best || best.confidence < minConfidence) {
+    return null;
+  }
+
   return best;
 }
