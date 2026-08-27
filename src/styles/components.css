@@ -2074,8 +2074,26 @@
   margin-top: 0.25rem;
 }
 
+.playlist-mobile-sheet-cancel {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 600;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
 .playlist-mobile-sheet-cancel:hover {
   background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.24);
+}
+
+.playlist-mobile-sheet-cancel:active {
+  background: rgba(255, 255, 255, 0.22);
 }
 
 /* ==========================================================================

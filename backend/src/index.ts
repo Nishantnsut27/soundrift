@@ -104,6 +104,7 @@ app.use(errorHandlerMiddleware);
 const startServer = async () => {
   try {
     await connectDatabase();
+    startDiscoveryScheduler();
     app.listen(config.port, () => {
       console.log(`🚀 Soundrift Backend running on http://localhost:${config.port}`);
     });

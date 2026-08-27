@@ -122,7 +122,7 @@ const areTracksIdentical = (tracksA: PlaylistTrack[] | Track[], tracksB: Playlis
 
 const newId = (): string =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto
-    ? crypto.randomUUID()
+    ? `pl_${crypto.randomUUID()}`
     : `pl_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
 const isValidTrack = (t: unknown): t is Track => {

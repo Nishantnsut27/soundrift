@@ -20,7 +20,7 @@ export default defineConfig({
         id: '/',
         name: 'Soundrift',
         short_name: 'Soundrift',
-        description: 'Where Music Finds You — Discover and stream your favorite music.',
+        description: 'Drift Into Your Next Favorite. Discover and stream music you love.',
         theme_color: '#000000',
         background_color: '#000000',
         display: 'standalone',

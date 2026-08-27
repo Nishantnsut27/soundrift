@@ -4,6 +4,7 @@ export const API_BASE_URL = `${BACKEND_URL}/api/music`;
 export const API_ENDPOINTS = {
   SEARCH: `${API_BASE_URL}/search`,
   TRENDING: `${API_BASE_URL}/trending`,
+  DISCOVERY: `${API_BASE_URL}/discovery`,
   SONG: (id: string) => `${API_BASE_URL}/song/${encodeURIComponent(id)}`,
   ARTIST: (id: string) => `${API_BASE_URL}/artist/${encodeURIComponent(id)}`,
   ALBUM: (id: string) => `${API_BASE_URL}/album/${encodeURIComponent(id)}`,

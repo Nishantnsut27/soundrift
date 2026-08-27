@@ -247,7 +247,12 @@ function App() {
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (showPlaylistActions && !(event.target as Element).closest('.playlist-card-actions')) {
+      const target = event.target as Element;
+      if (
+        showPlaylistActions &&
+        !target.closest('.playlist-card-actions') &&
+        !target.closest('.playlist-mobile-actions-overlay')
+      ) {
         setShowPlaylistActions(null);
       }
     };

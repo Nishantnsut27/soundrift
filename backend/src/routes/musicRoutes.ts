@@ -10,6 +10,7 @@ musicRouter.get('/search', searchLimiter, searchSlowDown, validateSearchQuery, M
 musicRouter.get('/trending', metadataLimiter, MusicController.getTrending);
 musicRouter.get('/curated', metadataLimiter, CurationController.getSections);
 musicRouter.get('/curated/:section', metadataLimiter, CurationController.getSection);
+musicRouter.get('/discovery', metadataLimiter, MusicController.getDiscovery);
 musicRouter.get('/song/:id', metadataLimiter, validateIdParameter, MusicController.getSongById);
 musicRouter.get('/album/:id', metadataLimiter, validateIdParameter, MusicController.getAlbumById);
 musicRouter.get('/artist/:id', metadataLimiter, validateIdParameter, MusicController.getArtistById);

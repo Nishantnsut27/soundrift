@@ -15,7 +15,7 @@ export const verificationEmailHtml = (otp: string): string => `<!DOCTYPE html>
           <tr>
             <td align="center" style="padding-bottom:8px">
               <h1 style="color:#ffffff;font-size:24px;font-weight:700;margin:16px 0 4px;letter-spacing:-0.5px">Soundrift</h1>
-              <p style="color:#9ca3af;font-size:14px;margin:0 0 28px">Where Music Finds You</p>
+              <p style="color:#9ca3af;font-size:14px;margin:0 0 28px">Drift Into Your Next Favorite.</p>
             </td>
           </tr>
 
@@ -53,7 +53,7 @@ export const verificationEmailHtml = (otp: string): string => `<!DOCTYPE html>
           <tr>
             <td align="center" style="padding-top:32px">
               <div style="height:1px;background:rgba(255,255,255,0.06);margin-bottom:24px;display:block"></div>
-              <p style="color:#6b7280;font-size:11px;margin:0;letter-spacing:0.5px">SOUNDRIFT &bull; WHERE MUSIC FINDS YOU</p>
+              <p style="color:#6b7280;font-size:11px;margin:0;letter-spacing:0.5px">SOUNDRIFT &bull; DRIFT INTO YOUR NEXT FAVORITE.</p>
             </td>
           </tr>
         </table>
