@@ -1,4 +1,5 @@
 import { CuratedSectionModel, type ICuratedSectionDoc, type ICuratedSectionStats } from '../models/curatedSection.model.js';
+import { CurationRefreshLockModel } from '../models/curationRefreshLock.model.js';
 import { ISongSubDoc } from '../models/playlist.model.js';
 import { CURATED_SECTIONS, type CuratedSectionId } from '../config/curationConfig.js';
 import { buildCandidateKey } from '../utils/curationCandidates.js';
@@ -27,6 +28,32 @@ function toRecord(doc: ICuratedSectionDoc): CuratedSectionRecord {
 }
 
 export class CuratedSectionRepository {
+  async acquireRefreshLock(sectionId: CuratedSectionId, owner: string, leaseMs: number): Promise<boolean> {
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + leaseMs);
+
+    try {
+      const lock = await CurationRefreshLockModel.findOneAndUpdate(
+        {
+          sectionId,
+          $or: [{ expiresAt: { $lte: now } }, { owner }]
+        },
+        { $set: { owner, expiresAt } },
+        { new: true, upsert: true, setDefaultsOnInsert: true }
+      ).lean().exec();
+
+      return lock?.owner === owner;
+    } catch (error: unknown) {
+      // A concurrent first acquisition can race on the unique sectionId index.
+      if ((error as { code?: number }).code === 11000) return false;
+      throw error;
+    }
+  }
+
+  async releaseRefreshLock(sectionId: CuratedSectionId, owner: string): Promise<void> {
+    await CurationRefreshLockModel.deleteOne({ sectionId, owner }).exec();
+  }
+
   async findAll(): Promise<CuratedSectionRecord[]> {
     const docs = await CuratedSectionModel.find({}).lean<ICuratedSectionDoc[]>().exec();
     const bySectionId = new Map(docs.map(doc => [doc.sectionId, doc]));

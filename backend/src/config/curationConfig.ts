@@ -54,5 +54,6 @@ export const CURATION_ENGINE_CONFIG = {
   staleAfterMs: parseInt(process.env.CURATION_STALE_AFTER_MS || '46800000', 10),
   schedulerTickMs: 30000,
   startupBackfillDelayMs: parseInt(process.env.CURATION_STARTUP_DELAY_MS || '20000', 10),
-  startupBackfillSpacingMs: parseInt(process.env.CURATION_STARTUP_SPACING_MS || '15000', 10)
+  startupBackfillSpacingMs: parseInt(process.env.CURATION_STARTUP_SPACING_MS || '15000', 10),
+  sectionRefreshLockMs: parseInt(process.env.CURATION_SECTION_REFRESH_LOCK_MS || '900000', 10)
 } as const;

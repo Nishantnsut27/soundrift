@@ -21,6 +21,7 @@ import {
 } from '../utils/curationCandidates.js';
 import { findBestSongMatch } from '../utils/songMatcher.js';
 import { logger, serializeError } from '../utils/logger.js';
+import { randomUUID } from 'node:crypto';
 
 const SCOPE = 'CurationService';
 const SECTIONS_CACHE_KEY = 'curated:sections:all';
@@ -118,6 +119,18 @@ export class CurationService {
       return { sectionId, status: 'skipped', reason: 'groq_not_configured' };
     }
 
+    const lockOwner = randomUUID();
+    const ownsRefreshLock = await curatedSectionRepository.acquireRefreshLock(
+      sectionId,
+      lockOwner,
+      CURATION_ENGINE_CONFIG.sectionRefreshLockMs
+    );
+
+    if (!ownsRefreshLock) {
+      logger.info(SCOPE, 'Section generation skipped: refresh already in progress', { sectionId });
+      return { sectionId, status: 'skipped', reason: 'refresh_in_progress' };
+    }
+
     try {
       const completion = await createJsonCompletion({
         systemPrompt: CURATION_SYSTEM_PROMPT,
@@ -205,6 +218,13 @@ export class CurationService {
       });
 
       return { sectionId, status: 'kept_previous', reason };
+    } finally {
+      await curatedSectionRepository.releaseRefreshLock(sectionId, lockOwner).catch(error => {
+        logger.warn(SCOPE, 'Failed to release section refresh lock', {
+          sectionId,
+          error: serializeError(error)
+        });
+      });
     }
   }
 

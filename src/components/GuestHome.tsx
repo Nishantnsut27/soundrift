@@ -7,6 +7,7 @@ import { SearchBar } from './SearchBar';
 import { SearchResults } from './SearchResults';
 import { RelatedMusic } from './RelatedMusic';
 import { ErrorDisplay } from './ErrorDisplay';
+import { CuratedSections } from './CuratedSections';
 
 const CATEGORY_SEEDS = ['pop', 'rock', 'hip-hop', 'electronic', 'indie', 'edm', 'jazz', 'classical'];
 
@@ -85,6 +86,8 @@ export function GuestHome() {
         <SearchResults tracks={results} query={query} isLoading={isLoading} />
       ) : (
         <>
+          <CuratedSections />
+
           {recommended.length > 0 && (
             <section className="home-section">
               <div className="section-header-row">

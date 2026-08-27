@@ -104,18 +104,14 @@ class GroqKeyManager {
 
     const now = Date.now();
     const available: number[] = [];
-    const cooling: number[] = [];
-
     for (let offset = 0; offset < this.keys.length; offset++) {
       const index = (this.cursor + offset) % this.keys.length;
-      if (this.cooldownUntil[index] > now) {
-        cooling.push(index);
-      } else {
+      if (this.cooldownUntil[index] <= now) {
         available.push(index);
       }
     }
 
-    return [...available, ...cooling].slice(0, Math.max(1, maxAttempts));
+    return available.slice(0, Math.max(1, maxAttempts));
   }
 
   advanceCursor(): void {
@@ -183,6 +179,10 @@ export async function createJsonCompletion(options: {
   const attemptOrder = keyManager.buildAttemptOrder(
     Math.min(CURATION_ENGINE_CONFIG.maxGroqAttempts, keyManager.keyCount)
   );
+
+  if (attemptOrder.length === 0) {
+    throw new GroqRequestError('All configured Groq keys are cooling down', 0, 'rate_limit');
+  }
 
   let lastFailure: GroqAttemptFailure | null = null;
 
