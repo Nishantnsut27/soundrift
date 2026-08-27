@@ -3,24 +3,37 @@ import { MusicAPI } from '../services/musicApi';
 import type { CuratedSection } from '../types/types';
 import { TrackListModern } from './TrackListModern';
 
+const REFRESH_INTERVAL_MS = 60_000;
+
 export function CuratedSections() {
   const [sections, setSections] = useState<CuratedSection[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
+    let refreshInFlight = false;
 
-    MusicAPI.getCuratedSections()
-      .then(sections => {
-        if (!cancelled) setSections(sections);
-      })
-      .catch(error => console.warn('[CuratedSections] Failed to load curated sections', error))
-      .finally(() => {
+    const loadSections = async (): Promise<void> => {
+      if (refreshInFlight) return;
+      refreshInFlight = true;
+
+      try {
+        const nextSections = await MusicAPI.getCuratedSections();
+        if (!cancelled) setSections(nextSections);
+      } catch (error) {
+        console.warn('[CuratedSections] Failed to load curated sections', error);
+      } finally {
+        refreshInFlight = false;
         if (!cancelled) setIsLoading(false);
-      });
+      }
+    };
+
+    void loadSections();
+    const refreshTimer = window.setInterval(() => void loadSections(), REFRESH_INTERVAL_MS);
 
     return () => {
       cancelled = true;
+      window.clearInterval(refreshTimer);
     };
   }, []);
 
