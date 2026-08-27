@@ -2,10 +2,22 @@ import { Request, Response } from 'express';
 import { MusicService } from '../services/musicService.js';
 import { StandardApiResponse } from '../models/music.model.js';
 import { logger, serializeError } from '../utils/logger.js';
+import { discoveryRefreshService } from '../services/discoveryRefreshService.js';
 
 const musicService = new MusicService();
 
 export class MusicController {
+  static async getDiscovery(_req: Request, res: Response): Promise<void> {
+    try {
+      const snapshot = await discoveryRefreshService.getActiveSnapshot();
+      if (!snapshot) { res.status(404).json({ success: false, data: null, error: 'Discovery is being prepared. Please try again shortly.' }); return; }
+      res.status(200).json({ success: true, data: { generatedAt: snapshot.generatedAt, sections: snapshot.sections } });
+    } catch (error) {
+      logger.error('MusicController', 'Get discovery error', { error: serializeError(error) });
+      res.status(500).json({ success: false, data: null, error: 'Failed to retrieve discovery music.' });
+    }
+  }
+
   static async search(req: Request, res: Response): Promise<void> {
     try {
       const query = (req.query.q || req.query.query || '').toString().trim();

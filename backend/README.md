@@ -8,7 +8,7 @@
 [![JWT](https://img.shields.io/badge/Auth-JWT-000000?logo=jsonwebtokens&logoColor=white)](https://jwt.io)
 [![Render](https://img.shields.io/badge/Deploy-Render-46E3B7?logo=render&logoColor=white)](https://render.com)
 
-> Where Music Finds You — Express backend for the Soundrift streaming platform. Handles authentication, user data, music search from JioSaavn and Jamendo, and email notifications via Brevo.
+> Drift Into Your Next Favorite. Express backend for the Soundrift streaming platform. Handles authentication, user data, music search from JioSaavn and Jamendo, and email notifications via Brevo.
 
 ---
 

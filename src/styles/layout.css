@@ -565,6 +565,8 @@
 .playlist-card-content {
   max-height: 400px;
   overflow-y: auto;
+  overflow-x: hidden;
+  min-width: 0;
 }
 
 .playlist-card-actions {

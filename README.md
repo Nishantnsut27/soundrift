@@ -1,6 +1,6 @@
 # Soundrift
 
-> Where Music Finds You
+> Drift Into Your Next Favorite.
 
 [Live Demo](https://notify-music.vercel.app) · [Backend Health](https://notify-music.onrender.com/health) · [GitHub](https://github.com/Nishantnsut27/Notify-Music)
 
