@@ -12,8 +12,8 @@ export function SearchResults({ tracks, query, isLoading, error }: { tracks: Tra
   const albums = unique(tracks.filter(track => track.album_name), track => track.album_name).slice(0, 5);
   const matchedPlaylists = playlists.filter(playlist => playlist.name.toLowerCase().includes(query.toLowerCase())).slice(0, 4);
   return <div className="search-results">
-    <section><h2 className="search-section-title">Top result</h2><TrackListModern tracks={tracks.slice(0, 1)} playQueue={tracks} showAddToPlaylist /></section>
-    <section><TrackListModern tracks={tracks} title="Songs" showAddToPlaylist /></section>
+    <section><h2 className="search-section-title">Top result</h2><TrackListModern tracks={tracks.slice(0, 1)} startRelatedRadio showAddToPlaylist /></section>
+    <section><TrackListModern tracks={tracks} title="Songs" startRelatedRadio showAddToPlaylist /></section>
     {artists.length > 0 && <section><h2 className="search-section-title">Artists</h2><div className="search-entity-grid">{artists.map(track => <button key={track.artist_id || track.artist_name} onClick={() => search(track.artist_name)}><img src={track.image || '/Favicon.png'} alt=""/><span>{track.artist_name}</span><small>Artist</small></button>)}</div></section>}
     {albums.length > 0 && <section><h2 className="search-section-title">Albums</h2><div className="search-entity-grid">{albums.map(track => <button key={track.album_id || track.album_name} onClick={() => search(track.album_name)}><img src={track.album_image || track.image || '/Favicon.png'} alt=""/><span>{track.album_name}</span><small>{track.artist_name}</small></button>)}</div></section>}
     {matchedPlaylists.length > 0 && <section><h2 className="search-section-title">Playlists</h2><div className="search-entity-grid">{matchedPlaylists.map(playlist => <button key={playlist.id} onClick={() => usePlayerStore.getState().setCurrentView('playlists')}><img src={playlist.tracks[0]?.image || '/Favicon.png'} alt=""/><span>{playlist.name}</span><small>{playlist.tracks.length} songs</small></button>)}</div></section>}

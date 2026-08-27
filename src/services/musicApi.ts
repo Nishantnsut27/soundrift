@@ -6,15 +6,7 @@ import { formatDuration, getTrackUrl, getArtistUrl } from '../utils/formatters';
 const searchCache = new Map<string, { timestamp: number; tracks: Track[] }>();
 const CACHE_TTL_MS = 300000;
 const CACHE_MAX_ENTRIES = 200;
-export interface DiscoveryResponse { generatedAt: string; sections: { trending: Track[]; popularThisWeek: Track[]; editorsPicks: Track[]; freshReleases: Track[] } }
-
 export class MusicAPI {
-  static async getDiscovery(): Promise<DiscoveryResponse | null> {
-    try {
-      const body = await fetchJson<ApiResponse<DiscoveryResponse>>(API_ENDPOINTS.DISCOVERY);
-      return body.success && body.data ? body.data : null;
-    } catch (error) { console.error('[MusicAPI] Discovery error:', error); return null; }
-  }
   static async searchTracks(query: string, limit: number = PLAYER_DEFAULTS.DEFAULT_SEARCH_LIMIT, signal?: AbortSignal): Promise<Track[]> {
     if (!query || !query.trim()) return [];
 

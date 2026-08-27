@@ -680,7 +680,26 @@ export const usePlayerStore = create<AppStore>()(
     setPlaybackError: (playbackError: string | null) => set({ playbackError }),
 
     setRelatedMusic: (data: RelatedMusic | null) => set({ relatedMusic: data }),
-    setRecommendations: (tracks: Track[]) => set({ recommendations: tracks }),
+    setRecommendations: (tracks: Track[]) => set((state) => {
+      const knownIds = new Set(state.queue.map(track => String(track.id)));
+      const newTracks = tracks.filter(track => track.audio && !knownIds.has(String(track.id)));
+      const queue = [...state.queue, ...newTracks];
+
+      if (newTracks.length > 0 && state.currentIndex >= state.queue.length - 1 && !state.isPlaying) {
+        const nextTrack = newTracks[0];
+        return {
+          recommendations: tracks,
+          queue,
+          currentTrack: nextTrack,
+          currentIndex: state.queue.length,
+          currentTime: 0,
+          duration: nextTrack.duration || 0,
+          isPlaying: true
+        };
+      }
+
+      return { recommendations: tracks, queue };
+    }),
     clearRecommendations: () => set({ recommendations: [] }),
   }))
 );

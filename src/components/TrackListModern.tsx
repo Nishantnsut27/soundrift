@@ -17,6 +17,16 @@ interface TrackListProps {
   error?: string | null;
   playlistId?: string;
   playQueue?: Track[];
+  startRelatedRadio?: boolean;
+}
+
+function displayArtists(artistName: string): string {
+  const artists = artistName
+    .split(',')
+    .map(artist => artist.trim())
+    .filter(Boolean);
+
+  return (artists.length > 0 ? artists.slice(0, 2) : ['Unknown Artist']).join(', ');
 }
 
 export function TrackListModern({ 
@@ -26,7 +36,8 @@ export function TrackListModern({
   isLoading = false, 
   error = null,
   playlistId,
-  playQueue
+  playQueue,
+  startRelatedRadio = false
 }: TrackListProps) {
   const [showPlaylistMenu, setShowPlaylistMenu] = useState<string | null>(null);
   const [hoveredTrack, setHoveredTrack] = useState<string | null>(null);
@@ -64,6 +75,11 @@ export function TrackListModern({
         setIsPlaying(true);
       }
     } else {
+      if (startRelatedRadio) {
+        playTrack(track, [track], 0);
+        return;
+      }
+
       const queueIndex = playContext.findIndex(t => String(t.id) === String(track.id));
       playTrack(track, playContext, queueIndex >= 0 ? queueIndex : undefined);
     }
@@ -301,7 +317,9 @@ export function TrackListModern({
                 </div>
                 <div className="guest-card-info">
                   <h4 className="guest-card-title truncate">{track.name}</h4>
-                  <p className="guest-card-artist truncate">{track.artist_name}</p>
+                  <p className="guest-card-artist" title={track.artist_name}>
+                    {displayArtists(track.artist_name)}
+                  </p>
                 </div>
               </div>
             );

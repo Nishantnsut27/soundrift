@@ -2599,6 +2599,11 @@
   font-size: 0.8rem;
   color: #a7a7a7;
   margin: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
 }
 
 /* Mobile Responsiveness for Guest Cards */
@@ -2781,6 +2786,11 @@
   font-size: 0.8rem;
   color: #a7a7a7;
   margin: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
 }
 
 /* Mobile Responsiveness for Guest Cards */

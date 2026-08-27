@@ -11,7 +11,6 @@ import { userRouter } from './routes/userRoutes.js';
 import { healthLimiter } from './middleware/rateLimit.middleware.js';
 import { botProtectionMiddleware, recordIpViolation } from './middleware/security.middleware.js';
 import { errorHandlerMiddleware } from './middleware/error.middleware.js';
-import { startDiscoveryScheduler } from './services/discoveryScheduler.js';
 import { curationScheduler } from './services/curationScheduler.js';
 
 // Validate required environment variables on startup
@@ -103,7 +102,6 @@ app.use(errorHandlerMiddleware);
 const startServer = async () => {
   try {
     await connectDatabase();
-    startDiscoveryScheduler();
     app.listen(config.port, () => {
       console.log(`🚀 Soundrift Backend running on http://localhost:${config.port}`);
     });

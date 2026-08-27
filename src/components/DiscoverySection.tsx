@@ -9,9 +9,7 @@ export function DiscoverySection() {
   const { recentlyPlayed } = usePlayerStore();
   const { isAuthenticated } = useAuthStore();
   const [recommendedArtists, setRecommendedArtists] = useState<Track[]>([]);
-  const [popularAlbums, setPopularAlbums] = useState<Track[]>([]);
   const [isLoadingArtists, setIsLoadingArtists] = useState(false);
-  const [isLoadingAlbums, setIsLoadingAlbums] = useState(false);
 
   const lastPlayedArtist = recentlyPlayed[0]?.artist_name;
   const lastPlayedGenre = recentlyPlayed[0]?.musicinfo?.tags?.genres?.[0];
@@ -24,15 +22,6 @@ export function DiscoverySection() {
       .catch(() => {})
       .finally(() => setIsLoadingArtists(false));
   }, [lastPlayedArtist, recentlyPlayed]);
-
-  useEffect(() => {
-    setIsLoadingAlbums(true);
-    const seed = recentlyPlayed[0]?.album_name || 'popular';
-    MusicAPI.searchTracks(seed, 12)
-      .then(tracks => setPopularAlbums(tracks.slice(0, 8)))
-      .catch(() => {})
-      .finally(() => setIsLoadingAlbums(false));
-  }, [recentlyPlayed]);
 
   if (!isAuthenticated) return null;
 
@@ -55,13 +44,6 @@ export function DiscoverySection() {
           <GenreExplorer genre={lastPlayedGenre} />
         </section>
       )}
-
-      <section className="home-section">
-        <div className="section-header-row">
-          <h2 className="section-title">Popular Albums</h2>
-        </div>
-        <TrackListModern tracks={popularAlbums} isLoading={isLoadingAlbums} showAddToPlaylist />
-      </section>
     </div>
   );
 }

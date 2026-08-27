@@ -55,6 +55,7 @@ export function useRecommendations() {
 
     MusicAPI.getRecommendations(currentTrack, excludeIds, 10)
       .then(tracks => {
+        if (String(storeRef.current.currentTrack?.id) !== String(currentTrack.id)) return;
         storeRef.current.setRecommendations(tracks);
       })
       .catch(() => {})
