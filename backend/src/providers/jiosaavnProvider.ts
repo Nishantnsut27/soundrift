@@ -15,7 +15,7 @@ export class JioSaavnProvider implements IMusicProvider {
       timeout: config.requestTimeoutMs,
       headers: {
         'Accept': 'application/json',
-        'User-Agent': 'NotifyMusicPlayer/1.0'
+        'User-Agent': 'Soundrift/1.0'
       }
     });
   }

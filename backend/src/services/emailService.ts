@@ -18,7 +18,7 @@ export class EmailService {
 
     try {
       await client.transactionalEmails.sendTransacEmail({
-        subject: 'Verify your Notify Music account',
+        subject: 'Verify your Soundrift account',
         htmlContent: verificationEmailHtml(otp),
         sender: { name: config.emailFromName, email: config.emailFrom },
         to: [{ email }],
@@ -35,7 +35,7 @@ export class EmailService {
 
     try {
       await client.transactionalEmails.sendTransacEmail({
-        subject: 'Reset your Notify Music password',
+        subject: 'Reset your Soundrift password',
         htmlContent: resetPasswordEmailHtml(otp),
         sender: { name: config.emailFromName, email: config.emailFrom },
         to: [{ email }],

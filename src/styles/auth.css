@@ -1,4 +1,4 @@
-/* Authentication & User Profile Styling - Notify Music Player Emerald Theme */
+/* Authentication & User Profile Styling - Soundrift Emerald Theme */
 
 /* ==========================================================================
    User Avatar & Top Bar Action (Guest Mode Header)
@@ -301,7 +301,7 @@
   transform: rotateY(180deg);
 }
 
-/* Shared Card Face Styling (Frosted Dark Glass matching Notify Player) */
+/* Shared Card Face Styling (Frosted Dark Glass matching Soundrift Player) */
 .auth-card-face {
   position: relative;
   width: 100%;
@@ -380,7 +380,7 @@
   transform: rotate(90deg) scale(0.95);
 }
 
-/* Top Avatar Silhouette Header Circle (Notify Emerald Glow) */
+/* Top Avatar Silhouette Header Circle (Soundrift Emerald Glow) */
 .auth-silhouette-avatar {
   width: 90px;
   height: 90px;

@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "Notify Music",
-  "short_name": "Notify Music",
+  "name": "Soundrift",
+  "short_name": "Soundrift",
   "description": "Where Music Finds You — Discover and stream your favorite music.",
   "start_url": "/",
   "scope": "/",

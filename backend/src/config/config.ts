@@ -3,6 +3,21 @@ import { v2 as cloudinary } from 'cloudinary';
 
 dotenv.config();
 
+const readGroqApiKeys = (): string[] => {
+  const collected: string[] = [];
+
+  for (let slot = 1; slot <= 6; slot++) {
+    const raw = process.env[`GROQ_API_KEY_${slot}`] || process.env[`GROQ_API_${slot}`] || '';
+    const key = raw.trim();
+    if (key) collected.push(key);
+  }
+
+  const legacyKey = (process.env.GROQ_API_KEY || '').trim();
+  if (legacyKey) collected.push(legacyKey);
+
+  return [...new Set(collected)];
+};
+
 export const config = {
   port: parseInt(process.env.PORT || '5000', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
@@ -31,8 +46,16 @@ export const config = {
 
   // Brevo Email Configuration
   brevoApiKey: process.env.BREVO_API_KEY || '',
-  emailFrom: process.env.EMAIL_FROM || 'notifymusicplayer@gmail.com',
-  emailFromName: process.env.EMAIL_FROM_NAME || 'Notify Music',
+  emailFrom: process.env.EMAIL_FROM || 'contactsoundrift@gmail.com',
+  emailFromName: process.env.EMAIL_FROM_NAME || 'Soundrift',
+
+  groqApiKeys: readGroqApiKeys(),
+  groqApiUrl: process.env.GROQ_API_URL || 'https://api.groq.com/openai/v1/chat/completions',
+  groqModel: process.env.GROQ_CURATION_MODEL || 'openai/gpt-oss-120b',
+  groqRequestTimeoutMs: parseInt(process.env.GROQ_REQUEST_TIMEOUT_MS || '45000', 10),
+
+  curationSchedulerEnabled: (process.env.CURATION_SCHEDULER_ENABLED || 'true').toLowerCase() !== 'false',
+  curationBackfillOnStartup: (process.env.CURATION_BACKFILL_ON_STARTUP || 'true').toLowerCase() !== 'false',
 };
 
 // Configure Cloudinary SDK

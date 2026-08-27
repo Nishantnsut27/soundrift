@@ -1,13 +1,14 @@
 {
-  "name": "notify-music-player-backend",
+  "name": "soundrift-backend",
   "version": "1.0.0",
-  "description": "Clean, scalable music provider backend for Notify Music Player",
+  "description": "Clean, scalable music provider backend for Soundrift",
   "main": "dist/index.js",
   "type": "module",
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "tsx watch src/index.ts"
+    "dev": "tsx watch src/index.ts",
+    "curate": "tsx src/scripts/runCuration.ts"
   },
   "dependencies": {
     "@getbrevo/brevo": "^6.0.2",

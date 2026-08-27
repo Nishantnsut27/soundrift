@@ -1,4 +1,4 @@
-# Notify Music Backend
+# Soundrift Backend
 
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
@@ -8,7 +8,7 @@
 [![JWT](https://img.shields.io/badge/Auth-JWT-000000?logo=jsonwebtokens&logoColor=white)](https://jwt.io)
 [![Render](https://img.shields.io/badge/Deploy-Render-46E3B7?logo=render&logoColor=white)](https://render.com)
 
-> Where Music Finds You — Express backend for the Notify Music streaming platform. Handles authentication, user data, music search from JioSaavn and Jamendo, and email notifications via Brevo.
+> Where Music Finds You — Express backend for the Soundrift streaming platform. Handles authentication, user data, music search from JioSaavn and Jamendo, and email notifications via Brevo.
 
 ---
 
@@ -54,8 +54,8 @@ npm run dev             # http://localhost:5000
 | `REFRESH_TOKEN_EXPIRES_IN` | `7d` | Refresh token TTL |
 | `COOKIE_SECRET` | — | Cookie signing secret |
 | `BREVO_API_KEY` | — | Brevo transactional email API key |
-| `EMAIL_FROM` | `notifymusicplayer@gmail.com` | Sender email |
-| `EMAIL_FROM_NAME` | `Notify Music` | Sender name |
+| `EMAIL_FROM` | `contactsoundrift@gmail.com` | Sender email |
+| `EMAIL_FROM_NAME` | `Soundrift` | Sender name |
 | `CLOUDINARY_CLOUD_NAME` | — | Cloudinary cloud name |
 | `CLOUDINARY_API_KEY` | — | Cloudinary API key |
 | `CLOUDINARY_API_SECRET` | — | Cloudinary API secret |

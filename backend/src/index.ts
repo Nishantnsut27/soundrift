@@ -11,6 +11,7 @@ import { userRouter } from './routes/userRoutes.js';
 import { healthLimiter } from './middleware/rateLimit.middleware.js';
 import { botProtectionMiddleware, recordIpViolation } from './middleware/security.middleware.js';
 import { errorHandlerMiddleware } from './middleware/error.middleware.js';
+import { curationScheduler } from './services/curationScheduler.js';
 
 // Validate required environment variables on startup
 validateConfig();
@@ -72,7 +73,7 @@ app.get('/health', healthLimiter, (_req, res) => {
 
   res.status(isOk ? 200 : 503).json({
     status: isOk ? 'ok' : 'degraded',
-    service: 'Notify Music Player Backend',
+    service: 'Soundrift Backend',
     database: {
       status: dbState.state,
       connected: dbState.connected,
@@ -104,8 +105,10 @@ const startServer = async () => {
   try {
     await connectDatabase();
     app.listen(config.port, () => {
-      console.log(`🚀 Notify Music Player Backend running on http://localhost:${config.port}`);
+      console.log(`🚀 Soundrift Backend running on http://localhost:${config.port}`);
     });
+
+    curationScheduler.start();
   } catch (err) {
     console.error('💥 Fatal Startup Failure:', err);
     process.exit(1);

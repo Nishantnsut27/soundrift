@@ -18,8 +18,8 @@ export default defineConfig({
       ],
       manifest: {
         id: '/',
-        name: 'Notify Music',
-        short_name: 'Notify Music',
+        name: 'Soundrift',
+        short_name: 'Soundrift',
         description: 'Where Music Finds You — Discover and stream your favorite music.',
         theme_color: '#000000',
         background_color: '#000000',

@@ -1,4 +1,4 @@
-# Notify Music
+# Soundrift
 
 > Where Music Finds You
 
@@ -8,7 +8,7 @@
 
 ## Project Overview
 
-Notify Music is a full-stack music streaming platform with authentication, playlist management, and multi-provider audio discovery. The React 19 frontend communicates with an Express.js API that orchestrates music search across JioSaavn (primary) and Jamendo (fallback) providers with automatic failover, ensuring uninterrupted playback.
+Soundrift is a full-stack music streaming platform with authentication, playlist management, and multi-provider audio discovery. The React 19 frontend communicates with an Express.js API that orchestrates music search across JioSaavn (primary) and Jamendo (fallback) providers with automatic failover, ensuring uninterrupted playback.
 
 ---
 

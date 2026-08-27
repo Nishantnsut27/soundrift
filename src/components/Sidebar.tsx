@@ -179,13 +179,13 @@ export function Sidebar() {
           <div className="sidebar-logo">
             <img
               src="/Favicon.png"
-              alt="Notify Music Logo"
+              alt="Soundrift Logo"
               width="32"
               height="32"
               className="sidebar-logo-icon"
             />
             <h2 className="sidebar-title" style={{ color: '#ffffff !important' }}>
-              Notify Music
+              Soundrift
             </h2>
           </div>
         </div>
@@ -420,7 +420,7 @@ export function Sidebar() {
             </div>
           ) : (
             <p className="sidebar-attribution">
-              Powered by <span style={{ color: '#1ed760', fontWeight: 600 }}>Notify Engine</span>
+              Powered by <span style={{ color: '#1ed760', fontWeight: 600 }}>Soundrift Engine</span>
               <br />
               <span className="text-muted">(Guest Discovery Mode)</span>
             </p>
