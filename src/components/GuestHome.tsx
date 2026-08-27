@@ -8,18 +8,13 @@ import { SearchResults } from './SearchResults';
 import { RelatedMusic } from './RelatedMusic';
 import { ErrorDisplay } from './ErrorDisplay';
 
-const CATEGORY_SEEDS = ['pop', 'rock', 'hip-hop', 'electronic', 'indie', 'edm', 'jazz', 'classical'];
-
-const daySeed = (offset: number) => {
-  const day = Math.floor(Date.now() / 86400000);
-  return CATEGORY_SEEDS[(day + offset) % CATEGORY_SEEDS.length];
-};
-
 export function GuestHome() {
-  const { results, query, isLoading, error, trending } = usePlayerStore();
+  const { results, query, isLoading, error } = usePlayerStore();
   const [recommended, setRecommended] = useState<Track[]>([]);
+  const [trending, setTrending] = useState<Track[]>([]);
   const [popularThisWeek, setPopularThisWeek] = useState<Track[]>([]);
   const [editorsPicks, setEditorsPicks] = useState<Track[]>([]);
+  const [freshReleases, setFreshReleases] = useState<Track[]>([]);
   const [isLoadingSections, setIsLoadingSections] = useState(true);
   const cancelledRef = useRef(false);
 
@@ -37,27 +32,27 @@ export function GuestHome() {
         return true;
       });
 
-    const seed = trending[0];
-    const recommendedSource = seed
-      ? MusicAPI.getRecommendations(seed, new Set(trending.map((t) => t.id)), 12).catch(() => [] as Track[])
-      : Promise.resolve([] as Track[]);
-
-    Promise.allSettled([
-      recommendedSource,
-      MusicAPI.getTracksByGenre(daySeed(1), 12).catch(() => [] as Track[]),
-      MusicAPI.getTracksByGenre(daySeed(2), 12).catch(() => [] as Track[]),
-    ]).then(([rec, popular, picks]) => {
+    MusicAPI.getDiscovery().then((discovery) => {
       if (cancelledRef.current) return;
-      if (rec.status === 'fulfilled') setRecommended(dedupe(rec.value));
-      if (popular.status === 'fulfilled') setPopularThisWeek(dedupe(popular.value));
-      if (picks.status === 'fulfilled') setEditorsPicks(dedupe(picks.value));
+      if (discovery) {
+        const curatedTrending = dedupe(discovery.sections.trending || []);
+        setTrending(curatedTrending);
+        setPopularThisWeek(dedupe(discovery.sections.popularThisWeek || []));
+        setFreshReleases(dedupe(discovery.sections.freshReleases || []));
+        setEditorsPicks(dedupe(discovery.sections.editorsPicks || []));
+        if (curatedTrending[0]) {
+          MusicAPI.getRecommendations(curatedTrending[0], new Set(curatedTrending.map(t => t.id)), 12)
+            .then(tracks => !cancelledRef.current && setRecommended(dedupe(tracks)))
+            .catch(() => undefined);
+        }
+      }
       setIsLoadingSections(false);
-    });
+    }).catch(() => !cancelledRef.current && setIsLoadingSections(false));
 
     return () => {
       cancelledRef.current = true;
     };
-  }, [trending]);
+  }, []);
 
   if (error) {
     return (
@@ -118,6 +113,13 @@ export function GuestHome() {
                 <h2 className="section-title">Editor's Picks</h2>
               </div>
               <TrackListModern tracks={editorsPicks} isLoading={isLoadingSections} showAddToPlaylist />
+            </section>
+          )}
+
+          {freshReleases.length > 0 && (
+            <section className="home-section">
+              <div className="section-header-row"><h2 className="section-title">Fresh Releases</h2></div>
+              <TrackListModern tracks={freshReleases} isLoading={isLoadingSections} showAddToPlaylist />
             </section>
           )}
 
