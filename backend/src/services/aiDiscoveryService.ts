@@ -2,7 +2,12 @@ import axios from 'axios';
 import { z } from 'zod';
 import { config } from '../config/config.js';
 import type { DiscoverySectionKey } from '../models/discoverySnapshot.model.js';
-import type { SongCandidate } from '../utils/songMatcher.js';
+
+export interface DiscoveryCandidate {
+  title: string;
+  artist: string;
+  reason: string;
+}
 
 const candidateSchema = z.object({ title: z.string().trim().min(1).max(180), artist: z.string().trim().min(1).max(180), reason: z.string().trim().min(1).max(300) });
 const responseSchema = z.object({ candidates: z.array(candidateSchema).default([]) });
@@ -14,7 +19,7 @@ const sectionInstructions: Record<DiscoverySectionKey, string> = {
 };
 
 export class AiDiscoveryService {
-  async generateCandidates(section: DiscoverySectionKey): Promise<SongCandidate[]> {
+  async generateCandidates(section: DiscoverySectionKey): Promise<DiscoveryCandidate[]> {
     if (!config.groqApiKey) throw new Error('GROQ_API_KEY is not configured.');
     const size = config.discoverySectionSize + 5;
     const generatedAt = new Date().toISOString();

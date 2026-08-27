@@ -54,6 +54,16 @@ export class CuratedSectionRepository {
     await CurationRefreshLockModel.deleteOne({ sectionId, owner }).exec();
   }
 
+  async renewRefreshLock(sectionId: CuratedSectionId, owner: string, leaseMs: number): Promise<boolean> {
+    const now = new Date();
+    const result = await CurationRefreshLockModel.updateOne(
+      { sectionId, owner, expiresAt: { $gt: now } },
+      { $set: { expiresAt: new Date(now.getTime() + leaseMs) } }
+    ).exec();
+
+    return result.modifiedCount === 1;
+  }
+
   async findAll(): Promise<CuratedSectionRecord[]> {
     const docs = await CuratedSectionModel.find({}).lean<ICuratedSectionDoc[]>().exec();
     const bySectionId = new Map(docs.map(doc => [doc.sectionId, doc]));

@@ -11,6 +11,7 @@ import { userRouter } from './routes/userRoutes.js';
 import { healthLimiter } from './middleware/rateLimit.middleware.js';
 import { botProtectionMiddleware, recordIpViolation } from './middleware/security.middleware.js';
 import { errorHandlerMiddleware } from './middleware/error.middleware.js';
+import { startDiscoveryScheduler } from './services/discoveryScheduler.js';
 import { curationScheduler } from './services/curationScheduler.js';
 
 // Validate required environment variables on startup
@@ -20,8 +21,6 @@ const app = express();
 
 app.disable('x-powered-by');
 
-// Trust the first proxy hop (required on Render/Heroku/etc. for express-rate-limit
-// to correctly read the real client IP from the X-Forwarded-For header)
 app.set('trust proxy', 1);
 
 app.use(helmet({

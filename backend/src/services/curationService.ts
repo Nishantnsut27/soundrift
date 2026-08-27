@@ -131,6 +131,30 @@ export class CurationService {
       return { sectionId, status: 'skipped', reason: 'refresh_in_progress' };
     }
 
+    let refreshLockLost = false;
+    const renewRefreshLock = async (): Promise<boolean> => {
+      try {
+        const renewed = await curatedSectionRepository.renewRefreshLock(
+          sectionId,
+          lockOwner,
+          CURATION_ENGINE_CONFIG.sectionRefreshLockMs
+        );
+        refreshLockLost ||= !renewed;
+        return renewed;
+      } catch (error) {
+        refreshLockLost = true;
+        logger.warn(SCOPE, 'Failed to renew section refresh lock', {
+          sectionId,
+          error: serializeError(error)
+        });
+        return false;
+      }
+    };
+    const refreshLockRenewal = setInterval(() => {
+      void renewRefreshLock();
+    }, Math.max(1_000, Math.floor(CURATION_ENGINE_CONFIG.sectionRefreshLockMs / 2)));
+    refreshLockRenewal.unref?.();
+
     try {
       const completion = await createJsonCompletion({
         systemPrompt: CURATION_SYSTEM_PROMPT,
@@ -179,6 +203,11 @@ export class CurationService {
         duplicateTracksRemoved: resolution.duplicateTracksRemoved
       };
 
+      if (refreshLockLost || !(await renewRefreshLock())) {
+        logger.warn(SCOPE, 'Section generation abandoned: refresh lock ownership was lost', { sectionId });
+        return { sectionId, status: 'kept_previous', reason: 'refresh_lock_lost' };
+      }
+
       await curatedSectionRepository.replaceSection({
         sectionId,
         title: definition.title,
@@ -219,6 +248,7 @@ export class CurationService {
 
       return { sectionId, status: 'kept_previous', reason };
     } finally {
+      clearInterval(refreshLockRenewal);
       await curatedSectionRepository.releaseRefreshLock(sectionId, lockOwner).catch(error => {
         logger.warn(SCOPE, 'Failed to release section refresh lock', {
           sectionId,
