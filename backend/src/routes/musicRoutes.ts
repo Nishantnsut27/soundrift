@@ -7,6 +7,7 @@ export const musicRouter = Router();
 
 musicRouter.get('/search', searchLimiter, searchSlowDown, validateSearchQuery, MusicController.search);
 musicRouter.get('/trending', metadataLimiter, MusicController.getTrending);
+musicRouter.get('/discovery', metadataLimiter, MusicController.getDiscovery);
 musicRouter.get('/song/:id', metadataLimiter, validateIdParameter, MusicController.getSongById);
 musicRouter.get('/album/:id', metadataLimiter, validateIdParameter, MusicController.getAlbumById);
 musicRouter.get('/artist/:id', metadataLimiter, validateIdParameter, MusicController.getArtistById);

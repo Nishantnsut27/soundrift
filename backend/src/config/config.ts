@@ -28,6 +28,15 @@ export const config = {
   slowDownSearchDelayAfter: parseInt(process.env.SLOW_DOWN_SEARCH_DELAY_AFTER || '100', 10),
   slowDownSearchDelayMs: parseInt(process.env.SLOW_DOWN_SEARCH_DELAY_MS || '500', 10),
   cacheTtlMs: parseInt(process.env.CACHE_TTL_MS || '300000', 10),
+  groqApiKey: process.env.GROQ_API_KEY || '',
+  groqDiscoveryModel: process.env.GROQ_DISCOVERY_MODEL || 'openai/gpt-oss-20b',
+  discoveryTimezone: process.env.DISCOVERY_TIMEZONE || 'Asia/Kolkata',
+  discoveryRefreshCrons: (process.env.DISCOVERY_REFRESH_CRONS || '0 3 * * *|35 12 * * *').split('|').map(value => value.trim()).filter(Boolean),
+  discoverySectionSize: parseInt(process.env.DISCOVERY_SECTION_SIZE || '12', 10),
+  discoverySnapshotTtlHours: parseInt(process.env.DISCOVERY_SNAPSHOT_TTL_HOURS || '26', 10),
+  discoveryMatchThreshold: parseInt(process.env.DISCOVERY_MATCH_THRESHOLD || '0.72', 10),
+  discoverySectionIntervalMinutes: parseInt(process.env.DISCOVERY_SECTION_INTERVAL_MINUTES || '5', 10),
+  discoveryRefreshOnStartup: process.env.DISCOVERY_REFRESH_ON_STARTUP !== 'false',
 
   // Brevo Email Configuration
   brevoApiKey: process.env.BREVO_API_KEY || '',
