@@ -3,6 +3,14 @@ import { v2 as cloudinary } from 'cloudinary';
 
 dotenv.config();
 
+const parseBoolean = (value: string | undefined): boolean | undefined => {
+  if (value === undefined || value === '') return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (['true', '1', 'yes', 'on'].includes(normalized)) return true;
+  if (['false', '0', 'no', 'off'].includes(normalized)) return false;
+  return undefined;
+};
+
 const readGroqApiKeys = (): string[] => {
   const collected: string[] = [];
 
@@ -28,6 +36,8 @@ export const config = {
   refreshTokenSecret: process.env.REFRESH_TOKEN_SECRET || '',
   refreshTokenExpiresIn: process.env.REFRESH_TOKEN_EXPIRES_IN || '7d',
   cookieSecret: process.env.COOKIE_SECRET || '',
+  cookieSecure: parseBoolean(process.env.COOKIE_SECURE) ?? (process.env.NODE_ENV === 'production'),
+  cookieSameSite: (process.env.COOKIE_SAME_SITE || (process.env.NODE_ENV === 'production' ? 'none' : 'lax')).toLowerCase() as 'lax' | 'strict' | 'none',
   googleClientId: process.env.GOOGLE_CLIENT_ID || '',
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
   googleCallbackUrl: process.env.GOOGLE_CALLBACK_URL || '',
@@ -96,6 +106,12 @@ export const validateConfig = (): void => {
   }
   if (!config.cookieSecret) {
     throw new Error('❌ Startup Error: COOKIE_SECRET environment variable is missing.');
+  }
+  if (!['lax', 'strict', 'none'].includes(config.cookieSameSite)) {
+    throw new Error('❌ Startup Error: COOKIE_SAME_SITE must be one of "lax", "strict", or "none".');
+  }
+  if (config.cookieSameSite === 'none' && !config.cookieSecure) {
+    throw new Error('❌ Startup Error: COOKIE_SAME_SITE=none requires COOKIE_SECURE=true.');
   }
   if (!config.cloudinaryCloudName || !config.cloudinaryApiKey || !config.cloudinaryApiSecret) {
     throw new Error('❌ Startup Error: Cloudinary environment variables are missing.');

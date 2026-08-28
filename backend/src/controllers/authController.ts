@@ -284,8 +284,8 @@ export class AuthController {
       const state = generateOAuthState();
       res.cookie(OAUTH_STATE_COOKIE, state, {
         httpOnly: true,
-        secure: config.nodeEnv === 'production',
-        sameSite: 'lax',
+        secure: config.cookieSecure,
+        sameSite: config.cookieSameSite,
         path: '/api/auth',
         maxAge: OAUTH_STATE_MAX_AGE_MS,
       });
@@ -302,8 +302,8 @@ export class AuthController {
     if (storedState) {
       res.clearCookie(OAUTH_STATE_COOKIE, {
         httpOnly: true,
-        secure: config.nodeEnv === 'production',
-        sameSite: 'lax',
+        secure: config.cookieSecure,
+        sameSite: config.cookieSameSite,
         path: '/api/auth',
       });
     }

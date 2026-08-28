@@ -39,11 +39,10 @@ export const REFRESH_TOKEN_COOKIE_PATH = '/api/auth';
 const LEGACY_REFRESH_TOKEN_COOKIE_PATH = '/api/auth/refresh';
 
 const baseCookieOptions = () => {
-  const isProd = config.nodeEnv === 'production';
   return {
     httpOnly: true,
-    secure: isProd,
-    sameSite: isProd ? ('none' as const) : ('lax' as const),
+    secure: config.cookieSecure,
+    sameSite: config.cookieSameSite,
   };
 };
 
