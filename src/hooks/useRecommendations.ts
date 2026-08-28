@@ -2,6 +2,9 @@ import { useEffect, useRef } from 'react';
 import { usePlayerStore } from '../store/playerStore';
 import { MusicAPI } from '../services/musicApi';
 
+const TOP_UP_THRESHOLD = 2;
+const REQUEST_BATCH = 10;
+
 export function useRecommendations() {
   const trackId = usePlayerStore(s => s.currentTrack?.id);
   const currentIndex = usePlayerStore(s => s.currentIndex);
@@ -9,12 +12,50 @@ export function useRecommendations() {
   const isPlaying = usePlayerStore(s => s.isPlaying);
   const repeatMode = usePlayerStore(s => s.repeatMode);
   const autoplayEnabled = usePlayerStore(s => s.autoplayEnabled);
-  const recommendationsLength = usePlayerStore(s => s.recommendations.length);
-  const recentlyPlayed = usePlayerStore(s => s.recentlyPlayed);
+  const sessionId = usePlayerStore(s => s.sessionId);
 
   const storeRef = useRef(usePlayerStore.getState());
-  const lastFetchedRef = useRef<string>('');
   const loadingRef = useRef(false);
+  const fetcherIdRef = useRef(0);
+
+  const topUpRef = useRef<(sourceTrackId: string) => Promise<void>>(async () => {});
+  topUpRef.current = async (sourceTrackId: string) => {
+    if (loadingRef.current) return;
+    const s = storeRef.current;
+    const sourceTrack = s.currentTrack;
+    if (!sourceTrack || String(sourceTrack.id) !== String(sourceTrackId)) return;
+
+    const session = s.sessionId;
+    const attempt = ++fetcherIdRef.current;
+    loadingRef.current = true;
+
+    try {
+      const excludeIds = new Set<string>([
+        sourceTrackId,
+        ...s.queue.map(t => t.id),
+        ...s.playbackHistory.map(t => t.id),
+        ...s.recentlyPlayed.slice(0, 30).map(t => t.id),
+      ]);
+
+      const tracks = await MusicAPI.getRecommendations(sourceTrack, excludeIds, REQUEST_BATCH);
+
+      const latest = storeRef.current;
+      if (attempt !== fetcherIdRef.current) return;
+      if (latest.sessionId !== session) return;
+      if (String(latest.currentTrack?.id) !== String(sourceTrackId)) return;
+
+      await latest.setRecommendations(tracks);
+    } catch (err) {
+      void err;
+    } finally {
+      loadingRef.current = false;
+    }
+  };
+
+  useEffect(() => {
+    fetcherIdRef.current += 1;
+    loadingRef.current = false;
+  }, [trackId, sessionId]);
 
   useEffect(() => {
     const unsub = usePlayerStore.subscribe((s) => { storeRef.current = s; });
@@ -22,46 +63,12 @@ export function useRecommendations() {
   }, []);
 
   useEffect(() => {
-    if (!trackId || !autoplayEnabled) {
-      storeRef.current.clearRecommendations();
-      return;
-    }
-    if (lastFetchedRef.current === trackId) return;
-    lastFetchedRef.current = trackId;
-    loadingRef.current = false;
-    storeRef.current.clearRecommendations();
-  }, [trackId, autoplayEnabled]);
-
-  useEffect(() => {
     if (!trackId || !autoplayEnabled || !isPlaying) return;
     if (repeatMode === 'one') return;
 
     const remaining = queueLength - currentIndex - 1;
-    if (remaining > 3) return;
-    if (recommendationsLength > 0) return;
-    if (loadingRef.current) return;
+    if (remaining > TOP_UP_THRESHOLD) return;
 
-    loadingRef.current = true;
-
-    const s = storeRef.current;
-    const currentTrack = s.currentTrack;
-    if (!currentTrack) { loadingRef.current = false; return; }
-
-    const excludeIds = new Set<string>([
-      trackId,
-      ...s.queue.map(t => t.id),
-      ...recentlyPlayed.slice(0, 20).map(t => t.id),
-    ]);
-
-    MusicAPI.getRecommendations(currentTrack, excludeIds, 10)
-      .then(tracks => {
-        if (String(storeRef.current.currentTrack?.id) !== String(currentTrack.id)) return;
-        storeRef.current.setRecommendations(tracks);
-      })
-      .catch(() => {})
-      .finally(() => {
-        loadingRef.current = false;
-      });
-  }, [trackId, currentIndex, queueLength, isPlaying, autoplayEnabled, repeatMode, recommendationsLength, recentlyPlayed]);
-
-  }
+    void topUpRef.current(trackId);
+  }, [trackId, currentIndex, queueLength, isPlaying, autoplayEnabled, repeatMode, sessionId]);
+}

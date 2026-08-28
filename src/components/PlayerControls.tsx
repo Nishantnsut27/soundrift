@@ -2,7 +2,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { usePlayer } from '../hooks/usePlayer';
 import { usePlayerStore } from '../store/playerStore';
 import { useToastStore } from '../store/toastStore';
-import { formatDuration } from '../utils/formatters';
+import { formatDuration, formatArtistNames } from '../utils/formatters';
 import { AudioVisualizer } from './AudioVisualizer';
 
 export function PlayerControls() {
@@ -332,7 +332,7 @@ export function PlayerControls() {
 
         <div className="track-info">
           <div className="title-1">{currentTrack.name}</div>
-          <div className="title-2">{currentTrack.artist_name}</div>
+          <div className="title-2" title={currentTrack.artist_name}>{formatArtistNames(currentTrack.artist_name)}</div>
         </div>
 
         {(isPlaying || isBuffering) && (

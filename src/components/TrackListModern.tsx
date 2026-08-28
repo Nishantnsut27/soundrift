@@ -8,6 +8,7 @@ import { EmptySearchResults, EmptyState } from './EmptyState';
 import { ErrorDisplay } from './ErrorDisplay';
 import { useAuthStore } from '../store/authStore';
 import { TrackItemModern } from './TrackItemModern';
+import { formatArtistNames } from '../utils/formatters';
 
 interface TrackListProps {
   tracks: Track[];
@@ -20,15 +21,6 @@ interface TrackListProps {
   startRelatedRadio?: boolean;
 }
 
-function displayArtists(artistName: string): string {
-  const artists = artistName
-    .split(',')
-    .map(artist => artist.trim())
-    .filter(Boolean);
-
-  return (artists.length > 0 ? artists.slice(0, 2) : ['Unknown Artist']).join(', ');
-}
-
 export function TrackListModern({ 
   tracks, 
   title, 
@@ -36,8 +28,6 @@ export function TrackListModern({
   isLoading = false, 
   error = null,
   playlistId,
-  playQueue,
-  startRelatedRadio = false
 }: TrackListProps) {
   const [showPlaylistMenu, setShowPlaylistMenu] = useState<string | null>(null);
   const [hoveredTrack, setHoveredTrack] = useState<string | null>(null);
@@ -65,9 +55,7 @@ export function TrackListModern({
     favorites
   } = usePlayerStore();
 
-  const playContext = playQueue || tracks;
-
-  const handlePlayTrack = (track: Track, _renderIndex: number) => {
+  const handlePlayTrack = (track: Track) => {
     if (currentTrack?.id === track.id) {
       if (isPlaying) {
         pauseTrack();
@@ -75,13 +63,7 @@ export function TrackListModern({
         setIsPlaying(true);
       }
     } else {
-      if (startRelatedRadio) {
-        playTrack(track, [track], 0);
-        return;
-      }
-
-      const queueIndex = playContext.findIndex(t => String(t.id) === String(track.id));
-      playTrack(track, playContext, queueIndex >= 0 ? queueIndex : undefined);
+      playTrack(track);
     }
   };
 
@@ -289,7 +271,7 @@ export function TrackListModern({
               <div
                 key={`${track.id}-${index}`}
                 className={`guest-music-card ${isCurrent ? 'active' : ''}`}
-                onClick={() => handlePlayTrack(track, index)}
+                onClick={() => handlePlayTrack(track)}
               >
                 <div className="guest-card-cover-wrapper">
                   <img
@@ -318,7 +300,7 @@ export function TrackListModern({
                 <div className="guest-card-info">
                   <h4 className="guest-card-title truncate">{track.name}</h4>
                   <p className="guest-card-artist" title={track.artist_name}>
-                    {displayArtists(track.artist_name)}
+                    {formatArtistNames(track.artist_name)}
                   </p>
                 </div>
               </div>

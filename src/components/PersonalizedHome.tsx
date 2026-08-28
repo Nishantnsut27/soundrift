@@ -7,6 +7,7 @@ import { MusicAPI } from '../services/musicApi';
 import { SearchBar } from './SearchBar';
 import { SearchResults } from './SearchResults';
 import { CuratedSections } from './CuratedSections';
+import { formatArtistNames } from '../utils/formatters';
 
 function getPersonalizedGreeting(): string {
   const baseMessages = [
@@ -268,7 +269,7 @@ export function PersonalizedHome() {
           </div>
           <div className="recent-tracks-grid">
             {recentlyPlayed.slice(0, 6).map((track: Track, index) => (
-              <div key={`${track.id}-${index}`} className="recent-track-card" onClick={() => playTrack(track, recentlyPlayed)}>
+              <div key={`${track.id}-${index}`} className="recent-track-card" onClick={() => playTrack(track)}>
                 <div className="track-cover-wrapper">
                   <img
                     src={track.image || track.album_image || '/Favicon.png'}
@@ -288,7 +289,7 @@ export function PersonalizedHome() {
                 </div>
                 <div className="track-info">
                   <p className="track-title truncate">{track.name}</p>
-                  <p className="track-artist truncate">{track.artist_name}</p>
+                  <p className="track-artist truncate" title={track.artist_name}>{formatArtistNames(track.artist_name)}</p>
                 </div>
               </div>
             ))}

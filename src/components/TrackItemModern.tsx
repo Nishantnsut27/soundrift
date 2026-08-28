@@ -1,6 +1,6 @@
 import React, { memo } from 'react';
 import type { Track } from '../types/types';
-import { formatDuration, getArtistUrl } from '../utils/formatters';
+import { formatDuration, getArtistUrl, formatArtistNames } from '../utils/formatters';
 import { AudioVisualizer } from './AudioVisualizer';
 import { useAuthStore } from '../store/authStore';
 
@@ -114,9 +114,10 @@ export const TrackItemModern = memo(function TrackItemModern({
             target="_blank"
             rel="noopener noreferrer"
             className="artist-link-modern"
+            title={track.artist_name}
             onClick={(e) => e.stopPropagation()}
           >
-            {track.artist_name}
+            {formatArtistNames(track.artist_name)}
           </a>
         </p>
         {track.album_name && <p className="track-album-modern">{track.album_name}</p>}

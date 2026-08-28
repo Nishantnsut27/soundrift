@@ -6,7 +6,7 @@ import { userApi } from '../services/userApi';
 import { useAuthStore } from './authStore';
 
 interface PlayerStore extends PlayerState {
-  playTrack: (track: Track, queue?: Track[], index?: number) => void;
+  playTrack: (track: Track, _queue?: Track[], _index?: number) => void;
   pauseTrack: () => void;
   nextTrack: () => void;
   previousTrack: () => void;
@@ -58,7 +58,7 @@ interface PlaylistStore {
   exportPlaylist: (id: string) => string;
   importPlaylist: (data: string) => void;
   setRelatedMusic: (data: RelatedMusic | null) => void;
-  setRecommendations: (tracks: Track[]) => void;
+  setRecommendations: (tracks: Track[]) => Promise<void>;
   clearRecommendations: () => void;
 }
 
@@ -169,6 +169,8 @@ export const usePlayerStore = create<AppStore>()(
     volumeBeforeMute: PLAYER_DEFAULTS.DEFAULT_VOLUME,
     queue: [],
     currentIndex: -1,
+    playbackHistory: [],
+    sessionId: 0,
     isShuffling: false,
     shuffleOrder: [] as number[],
     shufflePosition: 0,
@@ -195,33 +197,18 @@ export const usePlayerStore = create<AppStore>()(
     currentView: 'search',
     theme: loadFromLocalStorage(STORAGE_KEYS.THEME, 'dark'),
 
-    playTrack: (track: Track, queue?: Track[], index?: number) => {
+    playTrack: (track: Track) => {
       const state = get();
-      let newQueue = queue || (state.queue.length > 0 ? state.queue : [track]);
-      let newIndex = index;
 
-      if (newIndex === undefined) {
-        newIndex = newQueue.findIndex(t => String(t.id) === String(track.id));
-      }
-      if (newIndex === undefined || newIndex < 0) {
-        newQueue = [...newQueue, track];
-        newIndex = newQueue.length - 1;
-      }
+      const newQueue = [track];
+      const newIndex = 0;
 
       const updatedRecentlyPlayed = [track, ...state.recentlyPlayed.filter(t => t.id !== track.id)].slice(0, 30);
 
       let shuffleOrder: number[] = [];
       let shufflePosition = 0;
       if (state.isShuffling) {
-        shuffleOrder = Array.from({ length: newQueue.length }, (_, i) => i);
-        for (let i = shuffleOrder.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [shuffleOrder[i], shuffleOrder[j]] = [shuffleOrder[j], shuffleOrder[i]];
-        }
-        const pos = shuffleOrder.indexOf(newIndex);
-        if (pos > 0) {
-          shuffleOrder = [...shuffleOrder.slice(pos), ...shuffleOrder.slice(0, pos)];
-        }
+        shuffleOrder = [0];
         shufflePosition = 0;
       }
 
@@ -230,6 +217,8 @@ export const usePlayerStore = create<AppStore>()(
         isPlaying: true,
         queue: newQueue,
         currentIndex: newIndex,
+        playbackHistory: [],
+        sessionId: state.sessionId + 1,
         currentTime: 0,
         duration: track.duration || 0,
         recentlyPlayed: updatedRecentlyPlayed,
@@ -246,26 +235,48 @@ export const usePlayerStore = create<AppStore>()(
 
     pauseTrack: () => set({ isPlaying: false }),
 
+    setRecommendations: async (tracks: Track[]) => {
+      const state = get();
+      const knownIds = new Set<string>();
+      for (const t of state.queue) knownIds.add(String(t.id));
+      for (const t of state.playbackHistory) knownIds.add(String(t.id));
+      for (const t of state.recentlyPlayed.slice(0, 30)) knownIds.add(String(t.id));
+
+      const newTracks = tracks.filter(t => t && t.audio && !knownIds.has(String(t.id)));
+      if (newTracks.length === 0) return;
+
+      let shuffleOrder = state.shuffleOrder;
+      const shufflePosition = state.shufflePosition;
+      if (state.isShuffling) {
+        shuffleOrder = [...state.shuffleOrder];
+        for (let i = 0; i < newTracks.length; i++) shuffleOrder.push(state.queue.length + i);
+      }
+
+      set({
+        recommendations: tracks,
+        queue: [...state.queue, ...newTracks],
+        shuffleOrder,
+        shufflePosition,
+      });
+    },
+
     nextTrack: () => {
       const state = get();
-      if (state.queue.length === 0) return;
+      if (!state.currentTrack || state.queue.length === 0) return;
 
       let nextIndex: number;
+      let playNext = true;
 
-      if (state.isShuffling && state.shuffleOrder.length === state.queue.length) {
+      if (state.repeatMode === 'one') {
+        nextIndex = state.currentIndex;
+      } else if (state.isShuffling && state.shuffleOrder.length > 0) {
         const nextPos = state.shufflePosition + 1;
         if (nextPos >= state.shuffleOrder.length) {
           if (state.repeatMode === 'all') {
-            const newOrder = Array.from({ length: state.queue.length }, (_, i) => i);
-            for (let i = newOrder.length - 1; i > 0; i--) {
-              const j = Math.floor(Math.random() * (i + 1));
-              [newOrder[i], newOrder[j]] = [newOrder[j], newOrder[i]];
-            }
-            set({ shuffleOrder: newOrder, shufflePosition: 0 });
-            nextIndex = newOrder[0];
+            nextIndex = 0;
           } else {
-            set({ isPlaying: false });
-            return;
+            playNext = false;
+            nextIndex = -1;
           }
         } else {
           nextIndex = state.shuffleOrder[nextPos];
@@ -277,64 +288,50 @@ export const usePlayerStore = create<AppStore>()(
           if (state.repeatMode === 'all') {
             nextIndex = 0;
           } else {
-            set({ isPlaying: false });
-            return;
+            playNext = false;
+            nextIndex = -1;
           }
         }
       }
 
-      const nextTrack = state.queue[nextIndex];
-      if (nextTrack) {
-        set({
-          currentTrack: nextTrack,
-          currentIndex: nextIndex,
-          currentTime: 0,
-          duration: nextTrack.duration || 0,
-          isPlaying: true
-        });
+      if (!playNext || nextIndex < 0 || nextIndex === state.currentIndex) {
+        if (!playNext) set({ isPlaying: false });
+        return;
       }
+
+      const history = state.currentIndex >= 0
+        ? [...state.playbackHistory, state.queue[state.currentIndex]].filter(Boolean) as Track[]
+        : state.playbackHistory;
+
+      const nextTrack = state.queue[nextIndex];
+      set({
+        currentTrack: nextTrack,
+        currentIndex: nextIndex,
+        playbackHistory: history,
+        currentTime: 0,
+        duration: nextTrack.duration || 0,
+        isPlaying: true
+      });
     },
 
     previousTrack: () => {
       const state = get();
-      if (state.queue.length === 0) return;
+      if (!state.currentTrack) return;
 
-      let prevIndex: number;
+      if (state.playbackHistory.length === 0) return;
 
-      if (state.isShuffling && state.shuffleOrder.length === state.queue.length) {
-        const prevPos = state.shufflePosition - 1;
-        if (prevPos < 0) {
-          if (state.repeatMode === 'all') {
-            prevIndex = state.shuffleOrder[state.shuffleOrder.length - 1];
-            set({ shufflePosition: state.shuffleOrder.length - 1 });
-          } else {
-            return;
-          }
-        } else {
-          prevIndex = state.shuffleOrder[prevPos];
-          set({ shufflePosition: prevPos });
-        }
-      } else {
-        prevIndex = state.currentIndex - 1;
-        if (prevIndex < 0) {
-          if (state.repeatMode === 'all') {
-            prevIndex = state.queue.length - 1;
-          } else {
-            return;
-          }
-        }
-      }
+      const prevTrack = state.playbackHistory[state.playbackHistory.length - 1];
+      const prevIndex = state.queue.findIndex(t => String(t.id) === String(prevTrack.id));
+      const newHistory = state.playbackHistory.slice(0, -1);
 
-      const prevTrack = state.queue[prevIndex];
-      if (prevTrack) {
-        set({
-          currentTrack: prevTrack,
-          currentIndex: prevIndex,
-          currentTime: 0,
-          duration: prevTrack.duration || 0,
-          isPlaying: true
-        });
-      }
+      set({
+        currentTrack: prevTrack,
+        currentIndex: prevIndex >= 0 ? prevIndex : state.currentIndex - 1,
+        playbackHistory: newHistory,
+        currentTime: 0,
+        duration: prevTrack.duration || 0,
+        isPlaying: true,
+      });
     },
 
     setCurrentTime: (time: number) => set({ currentTime: time }),
@@ -380,7 +377,12 @@ export const usePlayerStore = create<AppStore>()(
 
     addToQueue: (track: Track) => {
       const state = get();
-      set({ queue: [...state.queue, track] });
+      if (state.queue.some(t => String(t.id) === String(track.id))) return;
+
+      let shuffleOrder = state.shuffleOrder;
+      if (state.isShuffling) shuffleOrder = [...state.shuffleOrder, state.queue.length];
+
+      set({ queue: [...state.queue, track], shuffleOrder });
     },
 
     removeFromQueue: (index: number) => {
@@ -388,7 +390,7 @@ export const usePlayerStore = create<AppStore>()(
       const newQueue = state.queue.filter((_, i) => i !== index);
 
       if (newQueue.length === 0) {
-        set({ queue: [], currentIndex: -1, currentTrack: null, isPlaying: false });
+        set({ queue: [], currentIndex: -1, currentTrack: null, isPlaying: false, playbackHistory: [] });
         return;
       }
 
@@ -407,7 +409,17 @@ export const usePlayerStore = create<AppStore>()(
       });
     },
 
-    clearQueue: () => set({ queue: [], currentIndex: -1, currentTrack: null, isPlaying: false }),
+    clearQueue: () => set((state) => ({
+      queue: [],
+      currentIndex: -1,
+      currentTrack: null,
+      isPlaying: false,
+      playbackHistory: [],
+      recommendations: [],
+      shuffleOrder: [],
+      shufflePosition: 0,
+      sessionId: state.sessionId + 1,
+    })),
 
     setQuery: (query: string) => set({ query }),
     setResults: (results: Track[]) => set({ results }),
@@ -680,26 +692,6 @@ export const usePlayerStore = create<AppStore>()(
     setPlaybackError: (playbackError: string | null) => set({ playbackError }),
 
     setRelatedMusic: (data: RelatedMusic | null) => set({ relatedMusic: data }),
-    setRecommendations: (tracks: Track[]) => set((state) => {
-      const knownIds = new Set(state.queue.map(track => String(track.id)));
-      const newTracks = tracks.filter(track => track.audio && !knownIds.has(String(track.id)));
-      const queue = [...state.queue, ...newTracks];
-
-      if (newTracks.length > 0 && state.currentIndex >= state.queue.length - 1 && !state.isPlaying) {
-        const nextTrack = newTracks[0];
-        return {
-          recommendations: tracks,
-          queue,
-          currentTrack: nextTrack,
-          currentIndex: state.queue.length,
-          currentTime: 0,
-          duration: nextTrack.duration || 0,
-          isPlaying: true
-        };
-      }
-
-      return { recommendations: tracks, queue };
-    }),
     clearRecommendations: () => set({ recommendations: [] }),
   }))
 );

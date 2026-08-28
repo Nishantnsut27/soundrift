@@ -15,3 +15,18 @@ export const getTrackUrl = (trackId: string): string => {
 export const getArtistUrl = (artistId: string): string => {
   return `https://www.jamendo.com/artist/${encodeURIComponent(artistId)}`;
 };
+
+export const formatArtistNames = (artistName: string, max = 2): string => {
+  if (!artistName) return 'Unknown Artist';
+  const artists = artistName
+    .split(',')
+    .map(a => a.trim())
+    .filter(Boolean);
+
+  if (artists.length === 0) return 'Unknown Artist';
+  if (artists.length <= max) return artists.join(', ');
+
+  const shown = artists.slice(0, max).join(', ');
+  const extra = artists.length - max;
+  return `${shown}, +${extra}`;
+};

@@ -101,6 +101,8 @@ export interface PlayerState {
   playbackError: string | null;
   queue: Track[];
   currentIndex: number;
+  playbackHistory: Track[];
+  sessionId: number;
   isShuffling: boolean;
   repeatMode: 'none' | 'one' | 'all';
 }
