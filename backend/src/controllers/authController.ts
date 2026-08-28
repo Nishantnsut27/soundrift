@@ -2,6 +2,20 @@ import { Request, Response, NextFunction } from 'express';
 import { AuthService } from '../services/authService.js';
 import { setAuthCookies, clearAuthCookies } from '../utils/token.utils.js';
 import { AuthenticatedRequest } from '../middleware/auth.middleware.js';
+import {
+  generateOAuthState,
+  verifyOAuthState,
+  buildAuthorizationUrl,
+  validateGoogleCode,
+} from '../services/googleOAuthService.js';
+import { config } from '../config/config.js';
+
+const OAUTH_STATE_COOKIE = 'oauth_state';
+const OAUTH_STATE_MAX_AGE_MS = 10 * 60 * 1000;
+
+function redirectToFrontend(res: Response, path: string): void {
+  res.redirect(`${config.frontendUrl}${path}`);
+}
 
 export class AuthController {
   static async sendOtp(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -262,6 +276,58 @@ export class AuthController {
       });
     } catch (error) {
       next(error);
+    }
+  }
+
+  public static async googleAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const state = generateOAuthState();
+      res.cookie(OAUTH_STATE_COOKIE, state, {
+        httpOnly: true,
+        secure: config.nodeEnv === 'production',
+        sameSite: 'lax',
+        path: '/api/auth',
+        maxAge: OAUTH_STATE_MAX_AGE_MS,
+      });
+      res.redirect(buildAuthorizationUrl(state));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  public static async googleCallback(req: Request, res: Response): Promise<void> {
+    const { code, state, error: paramError } = req.query;
+    const storedState = req.cookies?.[OAUTH_STATE_COOKIE];
+
+    if (storedState) {
+      res.clearCookie(OAUTH_STATE_COOKIE, {
+        httpOnly: true,
+        secure: config.nodeEnv === 'production',
+        sameSite: 'lax',
+        path: '/api/auth',
+      });
+    }
+
+    if (paramError === 'access_denied' || paramError === 'user_cancelled') {
+      redirectToFrontend(res, '/?auth=error&reason=cancelled');
+      return;
+    }
+    if (paramError) {
+      redirectToFrontend(res, '/?auth=error&reason=google');
+      return;
+    }
+    if (!code || !state || !storedState || state !== storedState || !verifyOAuthState(String(state))) {
+      redirectToFrontend(res, '/?auth=error&reason=state');
+      return;
+    }
+
+    try {
+      const identity = await validateGoogleCode(String(code));
+      const { accessToken, refreshToken } = await AuthService.authenticateWithGoogle(identity);
+      setAuthCookies(res, accessToken, refreshToken);
+      redirectToFrontend(res, '/?auth=success');
+    } catch {
+      redirectToFrontend(res, '/?auth=error&reason=failed');
     }
   }
 }

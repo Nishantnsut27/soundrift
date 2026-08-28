@@ -5,7 +5,7 @@ import { useAuthStore } from '../../store/authStore';
 import { authApi } from '../../services/authApi';
 import { ApiError } from '../../services/apiClient';
 import { useCountdown } from '../../hooks/useCountdown';
-import { UserIcon, MailIcon, SendIcon, CheckCircleIcon, AlertCircleIcon, TimerIcon, LoaderIcon, CheckIcon } from './AuthIcons';
+import { UserIcon, MailIcon, SendIcon, CheckCircleIcon, AlertCircleIcon, TimerIcon, LoaderIcon, CheckIcon, GoogleIcon } from './AuthIcons';
 
 interface SignupFormProps {
   onSwitchToLogin: () => void;
@@ -178,7 +178,7 @@ export const SignupForm: React.FC<SignupFormProps> = ({ onSwitchToLogin, onSucce
             <label className="auth-glass-checkbox-label">
               <input type="checkbox" className="auth-glass-checkbox-input" checked={agreeTerms} onChange={(e) => { setAgreeTerms(e.target.checked); if (errors.terms) setErrors((p) => ({ ...p, terms: undefined })); }} disabled={isSendingOtp} />
               <span className="auth-glass-checkbox-custom"><CheckIcon size={10} /></span>
-              I agree to the Terms & Privacy Policy
+              I agree to the <a href="/terms" onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.location.href = '/terms'; }} className="auth-legal-link">Terms</a> &amp; <a href="/privacy" onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.location.href = '/privacy'; }} className="auth-legal-link">Privacy Policy</a>
             </label>
             {errors.terms && <span className="auth-field-error" role="alert">{errors.terms}</span>}
           </div>
@@ -186,6 +186,13 @@ export const SignupForm: React.FC<SignupFormProps> = ({ onSwitchToLogin, onSucce
           <button type="submit" className="auth-glass-btn" disabled={isSendingOtp}>
             {isSendingOtp ? <><LoaderIcon size={18} /> SENDING CODE...</> : <><MailIcon size={18} /> SEND VERIFICATION CODE</>}
           </button>
+
+          <div className="auth-divider"><span>or</span></div>
+
+          <a href={authApi.getGoogleAuthUrl()} className="auth-google-btn" onClick={(e) => { e.preventDefault(); window.location.href = authApi.getGoogleAuthUrl(); }}>
+            <GoogleIcon size={18} />
+            Continue with Google
+          </a>
         </>
       ) : (
         <div className="otp-step-container">

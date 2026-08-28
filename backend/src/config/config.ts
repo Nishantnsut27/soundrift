@@ -28,6 +28,10 @@ export const config = {
   refreshTokenSecret: process.env.REFRESH_TOKEN_SECRET || '',
   refreshTokenExpiresIn: process.env.REFRESH_TOKEN_EXPIRES_IN || '7d',
   cookieSecret: process.env.COOKIE_SECRET || '',
+  googleClientId: process.env.GOOGLE_CLIENT_ID || '',
+  googleClientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+  googleCallbackUrl: process.env.GOOGLE_CALLBACK_URL || '',
+  frontendUrl: process.env.FRONTEND_URL || '',
   cloudinaryCloudName: process.env.CLOUDINARY_CLOUD_NAME || '',
   cloudinaryApiKey: process.env.CLOUDINARY_API_KEY || '',
   cloudinaryApiSecret: process.env.CLOUDINARY_API_SECRET || '',
@@ -114,6 +118,16 @@ export const validateConfig = (): void => {
     }
     if (config.allowedOrigins.length === 0) {
       throw new Error('❌ Startup Error: ALLOWED_ORIGINS must list at least one origin in production.');
+    }
+  }
+
+  const anyGoogleSet = Boolean(config.googleClientId || config.googleClientSecret || config.googleCallbackUrl);
+  if (anyGoogleSet) {
+    if (!config.googleClientId || !config.googleClientSecret || !config.googleCallbackUrl) {
+      throw new Error('❌ Startup Error: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_CALLBACK_URL must all be set to enable Google OAuth.');
+    }
+    if (!config.frontendUrl) {
+      throw new Error('❌ Startup Error: FRONTEND_URL must be set when Google OAuth is enabled.');
     }
   }
 };

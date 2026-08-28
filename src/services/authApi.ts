@@ -54,6 +54,10 @@ export const authApi = {
     });
   },
 
+  getGoogleAuthUrl(): string {
+    return `${AUTH_BASE_URL}/google`;
+  },
+
   async sendOtp(data: { fullName: string; email: string; password: string }): Promise<OtpResponse> {
     return fetchJson<OtpResponse>(`${AUTH_BASE_URL}/send-otp`, {
       method: 'POST',

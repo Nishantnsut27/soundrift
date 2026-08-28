@@ -15,6 +15,7 @@ interface AuthState {
   signup: (data: { fullName: string; email: string; password: string }) => Promise<boolean>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
+  completeOAuth: () => Promise<{ status: 'success' | 'error' | 'none'; reason?: string }>;
   clearError: () => void;
 }
 
@@ -130,10 +131,6 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   checkAuth: async () => {
-    if (!getStoredToken()) {
-      set({ isAuthenticated: false, isInitialized: true, user: null, token: null });
-      return;
-    }
     try {
       const response = await authApi.getCurrentUser();
       set({
@@ -155,6 +152,48 @@ export const useAuthStore = create<AuthState>((set) => ({
       isAuthenticated: false,
       isInitialized: true,
     });
+  },
+
+  completeOAuth: async () => {
+    if (typeof window === 'undefined') return { status: 'none' };
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get('auth');
+    const reason = params.get('reason') || undefined;
+    const cleanUrl = () => {
+      const url = new URL(window.location.href);
+      url.search = '';
+      url.hash = '';
+      window.history.replaceState(null, '', url.toString());
+    };
+
+    if (status === 'success') {
+      try {
+        const response = await authApi.getCurrentUser();
+        set({
+          user: response.user,
+          isAuthenticated: true,
+          isInitialized: true,
+          error: null,
+        });
+        cleanUrl();
+        import('./playerStore').then(({ usePlayerStore }) => {
+          usePlayerStore.getState().syncCloudUserData();
+        });
+        return { status: 'success' };
+      } catch {
+        cleanUrl();
+        set({ isInitialized: true });
+        return { status: 'error', reason: 'failed' };
+      }
+    }
+
+    if (status === 'error') {
+      cleanUrl();
+      set({ isInitialized: true });
+      return { status: 'error', reason };
+    }
+
+    return { status: 'none' };
   },
 
   clearError: () => set({ error: null }),

@@ -33,12 +33,15 @@ import './styles/components.css';
 import './styles/player.css';
 import './styles/animations.css';
 import './styles/auth.css';
+import './styles/legal.css';
+import { LegalPage } from './pages/LegalPage';
 
 function App() {
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authModalMode, setAuthModalMode] = useState<AuthMode>('login');
+  const [legalPage, setLegalPage] = useState<'terms' | 'privacy' | null>(null);
 
   useEffect(() => {
     const goOnline = () => setIsOffline(false);
@@ -57,6 +60,31 @@ function App() {
   useEffect(() => {
     checkAuth();
   }, [checkAuth]);
+
+  useEffect(() => {
+    let mounted = true;
+    const { completeOAuth } = useAuthStore.getState();
+    completeOAuth().then((result) => {
+      if (!mounted) return;
+      if (result.status === 'success') {
+        addToast({ message: 'Signed in with Google.', type: 'success' });
+      } else if (result.status === 'error') {
+        const reason = result.reason;
+        if (reason !== 'cancelled') {
+          const message =
+            reason === 'failed'
+              ? 'Google sign-in failed. Please try again.'
+              : 'Unable to sign in with Google. Please try again.';
+          addToast({ message, type: 'error' });
+        }
+        setIsAuthModalOpen(true);
+        setAuthModalMode('login');
+      }
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [addToast]);
 
   useEffect(() => {
     const handleOpenAuth = (e: Event) => {
@@ -104,6 +132,12 @@ function App() {
       const path = window.location.pathname.toLowerCase();
       const isAuth = useAuthStore.getState().isAuthenticated;
 
+      if (path === '/terms' || path === '/privacy') {
+        setLegalPage(path === '/terms' ? 'terms' : 'privacy');
+        return;
+      }
+      setLegalPage(null);
+
       const isProtectedRoute =
         path.includes('/favorites') ||
         path.includes('/playlists') ||
@@ -149,6 +183,9 @@ function App() {
   }, [isAuthenticated, currentView, setCurrentView, addToast]);
 
   useEffect(() => {
+    const path = window.location.pathname.toLowerCase();
+    if (path === '/terms' || path === '/privacy') return;
+    if (legalPage) return;
     let targetPath = '/';
     if (currentView !== 'search') targetPath = `/${currentView}`;
     if (window.location.pathname !== targetPath) {
@@ -158,7 +195,7 @@ function App() {
         void e;
       }
     }
-  }, [currentView]);
+  }, [currentView, legalPage]);
 
   const handleEditPlaylist = (playlistId: string, currentName: string) => {
     setPlaylistToRename({ id: playlistId, name: currentName });
@@ -506,6 +543,10 @@ function App() {
         );
     }
   };
+
+  if (legalPage) {
+    return <LegalPage page={legalPage} />;
+  }
 
   if (isOffline) {
     return <OfflinePage />;
