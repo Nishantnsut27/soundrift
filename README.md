@@ -8,20 +8,23 @@
 
 ## Project Overview
 
-Soundrift is a full-stack music discovery and streaming platform with authentication, playlist management, and multi-provider audio discovery. The React 19 frontend communicates with an Express.js API that orchestrates music search across JioSaavn (primary) and Jamendo (fallback) providers with automatic failover, ensuring uninterrupted playback.
+Soundrift is a full-stack music discovery and streaming platform built with React 19 and an Express.js/Node.js backend. It combines multi-provider music discovery, personalized recommendations, curated discovery sections, authentication, cloud-synced user libraries, and a browser-based playback experience. JioSaavn is used as the primary music provider with Jamendo available as a fallback provider, while an AI-assisted curation pipeline generates and refreshes editorial-style discovery sections.
 
 ---
 
 ## Key Features
 
-- **Authentication** — Email/password registration and login with JWT access and refresh tokens, OTP-based email verification, forgot/reset password flow, and Remember Me persistence
-- **Music Discovery** — Multi-provider search engine with result deduplication and relevance ranking; trending content via Fisher-Yates shuffled discovery queue; personalized track recommendations
-- **Playback Engine** — Singleton HTML5 audio with seek, volume, shuffle, repeat modes, Media Session API integration, and keyboard shortcuts
-- **Library Management** — Favorites, playlists (create, rename, delete, add/remove tracks, import/export as JSON), recently played, and search history — synced to the cloud when authenticated
-- **Audio Visualizer** — Real-time Canvas-based harmonic frequency visualization during playback
-- **PWA & Offline** — Installable progressive web app with Workbox service worker; network-first API caching; cache-first asset caching; dedicated offline page
-- **Responsive Design** — Desktop layout with persistent sidebar, mobile drawer navigation, and adaptive UI components
-- **Security** — Rate limiting, progressive slow-down, bot protection with IP violation tracking, Zod input validation, Helmet headers, and CORS enforcement
+- **Authentication** — Email/password registration and login with JWT access and refresh tokens, OTP-based email verification, forgot/reset password flow, password change, Remember Me persistence, and optional Google OAuth sign-in
+- **Music Discovery** — Multi-provider search with result filtering, normalization, deduplication, relevance ranking, trending discovery, and related-track recommendations
+- **AI-Assisted Curation** — Curated sections including Trending Now, Editor's Picks, Fresh Releases, K-Pop, and Worldwide, refreshed through a scheduled Groq-powered curation engine with configurable fallback/backfill behavior
+- **Playback Engine** — Singleton HTML5 audio playback with seeking, volume control, shuffle, repeat modes, Media Session API integration, and keyboard shortcuts
+- **Library Management** — Favorites, playlists, playlist track management and reordering, recently played, listening history, and search history with authenticated cloud synchronization
+- **Playlist Tools** — Create, rename, delete, add/remove/reorder tracks, and export playlists as JSON from the frontend
+- **Audio Visualizer** — Real-time Canvas-based harmonic/frequency visualization during playback
+- **PWA & Offline** — Installable progressive web app with service-worker support, cached assets/API behavior, and a dedicated offline page
+- **Responsive Design** — Desktop sidebar navigation, mobile drawer navigation, adaptive layouts, lazy-loaded discovery views, and dark/light theme support
+- **Profile & Media** — User profile management and avatar uploads backed by Cloudinary
+- **Security** — Rate limiting, progressive slowdown, bot protection, Zod input validation, Helmet security headers, CORS enforcement, compressed responses, secure cookies, and request coalescing
 
 ---
 
@@ -29,27 +32,39 @@ Soundrift is a full-stack music discovery and streaming platform with authentica
 
 ### Provider Architecture
 
-The backend uses a **sequential fallback** strategy across two providers:
+The backend uses a sequential provider strategy:
 
-1. **JioSaavn (Primary)** — Queried for all search, track, album, artist, playlist, and suggestion requests. Results are filtered for quality (`isSearchNoise`), deduplicated by normalized title and duration similarity, and ranked by relevance score.
+1. **JioSaavn (Primary)** — Used for search and music metadata operations such as songs, albums, artists, playlists, and suggestions. Results are normalized, filtered for search noise, deduplicated, and ranked before being returned.
 
-2. **Jamendo (Fallback)** — Open-license provider activated when JioSaavn returns zero results or throws an error. Fires three parallel queries (`namesearch`, `artist_name`, `tags`) and deduplicates results internally.
+2. **Jamendo (Fallback)** — Used when the primary provider returns no usable results or encounters an error. Multiple Jamendo search strategies can be combined and deduplicated to improve fallback coverage.
 
 ```
-Search/Detail Request
+Search / Detail Request
         │
-        ├── JioSaavn ── Success ──→ Filter ──→ Deduplicate ──→ Rank ──→ Output
+        ├── JioSaavn ──→ Normalize ──→ Filter ──→ Deduplicate ──→ Rank ──→ Output
         │
-        └── (empty/error) ──→ Jamendo ──→ Output
+        └── (empty/error) ──→ Jamendo ──→ Normalize ──→ Output
 ```
 
 ### Trending & Discovery
 
-The home endpoint (`GET /api/music/trending`) generates content from a **Fisher-Yates shuffled queue** of 79 curated keywords spanning Indian artists, movies, playlists, and international hits. Each request selects 4–6 random artists from a pool of 33, searches each via the provider chain, filters for artist-relevant results, and interleaves songs round-robin across artists. Results are cached for 45 seconds.
+The `/api/music/trending` endpoint generates a rotating discovery feed from curated keyword data. Provider results are filtered and combined to create a varied selection of music, with backend caching used to reduce repeated provider requests.
+
+### AI-Assisted Curated Sections
+
+The `/api/music/curated` and `/api/music/curated/:section` endpoints expose persistent curated sections. The current section set is:
+
+- **Trending Now**
+- **Editor's Picks**
+- **Fresh Releases**
+- **K-Pop**
+- **Worldwide**
+
+The backend includes a Groq-powered curation service, stored curated-section data, refresh locks, and a scheduler. The scheduler operates in the `Asia/Kolkata` timezone, runs two curation cycles per day, refreshes sections at five-minute intervals, and can perform startup backfill for stale or missing sections. Up to six Groq API keys can be configured for resilient curation requests.
 
 ### Recommendations
 
-The suggestions endpoint (`GET /api/music/suggestions/:id`) calls JioSaavn's related-tracks API and falls back to Jamendo genre-based recommendations when JioSaavn returns empty.
+The `/api/music/suggestions/:id` endpoint provides related-track recommendations using the provider layer and fallback behavior when the primary provider cannot return suitable results.
 
 ---
 
@@ -57,18 +72,19 @@ The suggestions endpoint (`GET /api/music/suggestions/:id`) calls JioSaavn's rel
 
 | Protection Layer | Implementation | Purpose |
 |---|---|---|
-| **JWT Authentication** | `jsonwebtoken` | Access (15 min) + Refresh (7 day) tokens via httpOnly cookies and Authorization header |
+| **JWT Authentication** | `jsonwebtoken` | Short-lived access tokens plus rotating refresh tokens via secure cookies/headers |
 | **Password Hashing** | `bcrypt` | Secure password and OTP hash storage |
-| **OTP Verification** | 6-digit bcrypt-hashed OTP | Email verification and password reset flows |
-| **Rate Limiting** | `express-rate-limit` | Auth (25/15min), OTP (5/60s), forgot password (5/15min), search (300/min), metadata (600/min) |
-| **Progressive Slowdown** | `express-slow-down` | +500ms delay per request after 100 search hits |
-| **Bot Protection** | Custom middleware | Rejects missing User-Agent; tracks IP violations in-memory |
-| **Input Validation** | `zod` | Search queries (1–100 chars), resource IDs (1–128), auth inputs |
-| **Security Headers** | `helmet` | CSP, frameguard, X-Content-Type-Options, cross-origin resource policy |
-| **CORS Policy** | `cors` | Dynamic origin whitelist with localhost auto-allow in development |
-| **Body Size Limit** | `express.json({ limit: '10kb' })` | Prevents large-payload DoS |
-| **Request Coalescing** | In-memory inflight map | Deduplicates simultaneous identical provider requests |
-| **Token Rotation** | Refresh token rotation | Old tokens invalidated on each refresh |
+| **OTP Verification** | 6-digit bcrypt-hashed OTP | Email verification and password-reset verification flows |
+| **Google OAuth** | `google-auth-library` | Optional authorization-code based Google sign-in |
+| **Rate Limiting** | `express-rate-limit` | Separate limits for authentication, OTP, search, metadata, health, and password-reset operations |
+| **Progressive Slowdown** | `express-slow-down` | Adds increasing delay after configured search request thresholds |
+| **Bot Protection** | Custom middleware | Rejects suspicious requests and records IP violations |
+| **Input Validation** | `zod` | Validates search queries, resource IDs, and authentication inputs |
+| **Security Headers** | `helmet` | Applies standard HTTP security protections |
+| **CORS Policy** | `cors` | Restricts cross-origin requests to configured allowed origins |
+| **Body Size Limit** | Express body-parser limits | Prevents oversized request payloads |
+| **Request Coalescing** | In-memory inflight maps | Prevents duplicate simultaneous provider work |
+| **Refresh Token Rotation** | Auth service | Invalidates/rotates refresh tokens during token refresh |
 
 ---
 
@@ -77,18 +93,22 @@ The suggestions endpoint (`GET /api/music/suggestions/:id`) calls JioSaavn's rel
 ```
 Frontend (React 19 + TypeScript + Zustand)
     ↓  HTTPS / REST
-Backend (Express.js + Node.js)
+Backend (Express.js + Node.js + TypeScript)
     ↓
-Music Providers (JioSaavn → Jamendo)
+Music Provider Layer (JioSaavn → Jamendo)
     ↓
-Database (MongoDB + Mongoose)
+MongoDB + Mongoose
     ↓
-Authentication (JWT + bcrypt)
+Authentication (JWT + bcrypt + optional Google OAuth)
     ↓
-Email Service (Brevo/Sendinblue)
+AI Curation (Groq)
+    ↓
+Email Service (Brevo) + Avatar Storage (Cloudinary)
 ```
 
-The frontend is a single-page application deployed on Vercel. It uses Zustand for state management with localStorage persistence and communicates with the production backend at `https://notify-music.onrender.com` by default. Set `VITE_API_URL` to override this URL for local or alternate deployments. The backend runs on Express.js with MongoDB for persistent storage, Cloudinary for avatar uploads, and Brevo for transactional email.
+The frontend is a single-page application deployed on Vercel. It uses Zustand for client-side state and local persistence, communicates with the backend through REST APIs, supports PWA installation/offline behavior, and provides dedicated search, favorites, playlists, recently played, legal, authentication, and discovery experiences.
+
+The backend runs on Express.js with MongoDB/Mongoose for persistent storage, Cloudinary for avatar uploads, Brevo for transactional email, JioSaavn and Jamendo for music data, and Groq for AI-assisted curated discovery. The default backend URL used by the frontend is configurable through `VITE_API_URL`.
 
 ---
 
@@ -97,15 +117,17 @@ The frontend is a single-page application deployed on Vercel. It uses Zustand fo
 | Domain | Technology |
 |---|---|
 | **Frontend** | React 19, TypeScript 5.9, Vite 7, Zustand 5, Lucide React, Sonner |
-| **Backend** | Express.js 4, Node.js, TypeScript 5.8 |
+| **Backend** | Node.js, Express.js 4, TypeScript 5.8 |
 | **Database** | MongoDB, Mongoose 8 |
-| **Authentication** | JWT (jsonwebtoken), bcrypt |
-| **Email Service** | Brevo (Sendinblue) |
+| **Authentication** | JWT (`jsonwebtoken`), bcrypt, Google OAuth (`google-auth-library`) |
+| **Email Service** | Brevo (`@getbrevo/brevo`) |
+| **AI Curation** | Groq API, configurable Groq models and multiple API keys |
 | **Music Providers** | JioSaavn (primary), Jamendo (fallback) |
 | **File Upload** | Multer, Cloudinary |
-| **Security** | Helmet, express-rate-limit, express-slow-down |
+| **Security** | Helmet, express-rate-limit, express-slow-down, CORS, secure cookies |
 | **Validation** | Zod 4 |
-| **PWA** | vite-plugin-pwa, Workbox |
+| **PWA** | vite-plugin-pwa / service-worker support |
+| **Frontend Tooling** | ESLint 9, TypeScript ESLint, Vite React plugin, TSX |
 | **Deployment** | Vercel (frontend), Render (backend) |
 
 ---
@@ -114,25 +136,44 @@ The frontend is a single-page application deployed on Vercel. It uses Zustand fo
 
 | Group | Base Path | Description |
 |---|---|---|
-| **Health** | `GET /health` | Server status with database connection state |
-| **Auth** | `/api/auth/*` | Register, login, logout, token refresh, OTP send/verify/resend, forgot/reset password, change password, profile |
-| **User** | `/api/user/*` | Profile management, avatar upload, favorites, playlists, recently played, listening history, search history |
-| **Music** | `/api/music/*` | Multi-provider search, trending, song/album/artist/playlist details, track suggestions |
+| **Health** | `GET /health` | Server status with database connection state and runtime information |
+| **Auth** | `/api/auth/*` | Registration, login, logout, refresh, OTP flows, email verification, password reset/change, profile session, and Google OAuth |
+| **User** | `/api/user/*` | Authenticated profile/avatar management, favorites, playlists, playlist tracks, recently played, listening history, and search history |
+| **Music** | `/api/music/*` | Search, trending, curated sections, song/album/artist/playlist details, and track suggestions |
+
+### Music Endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/music/search` | Search music through the provider layer |
+| `GET` | `/api/music/trending` | Fetch rotating trending/discovery content |
+| `GET` | `/api/music/curated` | Fetch all curated discovery sections |
+| `GET` | `/api/music/curated/:section` | Fetch a specific curated section |
+| `GET` | `/api/music/song/:id` | Fetch song details |
+| `GET` | `/api/music/album/:id` | Fetch album details |
+| `GET` | `/api/music/artist/:id` | Fetch artist details |
+| `GET` | `/api/music/playlist/:id` | Fetch playlist details |
+| `GET` | `/api/music/suggestions/:id` | Fetch related-track recommendations |
 
 ---
 
 ## Installation & Local Setup
 
 ### Prerequisites
+
 - Node.js v18+
 - npm v9+
 - MongoDB instance (local or Atlas)
+- Optional: Google OAuth credentials for Google sign-in
+- Optional: Groq API key(s) for AI-assisted curation
+- Cloudinary credentials for avatar uploads
+- Brevo credentials for transactional email
 
 ### Setup
 
 ```bash
-git clone https://github.com/Nishantnsut27/Notify-Music.git
-cd Notify-Music
+git clone https://github.com/Nishantnsut27/soundrift.git
+cd soundrift
 npm install
 cd backend
 npm install
@@ -140,7 +181,7 @@ cp .env.example .env
 cd ..
 ```
 
-Edit the backend `.env` file with your database URI, JWT secrets, and Cloudinary credentials. Optionally configure a frontend `.env` file with `VITE_API_URL` pointing to your backend.
+Edit `backend/.env` with the required MongoDB, JWT, refresh-token, cookie, and Cloudinary configuration. Configure Google OAuth, Brevo, and Groq variables when those features are enabled. The frontend can use `VITE_API_URL` to point to a local or alternate backend.
 
 ### Run
 
@@ -148,6 +189,37 @@ Edit the backend `.env` file with your database URI, JWT secrets, and Cloudinary
 npm run backend    # Backend at http://localhost:5000
 npm run dev        # Frontend at http://localhost:5173
 ```
+
+### Production Build
+
+```bash
+npm run build
+npm run backend:build
+```
+
+The backend can then be started with:
+
+```bash
+cd backend
+npm start
+```
+
+---
+
+## Environment Configuration
+
+The backend reads its configuration from environment variables. Important groups include:
+
+- **Server:** `PORT`, `NODE_ENV`, `CLIENT_URL`, `ALLOWED_ORIGINS`
+- **Database:** `MONGODB_URI`, `MONGODB_DB_NAME`
+- **Authentication:** `JWT_SECRET`, `JWT_EXPIRES_IN`, `REFRESH_TOKEN_SECRET`, `REFRESH_TOKEN_EXPIRES_IN`, `COOKIE_SECRET`
+- **Google OAuth:** `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URL`, `FRONTEND_URL`
+- **Music Providers:** `JIOSAAVN_API_URL`, `JAMENDO_API_URL`, `JAMENDO_CLIENT_ID`
+- **AI Curation:** `GROQ_API_KEY_1` through `GROQ_API_KEY_6` (or legacy `GROQ_API_n`/`GROQ_API_KEY`), plus curation scheduler settings
+- **Email:** `BREVO_API_KEY`, `EMAIL_FROM`, `EMAIL_FROM_NAME`
+- **Media:** `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`
+
+Never expose backend secrets or Groq API keys through the Vite frontend.
 
 ---
 
