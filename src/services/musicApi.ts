@@ -149,22 +149,22 @@ export class MusicAPI {
       return cached.tracks as unknown as RelatedMusic;
     }
 
-    const [similarByGenre, moreFromArtist, moreFromAlbum] = await Promise.all([
-      track.musicinfo?.tags?.genres?.[0]
-        ? this.getTracksByGenre(track.musicinfo.tags.genres[0], 10)
-        : Promise.resolve<Track[]>([]),
+    const similarPromise = track.id ? this.getSuggestionsById(track.id) : Promise.resolve<Track[]>([]);
+
+    const [similarBySuggestion, moreFromArtist, moreFromAlbum] = await Promise.all([
+      similarPromise,
       this.getArtistTracks(track.artist_name, 10),
       this.getAlbumTracks(track.album_name, track.artist_name, 10),
     ]);
 
-    const similarSongs = (similarByGenre || [])
-      .filter(t => t.id !== track.id)
+    const similarSongs = (similarBySuggestion || [])
+      .filter(t => t && t.id && String(t.id) !== String(track.id))
       .slice(0, 8);
     const artistTracks = (moreFromArtist || [])
-      .filter(t => t.id !== track.id)
+      .filter(t => t && t.id && String(t.id) !== String(track.id))
       .slice(0, 8);
     const albumTracks = (moreFromAlbum || [])
-      .filter(t => t.id !== track.id)
+      .filter(t => t && t.id && String(t.id) !== String(track.id))
       .slice(0, 8);
 
     const result: RelatedMusic = { similarSongs, moreFromArtist: artistTracks, moreFromAlbum: albumTracks };
@@ -173,31 +173,23 @@ export class MusicAPI {
   }
 
   static async getRecommendations(track: Track, excludeIds: Set<string> = new Set(), limit: number = 10): Promise<Track[]> {
-    const genres = track.musicinfo?.tags?.genres || [];
-    const searches: Promise<Track[]>[] = [];
+    if (!track || !track.id) return [];
 
-    if (genres.length > 0) {
-      searches.push(this.getTracksByGenre(genres[0], limit));
-    }
-    searches.push(this.getArtistTracks(track.artist_name, Math.ceil(limit / 2)));
-    searches.push(this.searchTracks(`${track.artist_name} ${track.album_name}`, limit));
+    const suggestions = await this.getSuggestionsById(track.id);
 
-    const settled = await Promise.allSettled(searches);
     const seen = new Set<string>([track.id, ...excludeIds]);
-    const combined: Track[] = [];
-
-    for (const result of settled) {
-      if (result.status !== 'fulfilled') continue;
-      for (const t of result.value) {
-        if (!t) continue;
-        if (!seen.has(String(t.id)) && t.audio) {
-          seen.add(String(t.id));
-          combined.push(t);
-        }
+    const curated: Track[] = [];
+    for (const t of suggestions) {
+      if (!t) continue;
+      const id = `${t.provider || ''}:${String(t.id)}`;
+      if (!seen.has(String(t.id)) && !seen.has(id) && t.audio) {
+        seen.add(String(t.id));
+        seen.add(id);
+        curated.push(t);
       }
     }
 
-    return combined.slice(0, limit);
+    return curated.slice(0, limit);
   }
 
   static getCached(key: string): Track[] | null {

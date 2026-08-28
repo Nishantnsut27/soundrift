@@ -49,6 +49,10 @@ export class MusicNormalizer {
     const bestImage = extractBestImage(raw?.image || raw?.album?.image || raw?.images || raw?.thumbnail);
     const audioUrl = extractBestAudioUrl(raw?.downloadUrl || raw?.audio);
 
+    const rawGenres = Array.isArray(raw?.musicinfo?.tags?.genres)
+      ? raw.musicinfo.tags.genres.filter((g: unknown): g is string => typeof g === 'string' && g.trim().length > 0)
+      : [];
+
     return {
       id: raw?.id || '',
       name: cleanText(raw.name || raw.title || 'Untitled Track'),
@@ -62,9 +66,10 @@ export class MusicNormalizer {
       audio: audioUrl,
       audiodownload: audioUrl,
       license_ccurl: '',
+      language: typeof raw?.language === 'string' ? cleanText(raw.language) : '',
       musicinfo: {
         tags: {
-          genres: raw.language ? [raw.language] : [],
+          genres: rawGenres,
           instruments: [],
           vartags: []
         }
@@ -90,6 +95,7 @@ export class MusicNormalizer {
       audio: audioUrl,
       audiodownload: raw.audiodownload || audioUrl,
       license_ccurl: raw.license_ccurl || '',
+      language: typeof raw?.language === 'string' ? cleanText(raw.language) : '',
       musicinfo: {
         tags: {
           genres: raw.musicinfo?.tags?.genres || [],
@@ -200,6 +206,7 @@ export class MusicNormalizer {
       image: song.image,
       audio: song.audio,
       duration: song.duration,
+      language: song.language,
       provider: song.provider
     };
   }

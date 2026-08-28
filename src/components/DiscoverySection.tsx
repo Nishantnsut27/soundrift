@@ -13,6 +13,8 @@ export function DiscoverySection() {
 
   const lastPlayedArtist = recentlyPlayed[0]?.artist_name;
   const lastPlayedGenre = recentlyPlayed[0]?.musicinfo?.tags?.genres?.[0];
+  const lastPlayedLanguage = recentlyPlayed[0]?.language;
+  const exploreTerm = lastPlayedGenre || lastPlayedLanguage;
 
   useEffect(() => {
     if (!lastPlayedArtist) return;
@@ -36,12 +38,12 @@ export function DiscoverySection() {
         </section>
       )}
 
-      {lastPlayedGenre && (
+      {exploreTerm && (
         <section className="home-section">
           <div className="section-header-row">
-            <h2 className="section-title">Explore {lastPlayedGenre}</h2>
+            <h2 className="section-title">Explore {exploreTerm}</h2>
           </div>
-          <GenreExplorer genre={lastPlayedGenre} />
+          <GenreExplorer genre={exploreTerm} />
         </section>
       )}
     </div>

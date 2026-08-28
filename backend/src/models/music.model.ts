@@ -11,6 +11,7 @@ export interface Song {
   audio: string;
   audiodownload: string;
   license_ccurl: string;
+  language?: string;
   musicinfo: {
     tags: {
       genres: string[];
@@ -67,6 +68,7 @@ export interface Suggestion {
   image: string;
   audio: string;
   duration: number;
+  language?: string;
   provider?: 'jiosaavn' | 'jamendo';
 }
 

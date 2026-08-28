@@ -11,6 +11,8 @@ export interface Track {
   audio: string;
   audiodownload: string;
   license_ccurl: string;
+  language?: string;
+  provider?: string;
   musicinfo: {
     tags: {
       genres: string[];

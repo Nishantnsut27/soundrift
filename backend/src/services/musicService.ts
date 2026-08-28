@@ -1,9 +1,9 @@
 import { IMusicProvider } from '../providers/musicProvider.interface.js';
 import { JioSaavnProvider } from '../providers/jiosaavnProvider.js';
 import { JamendoProvider } from '../providers/jamendoProvider.js';
-import { Song, Album, Artist, Playlist, Suggestion } from '../models/music.model.js';
-import { MusicNormalizer } from '../normalizers/musicNormalizer.js';
+import { Song, Album, Artist, Playlist } from '../models/music.model.js';
 import { deduplicateSongs, rankSongs } from '../utils/deduplication.js';
+import { scoreCandidate, ScoredCandidate } from '../utils/recommendationScore.js';
 import { globalCacheService } from './cacheService.js';
 import { MUSIC_ENGINE_CONFIG, TRENDING_ARTIST_POOL } from '../config/musicEngineConfig.js';
 import { isSearchNoise, normalizeStringForSearch } from '../utils/musicSearch.js';
@@ -104,23 +104,99 @@ export class MusicService {
     }, MUSIC_ENGINE_CONFIG.metadataCacheTtlMs);
   }
 
-  async getSuggestions(id: string, limit = 10): Promise<Suggestion[]> {
+  async getSuggestions(id: string, limit = 10): Promise<Song[]> {
     if (!id) return [];
-    const cacheKey = `suggestions:${id}:${limit}`;
+    const cacheKey = `suggestions:v2:${id}:${limit}`;
 
     return globalCacheService.getOrFetch(cacheKey, async () => {
-      const songs = await this.jiosaavnProvider.getSuggestions(id, limit);
-      if (songs.length > 0) {
-        return songs.map(song => MusicNormalizer.normalizeSuggestion(song));
-      }
+      const source = await this.getSongById(id).catch(() => null);
+      if (!source) return [];
 
-      const jamendoSongs = await this.jamendoProvider.getSuggestions(id, limit);
-      if (jamendoSongs.length > 0) {
-        return jamendoSongs.map(song => MusicNormalizer.normalizeSuggestion(song));
-      }
-
-      return songs.map(song => MusicNormalizer.normalizeSuggestion(song));
+      const results = await this.resolveCandidates(source, limit);
+      return results.slice(0, limit);
     }, MUSIC_ENGINE_CONFIG.metadataCacheTtlMs);
+  }
+
+  private async resolveCandidates(source: Song, limit: number): Promise<Song[]> {
+    const settled = await Promise.allSettled([
+      this.getProviderNativeSuggestions(source),
+      this.getSameArtistTracks(source),
+      this.getSameAlbumTracks(source),
+    ]);
+
+    const seen = new Set<string>([String(source.id)]);
+    const scored: ScoredCandidate[] = [];
+    const providerNativeIds = new Set<string>();
+
+    for (let slot = 0; slot < settled.length; slot++) {
+      const result = settled[slot];
+      if (result.status !== 'fulfilled') continue;
+
+      const isProviderNative = slot === 0;
+      for (const candidate of result.value) {
+        if (!candidate || !candidate.id || !candidate.audio) continue;
+        if (seen.has(String(candidate.id))) continue;
+        seen.add(String(candidate.id));
+
+        if (isProviderNative) providerNativeIds.add(String(candidate.id));
+        const entry = scoreCandidate(source, candidate, isProviderNative);
+        scored.push(entry);
+      }
+    }
+
+    for (const entry of scored) {
+      if (providerNativeIds.has(String(entry.song.id))) {
+        entry.score += 8;
+      }
+    }
+
+    if (scored.length === 0) {
+      logger.info('MusicService', 'No recommendation candidates; falling back to trending', { sourceId: source.id, sourceName: source.name });
+    }
+
+    scored.sort((a, b) => b.score - a.score);
+
+    const ranked = scored.map(s => s.song);
+
+    if (ranked.length < limit) {
+      const fallback = await this.getTrending(limit * 2).catch(() => ({ songs: [], provider: 'jiosaavn' }));
+      const fallbackSongs = (fallback.songs || []).filter(s => !seen.has(String(s.id)));
+      ranked.push(...fallbackSongs);
+    }
+
+    return deduplicateSongs(ranked).slice(0, limit * 2);
+  }
+
+  private async getProviderNativeSuggestions(source: Song): Promise<Song[]> {
+    if (source.provider === 'jamendo') {
+      return this.jamendoProvider.getSuggestions(source.id, 10).catch(() => []);
+    }
+    return this.jiosaavnProvider.getSuggestions(source.id, 10).catch(() => []);
+  }
+
+  private async getSameArtistTracks(source: Song): Promise<Song[]> {
+    if (!source.artist_name || source.artist_name === 'Unknown Artist') return [];
+    const result = await this.search(source.artist_name, 15).catch(() => ({ songs: [], provider: 'jiosaavn' }));
+    const filtered = result.songs.filter(song => {
+      const sourceArtists = source.artist_name.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+      const songArtists = song.artist_name.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+      return sourceArtists.some(a => songArtists.includes(a));
+    });
+    return filtered.length > 0 ? filtered : result.songs;
+  }
+
+  private async getSameAlbumTracks(source: Song): Promise<Song[]> {
+    if (!source.album_id) return [];
+    const album = await this.getAlbumByProviderId(source.provider || 'jiosaavn', source.album_id).catch(() => null);
+    if (!album || !Array.isArray(album.songs)) return [];
+    return album.songs.filter(song => song.id && song.audio);
+  }
+
+  private async getAlbumByProviderId(provider: 'jiosaavn' | 'jamendo', id: string): Promise<Album | null> {
+    if (provider === 'jamendo') {
+      return this.jamendoProvider.getAlbumById(id).catch(() => null);
+    }
+    return this.jiosaavnProvider.getAlbumById(id).catch(() => null);
   }
 
   async getTrending(limit = 20): Promise<{ songs: Song[]; provider: string }> {
