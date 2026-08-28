@@ -43,7 +43,7 @@ const baseCookieOptions = () => {
   return {
     httpOnly: true,
     secure: isProd,
-    sameSite: 'lax' as const,
+    sameSite: isProd ? ('none' as const) : ('lax' as const),
   };
 };
 
