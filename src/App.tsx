@@ -58,6 +58,8 @@ function App() {
   const { addToast } = useToastStore();
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('auth') || params.has('code') || params.has('error')) return;
     checkAuth();
   }, [checkAuth]);
 
@@ -70,11 +72,11 @@ function App() {
         addToast({ message: 'Signed in with Google.', type: 'success' });
       } else if (result.status === 'error') {
         const reason = result.reason;
-        if (reason !== 'cancelled') {
+        if (reason && reason !== 'cancelled') {
           const message =
-            reason === 'failed'
-              ? 'Google sign-in failed. Please try again.'
-              : 'Unable to sign in with Google. Please try again.';
+            reason === 'google' || reason === 'state'
+              ? 'Unable to sign in with Google. Please try again.'
+              : `Google sign-in failed: ${reason}`;
           addToast({ message, type: 'error' });
         }
         setIsAuthModalOpen(true);

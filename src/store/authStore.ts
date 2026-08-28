@@ -180,10 +180,11 @@ export const useAuthStore = create<AuthState>((set) => ({
           usePlayerStore.getState().syncCloudUserData();
         });
         return { status: 'success' };
-      } catch {
+      } catch (err) {
         cleanUrl();
         set({ isInitialized: true });
-        return { status: 'error', reason: 'failed' };
+        const message = err instanceof ApiError ? err.message : 'Unable to reach the authentication service.';
+        return { status: 'error', reason: message };
       }
     }
 
