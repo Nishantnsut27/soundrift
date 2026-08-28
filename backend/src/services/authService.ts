@@ -4,6 +4,7 @@ import { hashPassword, comparePassword } from '../utils/password.utils.js';
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '../utils/token.utils.js';
 import { AppError } from '../utils/AppError.js';
 import { EmailService } from './emailService.js';
+import { VerifiedGoogleIdentity } from './googleOAuthService.js';
 
 export interface RegisterDTO {
   fullName: string;
@@ -216,6 +217,64 @@ export class AuthService {
       accessToken,
       refreshToken,
     };
+  }
+
+  public static async authenticateWithGoogle(identity: VerifiedGoogleIdentity): Promise<{ user: SanitizedUser; accessToken: string; refreshToken: string }> {
+    const user = await this.findOrCreateGoogleUser(identity);
+
+    if (user.accountStatus !== 'active') {
+      throw new AppError('Your account is currently suspended or inactive.', 403);
+    }
+
+    const accessToken = generateAccessToken(user._id.toString(), user.role);
+    const refreshToken = generateRefreshToken(user._id.toString(), user.role);
+
+    user.refreshTokenHash = await hashPassword(refreshToken);
+    user.lastLoginAt = new Date();
+    await user.save();
+
+    return {
+      user: this.sanitizeUser(user),
+      accessToken,
+      refreshToken,
+    };
+  }
+
+  private static async findOrCreateGoogleUser(identity: VerifiedGoogleIdentity): Promise<IUser> {
+    const existingByIdentity = await User.findOne({ authProviders: { $elemMatch: { provider: 'google', providerId: identity.sub } } });
+    if (existingByIdentity) {
+      return existingByIdentity;
+    }
+
+    const existingByEmail = await User.findOne({ email: identity.email });
+    if (existingByEmail) {
+      if (!identity.emailVerified) {
+        throw new AppError('We could not verify this email with Google. Please log in with your existing Soundrift password instead.', 409);
+      }
+
+      existingByEmail.authProviders = [
+        ...(existingByEmail.authProviders || []),
+        { provider: 'google', providerId: identity.sub },
+      ];
+      existingByEmail.isEmailVerified = true;
+      if (!existingByEmail.avatarUrl && identity.picture) {
+        existingByEmail.avatarUrl = identity.picture;
+      }
+      await existingByEmail.save();
+      return existingByEmail;
+    }
+
+    const created = await User.create({
+      fullName: identity.fullName || 'Google User',
+      email: identity.email,
+      password: undefined,
+      authProviders: [{ provider: 'google', providerId: identity.sub }],
+      avatarUrl: identity.picture || '',
+      isEmailVerified: identity.emailVerified,
+      accountStatus: 'active',
+      role: 'user',
+    });
+    return created;
   }
 
   public static async refreshToken(token: string): Promise<{ accessToken: string; refreshToken: string; user: SanitizedUser }> {

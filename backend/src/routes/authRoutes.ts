@@ -29,5 +29,8 @@ authRouter.post('/reset-password', forgotPasswordLimiter, validateResetPasswordI
 
 authRouter.post('/verify-email', AuthController.verifyEmail as RequestHandler);
 
+authRouter.get('/google', authLimiter, AuthController.googleAuth as unknown as RequestHandler);
+authRouter.get('/google/callback', AuthController.googleCallback as unknown as RequestHandler);
+
 authRouter.get('/me', authenticateUser as RequestHandler, AuthController.getMe as RequestHandler);
 authRouter.post('/change-password', authenticateUser as RequestHandler, validateChangePasswordInput as RequestHandler, AuthController.changePassword as RequestHandler);

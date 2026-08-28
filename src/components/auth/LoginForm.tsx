@@ -1,7 +1,12 @@
 import React, { useState } from 'react';
 import { PasswordInput } from './PasswordInput';
 import { useAuthStore } from '../../store/authStore';
-import { MailIcon, CheckIcon, AlertCircleIcon, LoaderIcon, UserIcon } from './AuthIcons';
+import { MailIcon, CheckIcon, AlertCircleIcon, LoaderIcon, UserIcon, GoogleIcon } from './AuthIcons';
+import { authApi } from '../../services/authApi';
+
+const handleGoogleLogin = () => {
+  window.location.href = authApi.getGoogleAuthUrl();
+};
 
 interface LoginFormProps {
   onSwitchToSignup: () => void;
@@ -68,6 +73,13 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSwitchToSignup, onForgot
       <button type="submit" className="auth-glass-btn" disabled={isLoading}>
         {isLoading ? <><LoaderIcon size={18} /> LOGGING IN...</> : 'LOGIN'}
       </button>
+
+      <div className="auth-divider"><span>or</span></div>
+
+      <a href={authApi.getGoogleAuthUrl()} className="auth-google-btn" onClick={(e) => { e.preventDefault(); handleGoogleLogin(); }}>
+        <GoogleIcon size={18} />
+        Continue with Google
+      </a>
 
       <div className="auth-flip-trigger-footer">
         Don't have an account?

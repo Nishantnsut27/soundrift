@@ -5,6 +5,14 @@ export interface IAvatar {
   public_id: string;
 }
 
+export const AUTH_PROVIDERS = ['google'] as const;
+export type AuthProvider = (typeof AUTH_PROVIDERS)[number];
+
+export interface IAuthProvider {
+  provider: AuthProvider;
+  providerId: string;
+}
+
 export interface IUser extends Document {
   fullName: string;
   email: string;
@@ -12,6 +20,7 @@ export interface IUser extends Document {
   avatar?: string | IAvatar;
   avatarUrl?: string;
   avatarPublicId?: string;
+  authProviders: IAuthProvider[];
   refreshTokenHash?: string;
   passwordResetToken?: string;
   passwordResetExpires?: Date;
@@ -56,9 +65,18 @@ const userSchema = new Schema<IUser>(
     },
     password: {
       type: String,
-      required: [true, 'Password is required'],
       minlength: [6, 'Password must be at least 6 characters'],
       select: false,
+    },
+    authProviders: {
+      type: [
+        {
+          provider: { type: String, enum: AUTH_PROVIDERS, required: true },
+          providerId: { type: String, required: true },
+          _id: false,
+        },
+      ],
+      default: [],
     },
     avatarUrl: {
       type: String,
@@ -141,5 +159,9 @@ userSchema.index({ role: 1 });
 userSchema.index({ accountStatus: 1 });
 userSchema.index({ passwordResetToken: 1 });
 userSchema.index({ emailVerificationToken: 1 });
+userSchema.index(
+  { 'authProviders.provider': 1, 'authProviders.providerId': 1 },
+  { unique: true, partialFilterExpression: { 'authProviders.0': { $exists: true } } }
+);
 
 export const User = model<IUser>('User', userSchema);
