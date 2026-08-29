@@ -2,7 +2,7 @@
 
 > Drift Into Your Next Favorite.
 
-[Live Demo](https://www.soundrift.tech) · [Backend Health](https://notify-music.onrender.com/health) · [GitHub](https://github.com/Nishantnsut27/soundrift)
+[Live Demo](https://www.soundrift.tech) · [Backend Health](https://api.soundrift.tech/health) · [GitHub](https://github.com/Nishantnsut27/soundrift)
 
 ---
 
