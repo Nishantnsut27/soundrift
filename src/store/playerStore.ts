@@ -540,16 +540,20 @@ export const usePlayerStore = create<AppStore>()(
               });
             }
           }
-        }).catch(() => {
-          const rollback = get().playlists.filter(p => p.id !== tempId);
-          set({ playlists: rollback });
-          saveToLocalStorage(STORAGE_KEYS.PLAYLISTS, rollback);
-          useToastStore.getState().addToast({
-            type: 'error',
-            title: 'Could not create playlist',
-            message: 'Your playlist could not be synced to the cloud. Please try again.',
-          });
-        });
+}).catch(() => {
+  const currentState = get();
+  const currentTemp = currentState.playlists.find(p => p.id === tempId);
+  const editedLocally = !!currentTemp && (currentTemp.tracks.length > 0 || currentTemp.name !== uniqueName);
+  const rollback = editedLocally ? currentState.playlists : currentState.playlists.filter(p => p.id !== tempId);
+  set({ playlists: rollback });
+  saveToLocalStorage(STORAGE_KEYS.PLAYLISTS, rollback);
+  localStorage.removeItem(`pending_tracks_${tempId}`);
+  useToastStore.getState().addToast({
+    type: 'error',
+    title: 'Could not create playlist',
+    message: 'Your playlist could not be synced to the cloud. Please try again.',
+  });
+});
       }
 
       return newPlaylist;
@@ -840,16 +844,19 @@ export const usePlayerStore = create<AppStore>()(
               userApi.addTrackToPlaylist(remote.id, track).catch(() => { });
             });
           }
-        }).catch(() => {
-          const rollback = get().playlists.filter(p => p.id !== importedPlaylist.id);
-          set({ playlists: rollback });
-          saveToLocalStorage(STORAGE_KEYS.PLAYLISTS, rollback);
-          useToastStore.getState().addToast({
-            type: 'error',
-            title: 'Could not import playlist',
-            message: 'The playlist could not be synced to the cloud. Please try again.',
-          });
-        });
+}).catch(() => {
+  const currentState = get();
+  const currentImport = currentState.playlists.find(p => p.id === importedPlaylist.id);
+  const editedLocally = !!currentImport && (currentImport.tracks.length > 0 || currentImport.name !== uniqueName);
+  const rollback = editedLocally ? currentState.playlists : currentState.playlists.filter(p => p.id !== importedPlaylist.id);
+  set({ playlists: rollback });
+  saveToLocalStorage(STORAGE_KEYS.PLAYLISTS, rollback);
+  useToastStore.getState().addToast({
+    type: 'error',
+    title: 'Could not import playlist',
+    message: 'The playlist could not be synced to the cloud. Please try again.',
+  });
+});
       }
     },
 
