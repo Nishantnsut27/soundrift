@@ -319,6 +319,8 @@ export const usePlayerStore = create<AppStore>()(
         duration: nextTrack.duration || 0,
         isPlaying: true
       });
+
+      startHistory(nextTrack);
     },
 
     previousTrack: () => {
@@ -341,6 +343,8 @@ export const usePlayerStore = create<AppStore>()(
         duration: prevTrack.duration || 0,
         isPlaying: true,
       });
+
+      startHistory(prevTrack);
     },
 
     setCurrentTime: (time: number) => set({ currentTime: time }),
@@ -529,15 +533,19 @@ export const usePlayerStore = create<AppStore>()(
 
     deletePlaylist: (id: string) => {
       const state = get();
-      const prevPlaylists = state.playlists;
-      const newPlaylists = prevPlaylists.filter(p => p.id !== id);
+      const deletedPlaylist = state.playlists.find(p => p.id === id);
+      const newPlaylists = state.playlists.filter(p => p.id !== id);
       set({ playlists: newPlaylists });
       saveToLocalStorage(STORAGE_KEYS.PLAYLISTS, newPlaylists);
 
       if (useAuthStore.getState().isAuthenticated) {
         userApi.deletePlaylist(id).catch(() => {
-          set({ playlists: prevPlaylists });
-          saveToLocalStorage(STORAGE_KEYS.PLAYLISTS, prevPlaylists);
+          const currentPlaylists = get().playlists;
+          const merged = deletedPlaylist && !currentPlaylists.some(p => p.id === id)
+            ? [...currentPlaylists, deletedPlaylist]
+            : currentPlaylists;
+          set({ playlists: merged });
+          saveToLocalStorage(STORAGE_KEYS.PLAYLISTS, merged);
           useToastStore.getState().addToast({
             type: 'error',
             title: 'Could not delete playlist',
@@ -549,7 +557,7 @@ export const usePlayerStore = create<AppStore>()(
 
     renamePlaylist: (id: string, name: string) => {
       const state = get();
-      const prevPlaylists = state.playlists;
+      const prevName = state.playlists.find(p => p.id === id)?.name;
       const uniqueName = getUniquePlaylistName(name, state.playlists, id);
       const newPlaylists = state.playlists.map(p =>
         p.id === id ? { ...p, name: uniqueName, updatedAt: Date.now() } : p
@@ -559,8 +567,13 @@ export const usePlayerStore = create<AppStore>()(
 
       if (useAuthStore.getState().isAuthenticated) {
         userApi.updatePlaylist(id, { name: uniqueName }).catch(() => {
-          set({ playlists: prevPlaylists });
-          saveToLocalStorage(STORAGE_KEYS.PLAYLISTS, prevPlaylists);
+          const merged = get().playlists.map(p =>
+            p.id === id && p.name === uniqueName
+              ? { ...p, name: prevName ?? p.name, updatedAt: Date.now() }
+              : p
+          );
+          set({ playlists: merged });
+          saveToLocalStorage(STORAGE_KEYS.PLAYLISTS, merged);
           useToastStore.getState().addToast({
             type: 'error',
             title: 'Could not rename playlist',
@@ -622,8 +635,8 @@ export const usePlayerStore = create<AppStore>()(
 
     removeTrackFromPlaylist: (playlistId: string, trackId: string) => {
       const state = get();
-      const prevPlaylists = state.playlists;
-      const newPlaylists = prevPlaylists.map(p =>
+      const removedTrack = state.playlists.find(p => p.id === playlistId)?.tracks.find(t => t.id === trackId);
+      const newPlaylists = state.playlists.map(p =>
         p.id === playlistId
           ? {
             ...p,
@@ -651,8 +664,15 @@ export const usePlayerStore = create<AppStore>()(
         }
 
         userApi.removeTrackFromPlaylist(playlistId, trackId).catch(() => {
-          set({ playlists: prevPlaylists });
-          saveToLocalStorage(STORAGE_KEYS.PLAYLISTS, prevPlaylists);
+          const merged = removedTrack
+            ? get().playlists.map(p =>
+              p.id === playlistId && !p.tracks.some(t => t.id === trackId)
+                ? { ...p, tracks: [...p.tracks, removedTrack], updatedAt: Date.now() }
+                : p
+            )
+            : get().playlists;
+          set({ playlists: merged });
+          saveToLocalStorage(STORAGE_KEYS.PLAYLISTS, merged);
           useToastStore.getState().addToast({
             type: 'error',
             title: 'Could not update playlist',
@@ -665,15 +685,17 @@ export const usePlayerStore = create<AppStore>()(
     addToFavorites: (track: Track) => {
       const state = get();
       if (state.favorites.find(t => t.id === track.id)) return;
-      const prevFavorites = state.favorites;
-      const newFavorites = [...prevFavorites, track];
+      const newFavorites = [...state.favorites, track];
       set({ favorites: newFavorites });
       saveToLocalStorage(STORAGE_KEYS.FAVORITES, newFavorites);
 
       if (useAuthStore.getState().isAuthenticated) {
         userApi.addFavorite(track).catch(() => {
-          set({ favorites: prevFavorites });
-          saveToLocalStorage(STORAGE_KEYS.FAVORITES, prevFavorites);
+          const merged = get().favorites.some(t => t.id === track.id)
+            ? get().favorites
+            : [...get().favorites, track];
+          set({ favorites: merged });
+          saveToLocalStorage(STORAGE_KEYS.FAVORITES, merged);
           useToastStore.getState().addToast({
             type: 'error',
             title: 'Could not add favorite',
@@ -685,15 +707,21 @@ export const usePlayerStore = create<AppStore>()(
 
     removeFromFavorites: (trackId: string) => {
       const state = get();
-      const prevFavorites = state.favorites;
-      const newFavorites = prevFavorites.filter(t => t.id !== trackId);
+      const removedIndex = state.favorites.findIndex(t => t.id === trackId);
+      const removedTrack = removedIndex >= 0 ? state.favorites[removedIndex] : null;
+      const newFavorites = state.favorites.filter(t => t.id !== trackId);
       set({ favorites: newFavorites });
       saveToLocalStorage(STORAGE_KEYS.FAVORITES, newFavorites);
 
       if (useAuthStore.getState().isAuthenticated) {
         userApi.removeFavorite(trackId).catch(() => {
-          set({ favorites: prevFavorites });
-          saveToLocalStorage(STORAGE_KEYS.FAVORITES, prevFavorites);
+          if (!removedTrack) return;
+          const current = get().favorites;
+          if (current.some(t => t.id === trackId)) return;
+          const insertAt = Math.min(removedIndex, current.length);
+          const merged = [...current.slice(0, insertAt), removedTrack, ...current.slice(insertAt)];
+          set({ favorites: merged });
+          saveToLocalStorage(STORAGE_KEYS.FAVORITES, merged);
           useToastStore.getState().addToast({
             type: 'error',
             title: 'Could not update favorites',
@@ -710,8 +738,13 @@ export const usePlayerStore = create<AppStore>()(
       if (useAuthStore.getState().isAuthenticated) {
         import('../services/userApi').then(({ userApi }) => {
           userApi.clearFavorites().catch(() => {
-            set({ favorites: prevFavorites });
-            saveToLocalStorage(STORAGE_KEYS.FAVORITES, prevFavorites);
+            const current = get().favorites;
+            const merged = [...current];
+            for (const t of prevFavorites) {
+              if (!merged.some(x => x.id === t.id)) merged.push(t);
+            }
+            set({ favorites: merged });
+            saveToLocalStorage(STORAGE_KEYS.FAVORITES, merged);
             useToastStore.getState().addToast({
               type: 'error',
               title: 'Could not clear favorites',
