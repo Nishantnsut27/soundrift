@@ -50,7 +50,11 @@ export default defineConfig({
             handler: 'NetworkOnly',
           },
           {
-            urlPattern: /^https?:\/\/.*\/api\/.*/i,
+            urlPattern: /\/api\/user\//i,
+            handler: 'NetworkOnly',
+          },
+          {
+            urlPattern: /^https?:\/\/.*\/api\/music\/.*/i,
             handler: 'NetworkFirst',
             options: {
               cacheName: 'api-cache',

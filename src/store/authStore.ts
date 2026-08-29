@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { authApi, type UserProfile } from '../services/authApi';
 import { ApiError } from '../services/apiClient';
-import { getStoredToken, setStoredToken, removeStoredToken } from '../services/tokenStorage';
+import { removeStoredToken } from '../services/tokenStorage';
 
 interface AuthState {
   user: UserProfile | null;
@@ -21,7 +21,7 @@ interface AuthState {
 
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
-  token: getStoredToken(),
+  token: null,
   isAuthenticated: false,
   isInitialized: false,
   isLoading: false,
@@ -31,12 +31,9 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ isLoading: true, error: null });
     try {
       const response = await authApi.login(credentials);
-      if (response.token) {
-        setStoredToken(response.token, credentials.rememberMe || false);
-      }
       set({
         user: response.user,
-        token: response.token || getStoredToken(),
+        token: null,
         isAuthenticated: true,
         isLoading: false,
         error: null,
@@ -62,12 +59,9 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ isLoading: true, error: null });
     try {
       const response = await authApi.register(credentials);
-      if (response.token) {
-        setStoredToken(response.token, true);
-      }
       set({
         user: response.user,
-        token: response.token || getStoredToken(),
+        token: null,
         isAuthenticated: true,
         isLoading: false,
         error: null,

@@ -63,7 +63,10 @@ export const config = {
   discoveryRefreshCrons: (process.env.DISCOVERY_REFRESH_CRONS || '0 3 * * *|35 12 * * *').split('|').map(value => value.trim()).filter(Boolean),
   discoverySectionSize: parseInt(process.env.DISCOVERY_SECTION_SIZE || '12', 10),
   discoverySnapshotTtlHours: parseInt(process.env.DISCOVERY_SNAPSHOT_TTL_HOURS || '26', 10),
-  discoveryMatchThreshold: parseInt(process.env.DISCOVERY_MATCH_THRESHOLD || '0.72', 10),
+  discoveryMatchThreshold: (() => {
+    const raw = Number.parseFloat(process.env.DISCOVERY_MATCH_THRESHOLD || '0.72');
+    return Number.isFinite(raw) && raw >= 0 && raw <= 1 ? raw : 0.72;
+  })(),
   discoverySectionIntervalMinutes: parseInt(process.env.DISCOVERY_SECTION_INTERVAL_MINUTES || '5', 10),
   discoveryRefreshOnStartup: process.env.DISCOVERY_REFRESH_ON_STARTUP !== 'false',
 

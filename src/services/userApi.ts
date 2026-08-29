@@ -1,5 +1,4 @@
 import { fetchJson, API_BASE_URL } from './apiClient';
-import { getStoredToken } from './tokenStorage';
 import type { Track, Playlist } from '../types/types';
 
 export interface SearchHistoryItem { query: string; searchedAt: string; }
@@ -107,6 +106,11 @@ export const userApi = {
     return res.data || [];
   },
 
+  async getHistory(): Promise<Track[]> {
+    const res = await fetchJson<{ success: boolean; data: Track[] }>(`${USER_BASE_URL}/history`);
+    return res.data || [];
+  },
+
   async recordHistory(track: Track, playDurationSeconds = 0, completed = false): Promise<void> {
     await fetchJson(`${USER_BASE_URL}/history`, {
       method: 'POST',
@@ -146,16 +150,9 @@ export const userApi = {
     const formData = new FormData();
     formData.append('avatar', file);
 
-    const token = getStoredToken();
-    const headers: Record<string, string> = {};
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-
     const response = await fetch(`${USER_BASE_URL}/avatar`, {
       method: 'POST',
       credentials: 'include',
-      headers,
       body: formData,
     });
 

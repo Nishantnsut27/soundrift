@@ -19,7 +19,7 @@ export interface ApiResponse<T> {
 
 export const API_BASE_URL = (import.meta.env as Record<string, string | undefined>).VITE_API_URL || 'https://notify-music.onrender.com';
 
-import { getStoredToken, setStoredToken, removeStoredToken, isRememberMe } from './tokenStorage';
+import { removeStoredToken } from './tokenStorage';
 
 let isRefreshing = false;
 let refreshPromise: Promise<boolean> | null = null;
@@ -37,9 +37,7 @@ async function refreshAccessToken(): Promise<boolean> {
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
       });
-      const data = await res.json();
-      if (res.ok && data.token) {
-        setStoredToken(data.token, isRememberMe());
+      if (res.ok) {
         return true;
       }
       removeStoredToken();
@@ -66,15 +64,10 @@ export async function fetchJson<T>(
   hasRefreshedToken = false
 ): Promise<T> {
   try {
-    const savedToken = getStoredToken();
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...(options?.headers as Record<string, string>),
     };
-
-    if (savedToken) {
-      headers['Authorization'] = `Bearer ${savedToken}`;
-    }
 
     const response = await fetch(url, {
       ...options,

@@ -4,6 +4,8 @@ import type { Track, Playlist, PlaylistTrack, PlayerState, SearchState, RelatedM
 import { STORAGE_KEYS, PLAYER_DEFAULTS } from '../config/constants';
 import { userApi } from '../services/userApi';
 import { useAuthStore } from './authStore';
+import { useToastStore } from './toastStore';
+import { startHistory, finishHistory } from '../services/historyTracker';
 
 interface PlayerStore extends PlayerState {
   playTrack: (track: Track, _queue?: Track[], _index?: number) => void;
@@ -197,39 +199,42 @@ export const usePlayerStore = create<AppStore>()(
     currentView: 'search',
     theme: loadFromLocalStorage(STORAGE_KEYS.THEME, 'dark'),
 
-    playTrack: (track: Track) => {
+    playTrack: (track: Track, _queue?: Track[], _index?: number) => {
       const state = get();
 
-      const newQueue = [track];
-      const newIndex = 0;
+      const newQueue = _queue && _queue.length > 0 ? _queue : [track];
+      const newIndex = _index !== undefined && _index >= 0 && _index < newQueue.length ? _index : 0;
+      const actualTrack = newQueue[newIndex] || track;
 
-      const updatedRecentlyPlayed = [track, ...state.recentlyPlayed.filter(t => t.id !== track.id)].slice(0, 30);
+      finishHistory(state.currentTime);
+
+      const updatedRecentlyPlayed = [actualTrack, ...state.recentlyPlayed.filter(t => t.id !== actualTrack.id)].slice(0, 30);
 
       let shuffleOrder: number[] = [];
       let shufflePosition = 0;
       if (state.isShuffling) {
-        shuffleOrder = [0];
-        shufflePosition = 0;
+        shuffleOrder = newQueue.map((_, i) => i);
+        shufflePosition = newIndex;
       }
 
       set({
-        currentTrack: track,
+        currentTrack: actualTrack,
         isPlaying: true,
         queue: newQueue,
         currentIndex: newIndex,
         playbackHistory: [],
         sessionId: state.sessionId + 1,
         currentTime: 0,
-        duration: track.duration || 0,
+        duration: actualTrack.duration || 0,
         recentlyPlayed: updatedRecentlyPlayed,
-        listeningHistory: [track, ...state.listeningHistory].slice(0, 50),
         shuffleOrder,
         shufflePosition,
       });
 
+      startHistory(actualTrack);
+
       if (useAuthStore.getState().isAuthenticated) {
-        userApi.addRecentlyPlayed(track).catch(() => { });
-        userApi.recordHistory(track).catch(() => { });
+        userApi.addRecentlyPlayed(actualTrack).catch(() => { });
       }
     },
 
@@ -299,6 +304,8 @@ export const usePlayerStore = create<AppStore>()(
         return;
       }
 
+      finishHistory(state.currentTime);
+
       const history = state.currentIndex >= 0
         ? [...state.playbackHistory, state.queue[state.currentIndex]].filter(Boolean) as Track[]
         : state.playbackHistory;
@@ -324,6 +331,8 @@ export const usePlayerStore = create<AppStore>()(
       const prevIndex = state.queue.findIndex(t => String(t.id) === String(prevTrack.id));
       const newHistory = state.playbackHistory.slice(0, -1);
 
+      finishHistory(state.currentTime);
+
       set({
         currentTrack: prevTrack,
         currentIndex: prevIndex >= 0 ? prevIndex : state.currentIndex - 1,
@@ -340,14 +349,18 @@ export const usePlayerStore = create<AppStore>()(
 
     setVolume: (volume: number) => {
       const clamped = Math.max(0, Math.min(100, volume));
-      set({ volume: clamped, isMuted: clamped === 0 });
+      set((state) => ({
+        volume: clamped,
+        isMuted: clamped === 0,
+        volumeBeforeMute: clamped > 0 ? clamped : state.volumeBeforeMute,
+      }));
       saveToLocalStorage(STORAGE_KEYS.VOLUME, clamped);
     },
 
     toggleMute: () => set((state) => {
       if (state.isMuted) {
         const restored = state.volumeBeforeMute > 0 ? state.volumeBeforeMute : PLAYER_DEFAULTS.DEFAULT_VOLUME;
-        return { isMuted: false, volume: restored };
+        return { isMuted: false, volume: restored, volumeBeforeMute: restored };
       }
       return { isMuted: true, volumeBeforeMute: state.volume };
     }),
@@ -409,17 +422,21 @@ export const usePlayerStore = create<AppStore>()(
       });
     },
 
-    clearQueue: () => set((state) => ({
-      queue: [],
-      currentIndex: -1,
-      currentTrack: null,
-      isPlaying: false,
-      playbackHistory: [],
-      recommendations: [],
-      shuffleOrder: [],
-      shufflePosition: 0,
-      sessionId: state.sessionId + 1,
-    })),
+    clearQueue: () => {
+      const state = get();
+      finishHistory(state.currentTime);
+      set({
+        queue: [],
+        currentIndex: -1,
+        currentTrack: null,
+        isPlaying: false,
+        playbackHistory: [],
+        recommendations: [],
+        shuffleOrder: [],
+        shufflePosition: 0,
+        sessionId: state.sessionId + 1,
+      });
+    },
 
     setQuery: (query: string) => set({ query }),
     setResults: (results: Track[]) => set({ results }),
@@ -431,10 +448,11 @@ export const usePlayerStore = create<AppStore>()(
     syncCloudUserData: async () => {
       if (!useAuthStore.getState().isAuthenticated) return;
       try {
-        const [cloudFavorites, cloudPlaylists, cloudRecentlyPlayed] = await Promise.all([
+        const [cloudFavorites, cloudPlaylists, cloudRecentlyPlayed, cloudHistory] = await Promise.all([
           userApi.getFavorites().catch(() => null),
           userApi.getPlaylists().catch(() => null),
           userApi.getRecentlyPlayed().catch(() => null),
+          userApi.getHistory().catch(() => null),
         ]);
         if (cloudFavorites !== null) {
           set({ favorites: cloudFavorites });
@@ -445,7 +463,10 @@ export const usePlayerStore = create<AppStore>()(
           saveToLocalStorage(STORAGE_KEYS.PLAYLISTS, cloudPlaylists);
         }
         if (cloudRecentlyPlayed !== null) {
-          set({ recentlyPlayed: cloudRecentlyPlayed, listeningHistory: cloudRecentlyPlayed });
+          set({ recentlyPlayed: cloudRecentlyPlayed });
+        }
+        if (cloudHistory !== null) {
+          set({ listeningHistory: cloudHistory });
         }
       } catch (err) {
         console.error('Failed to sync cloud user data:', err);
@@ -491,7 +512,16 @@ export const usePlayerStore = create<AppStore>()(
               });
             }
           }
-        }).catch(() => { });
+        }).catch(() => {
+          const rollback = get().playlists.filter(p => p.id !== tempId);
+          set({ playlists: rollback });
+          saveToLocalStorage(STORAGE_KEYS.PLAYLISTS, rollback);
+          useToastStore.getState().addToast({
+            type: 'error',
+            title: 'Could not create playlist',
+            message: 'Your playlist could not be synced to the cloud. Please try again.',
+          });
+        });
       }
 
       return newPlaylist;
@@ -499,17 +529,27 @@ export const usePlayerStore = create<AppStore>()(
 
     deletePlaylist: (id: string) => {
       const state = get();
-      const newPlaylists = state.playlists.filter(p => p.id !== id);
+      const prevPlaylists = state.playlists;
+      const newPlaylists = prevPlaylists.filter(p => p.id !== id);
       set({ playlists: newPlaylists });
       saveToLocalStorage(STORAGE_KEYS.PLAYLISTS, newPlaylists);
 
       if (useAuthStore.getState().isAuthenticated) {
-        userApi.deletePlaylist(id).catch(() => { });
+        userApi.deletePlaylist(id).catch(() => {
+          set({ playlists: prevPlaylists });
+          saveToLocalStorage(STORAGE_KEYS.PLAYLISTS, prevPlaylists);
+          useToastStore.getState().addToast({
+            type: 'error',
+            title: 'Could not delete playlist',
+            message: 'The playlist could not be deleted. Please try again.',
+          });
+        });
       }
     },
 
     renamePlaylist: (id: string, name: string) => {
       const state = get();
+      const prevPlaylists = state.playlists;
       const uniqueName = getUniquePlaylistName(name, state.playlists, id);
       const newPlaylists = state.playlists.map(p =>
         p.id === id ? { ...p, name: uniqueName, updatedAt: Date.now() } : p
@@ -518,7 +558,15 @@ export const usePlayerStore = create<AppStore>()(
       saveToLocalStorage(STORAGE_KEYS.PLAYLISTS, newPlaylists);
 
       if (useAuthStore.getState().isAuthenticated) {
-        userApi.updatePlaylist(id, { name: uniqueName }).catch(() => { });
+        userApi.updatePlaylist(id, { name: uniqueName }).catch(() => {
+          set({ playlists: prevPlaylists });
+          saveToLocalStorage(STORAGE_KEYS.PLAYLISTS, prevPlaylists);
+          useToastStore.getState().addToast({
+            type: 'error',
+            title: 'Could not rename playlist',
+            message: 'The playlist could not be renamed. Please try again.',
+          });
+        });
       }
     },
 
@@ -554,14 +602,28 @@ export const usePlayerStore = create<AppStore>()(
           existing.push({ ...track, addedAt: Date.now() });
           localStorage.setItem(pendingKey, JSON.stringify(existing));
         } else {
-          userApi.addTrackToPlaylist(playlistId, track).catch(() => { });
+          userApi.addTrackToPlaylist(playlistId, track).catch(() => {
+            const prevPlaylists = get().playlists.map(p =>
+              p.id === playlistId
+                ? { ...p, tracks: p.tracks.filter(t => t.id !== track.id), updatedAt: Date.now() }
+                : p
+            );
+            set({ playlists: prevPlaylists });
+            saveToLocalStorage(STORAGE_KEYS.PLAYLISTS, prevPlaylists);
+            useToastStore.getState().addToast({
+              type: 'error',
+              title: 'Could not add to playlist',
+              message: `"${track.name}" could not be added. Please try again.`,
+            });
+          });
         }
       }
     },
 
     removeTrackFromPlaylist: (playlistId: string, trackId: string) => {
       const state = get();
-      const newPlaylists = state.playlists.map(p =>
+      const prevPlaylists = state.playlists;
+      const newPlaylists = prevPlaylists.map(p =>
         p.id === playlistId
           ? {
             ...p,
@@ -588,40 +650,74 @@ export const usePlayerStore = create<AppStore>()(
           return;
         }
 
-        userApi.removeTrackFromPlaylist(playlistId, trackId).catch(() => { });
+        userApi.removeTrackFromPlaylist(playlistId, trackId).catch(() => {
+          set({ playlists: prevPlaylists });
+          saveToLocalStorage(STORAGE_KEYS.PLAYLISTS, prevPlaylists);
+          useToastStore.getState().addToast({
+            type: 'error',
+            title: 'Could not update playlist',
+            message: 'The track could not be removed. Please try again.',
+          });
+        });
       }
     },
 
     addToFavorites: (track: Track) => {
       const state = get();
-      if (!state.favorites.find(t => t.id === track.id)) {
-        const newFavorites = [...state.favorites, track];
-        set({ favorites: newFavorites });
-        saveToLocalStorage(STORAGE_KEYS.FAVORITES, newFavorites);
+      if (state.favorites.find(t => t.id === track.id)) return;
+      const prevFavorites = state.favorites;
+      const newFavorites = [...prevFavorites, track];
+      set({ favorites: newFavorites });
+      saveToLocalStorage(STORAGE_KEYS.FAVORITES, newFavorites);
 
-        if (useAuthStore.getState().isAuthenticated) {
-          userApi.addFavorite(track).catch(() => { });
-        }
+      if (useAuthStore.getState().isAuthenticated) {
+        userApi.addFavorite(track).catch(() => {
+          set({ favorites: prevFavorites });
+          saveToLocalStorage(STORAGE_KEYS.FAVORITES, prevFavorites);
+          useToastStore.getState().addToast({
+            type: 'error',
+            title: 'Could not add favorite',
+            message: `"${track.name}" could not be saved. Please try again.`,
+          });
+        });
       }
     },
 
     removeFromFavorites: (trackId: string) => {
       const state = get();
-      const newFavorites = state.favorites.filter(t => t.id !== trackId);
+      const prevFavorites = state.favorites;
+      const newFavorites = prevFavorites.filter(t => t.id !== trackId);
       set({ favorites: newFavorites });
       saveToLocalStorage(STORAGE_KEYS.FAVORITES, newFavorites);
 
       if (useAuthStore.getState().isAuthenticated) {
-        userApi.removeFavorite(trackId).catch(() => { });
+        userApi.removeFavorite(trackId).catch(() => {
+          set({ favorites: prevFavorites });
+          saveToLocalStorage(STORAGE_KEYS.FAVORITES, prevFavorites);
+          useToastStore.getState().addToast({
+            type: 'error',
+            title: 'Could not update favorites',
+            message: 'The favorite could not be removed. Please try again.',
+          });
+        });
       }
     },
 
     clearFavorites: () => {
+      const prevFavorites = get().favorites;
       set({ favorites: [] });
       saveToLocalStorage(STORAGE_KEYS.FAVORITES, []);
       if (useAuthStore.getState().isAuthenticated) {
         import('../services/userApi').then(({ userApi }) => {
-          userApi.clearFavorites().catch(() => { });
+          userApi.clearFavorites().catch(() => {
+            set({ favorites: prevFavorites });
+            saveToLocalStorage(STORAGE_KEYS.FAVORITES, prevFavorites);
+            useToastStore.getState().addToast({
+              type: 'error',
+              title: 'Could not clear favorites',
+              message: 'Your favorites could not be cleared. Please try again.',
+            });
+          });
         });
       }
     },
@@ -675,7 +771,16 @@ export const usePlayerStore = create<AppStore>()(
               userApi.addTrackToPlaylist(remote.id, track).catch(() => { });
             });
           }
-        }).catch(() => { });
+        }).catch(() => {
+          const rollback = get().playlists.filter(p => p.id !== importedPlaylist.id);
+          set({ playlists: rollback });
+          saveToLocalStorage(STORAGE_KEYS.PLAYLISTS, rollback);
+          useToastStore.getState().addToast({
+            type: 'error',
+            title: 'Could not import playlist',
+            message: 'The playlist could not be synced to the cloud. Please try again.',
+          });
+        });
       }
     },
 

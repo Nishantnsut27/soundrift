@@ -407,17 +407,26 @@ export class UserService {
       throw new AppError('User not found', 404);
     }
 
-    // Delete existing Cloudinary image asset if present
-    if (user.avatarPublicId) {
-      await CloudinaryService.deleteAvatar(user.avatarPublicId);
-    }
+    const oldPublicId = user.avatarPublicId;
 
-    // Upload new image buffer to Cloudinary
+    // Upload new image buffer to Cloudinary first
     const uploadResult = await CloudinaryService.uploadAvatarBuffer(fileBuffer);
 
-    user.avatarUrl = uploadResult.url;
-    user.avatarPublicId = uploadResult.public_id;
-    await user.save();
+    // Persist the new avatar before removing the previous asset
+    try {
+      user.avatarUrl = uploadResult.url;
+      user.avatarPublicId = uploadResult.public_id;
+      await user.save();
+    } catch (error) {
+      // Persisting failed: clean up the newly uploaded asset, keep old avatar intact
+      await CloudinaryService.deleteAvatar(uploadResult.public_id).catch(() => {});
+      throw error;
+    }
+
+    // Only remove the previous asset after the new one is persisted successfully
+    if (oldPublicId) {
+      await CloudinaryService.deleteAvatar(oldPublicId).catch(() => {});
+    }
 
     console.log(`🖼️ [Cloudinary] Avatar updated for user ${user.email}: ${uploadResult.url}`);
 

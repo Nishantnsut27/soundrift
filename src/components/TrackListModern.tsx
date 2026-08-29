@@ -28,6 +28,7 @@ export function TrackListModern({
   isLoading = false, 
   error = null,
   playlistId,
+  playQueue,
 }: TrackListProps) {
   const [showPlaylistMenu, setShowPlaylistMenu] = useState<string | null>(null);
   const [hoveredTrack, setHoveredTrack] = useState<string | null>(null);
@@ -62,9 +63,12 @@ export function TrackListModern({
       } else {
         setIsPlaying(true);
       }
-    } else {
-      playTrack(track);
+      return;
     }
+
+    const queue = playQueue && playQueue.length > 0 ? playQueue : tracks;
+    const idx = queue.findIndex(t => t.id === track.id);
+    playTrack(track, queue.length > 0 ? queue : undefined, idx >= 0 ? idx : undefined);
   };
 
   useEffect(() => {

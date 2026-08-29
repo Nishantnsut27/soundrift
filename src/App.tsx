@@ -143,7 +143,8 @@ function App() {
       const isProtectedRoute =
         path.includes('/favorites') ||
         path.includes('/playlists') ||
-        path.includes('/recent');
+        path.includes('/recent') ||
+        path.includes('/history');
 
       if (!isAuth && isProtectedRoute) {
         usePlayerStore.getState().setCurrentView('search');
@@ -160,6 +161,8 @@ function App() {
         usePlayerStore.getState().setCurrentView('playlists');
       } else if (path.includes('/recent')) {
         usePlayerStore.getState().setCurrentView('recent');
+      } else if (path.includes('/history')) {
+        usePlayerStore.getState().setCurrentView('history');
       } else if (path === '/' || path.includes('/search')) {
         usePlayerStore.getState().setCurrentView('search');
       }
@@ -171,7 +174,7 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const protectedViews = ['favorites', 'playlists', 'recent'];
+    const protectedViews = ['favorites', 'playlists', 'recent', 'history'];
     if (!isAuthenticated && protectedViews.includes(currentView)) {
       setCurrentView('search');
       addToast({
