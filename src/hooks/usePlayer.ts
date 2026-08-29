@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import type { Track } from '../types/types';
 import { STORAGE_KEYS } from '../config/constants';
 import { usePlayerStore } from '../store/playerStore';
-import { finishHistory } from '../services/historyTracker';
+import { finishHistory, startHistory } from '../services/historyTracker';
 
 let singletonAudio: HTMLAudioElement | null = null;
 let listenersAttached = false;
@@ -86,7 +86,13 @@ function attachAudioListeners(audio: HTMLAudioElement) {
   audio.addEventListener('pause', () => { if (!audio.ended && !suppressPauseEvent) store().setIsPlaying(false); });
   audio.addEventListener('ended', () => {
     const state = store();
-    if (state.repeatMode === 'one') { audio.currentTime = 0; void audio.play().catch(() => {}); return; }
+    if (state.repeatMode === 'one') {
+      finishHistory(Number.isFinite(audio.duration) ? audio.duration : state.currentTime, true);
+      if (state.currentTrack) startHistory(state.currentTrack);
+      audio.currentTime = 0;
+      void audio.play().catch(() => {});
+      return;
+    }
     finishHistory(Number.isFinite(audio.duration) ? audio.duration : state.currentTime, true);
     state.nextTrack();
   });

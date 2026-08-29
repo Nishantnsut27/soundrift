@@ -127,6 +127,30 @@ const newId = (): string =>
     ? `pl_${crypto.randomUUID()}`
     : `pl_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
+const createOpGuard = () => {
+  let next = 1;
+  const lastTouch = new Map<string, number>();
+  return {
+    touch: (key: string): number => {
+      const seq = next++;
+      lastTouch.set(key, seq);
+      return seq;
+    },
+    touchWith: (key: string, seq: number): void => {
+      lastTouch.set(key, seq);
+    },
+    stillOwns: (key: string, seq: number): boolean => lastTouch.get(key) === seq,
+  };
+};
+
+const favoritesGuard = createOpGuard();
+const playlistsGuard = createOpGuard();
+
+const favKey = (trackId: string): string => `track:${trackId}`;
+const plDeleteKey = (id: string): string => `delete:${id}`;
+const plNameKey = (id: string): string => `name:${id}`;
+const plTrackKey = (playlistId: string, trackId: string): string => `track:${playlistId}:${trackId}`;
+
 const isValidTrack = (t: unknown): t is Track => {
   if (!t || typeof t !== 'object') return false;
   const c = t as Record<string, unknown>;
@@ -535,15 +559,17 @@ export const usePlayerStore = create<AppStore>()(
       const state = get();
       const deletedPlaylist = state.playlists.find(p => p.id === id);
       const newPlaylists = state.playlists.filter(p => p.id !== id);
+      const guardSeq = playlistsGuard.touch(plDeleteKey(id));
       set({ playlists: newPlaylists });
       saveToLocalStorage(STORAGE_KEYS.PLAYLISTS, newPlaylists);
 
       if (useAuthStore.getState().isAuthenticated) {
         userApi.deletePlaylist(id).catch(() => {
+          if (!deletedPlaylist || !playlistsGuard.stillOwns(plDeleteKey(id), guardSeq)) return;
           const currentPlaylists = get().playlists;
-          const merged = deletedPlaylist && !currentPlaylists.some(p => p.id === id)
-            ? [...currentPlaylists, deletedPlaylist]
-            : currentPlaylists;
+          const merged = currentPlaylists.some(p => p.id === id)
+            ? currentPlaylists
+            : [...currentPlaylists, deletedPlaylist];
           set({ playlists: merged });
           saveToLocalStorage(STORAGE_KEYS.PLAYLISTS, merged);
           useToastStore.getState().addToast({
@@ -562,11 +588,13 @@ export const usePlayerStore = create<AppStore>()(
       const newPlaylists = state.playlists.map(p =>
         p.id === id ? { ...p, name: uniqueName, updatedAt: Date.now() } : p
       );
+      const guardSeq = playlistsGuard.touch(plNameKey(id));
       set({ playlists: newPlaylists });
       saveToLocalStorage(STORAGE_KEYS.PLAYLISTS, newPlaylists);
 
       if (useAuthStore.getState().isAuthenticated) {
         userApi.updatePlaylist(id, { name: uniqueName }).catch(() => {
+          if (!playlistsGuard.stillOwns(plNameKey(id), guardSeq)) return;
           const merged = get().playlists.map(p =>
             p.id === id && p.name === uniqueName
               ? { ...p, name: prevName ?? p.name, updatedAt: Date.now() }
@@ -615,14 +643,16 @@ export const usePlayerStore = create<AppStore>()(
           existing.push({ ...track, addedAt: Date.now() });
           localStorage.setItem(pendingKey, JSON.stringify(existing));
         } else {
+          const guardSeq = playlistsGuard.touch(plTrackKey(playlistId, track.id));
           userApi.addTrackToPlaylist(playlistId, track).catch(() => {
-            const prevPlaylists = get().playlists.map(p =>
+            if (!playlistsGuard.stillOwns(plTrackKey(playlistId, track.id), guardSeq)) return;
+            const merged = get().playlists.map(p =>
               p.id === playlistId
                 ? { ...p, tracks: p.tracks.filter(t => t.id !== track.id), updatedAt: Date.now() }
                 : p
             );
-            set({ playlists: prevPlaylists });
-            saveToLocalStorage(STORAGE_KEYS.PLAYLISTS, prevPlaylists);
+            set({ playlists: merged });
+            saveToLocalStorage(STORAGE_KEYS.PLAYLISTS, merged);
             useToastStore.getState().addToast({
               type: 'error',
               title: 'Could not add to playlist',
@@ -663,14 +693,14 @@ export const usePlayerStore = create<AppStore>()(
           return;
         }
 
+        const guardSeq = playlistsGuard.touch(plTrackKey(playlistId, trackId));
         userApi.removeTrackFromPlaylist(playlistId, trackId).catch(() => {
-          const merged = removedTrack
-            ? get().playlists.map(p =>
-              p.id === playlistId && !p.tracks.some(t => t.id === trackId)
-                ? { ...p, tracks: [...p.tracks, removedTrack], updatedAt: Date.now() }
-                : p
-            )
-            : get().playlists;
+          if (!removedTrack || !playlistsGuard.stillOwns(plTrackKey(playlistId, trackId), guardSeq)) return;
+          const merged = get().playlists.map(p =>
+            p.id === playlistId && !p.tracks.some(t => t.id === trackId)
+              ? { ...p, tracks: [...p.tracks, removedTrack], updatedAt: Date.now() }
+              : p
+          );
           set({ playlists: merged });
           saveToLocalStorage(STORAGE_KEYS.PLAYLISTS, merged);
           useToastStore.getState().addToast({
@@ -686,11 +716,13 @@ export const usePlayerStore = create<AppStore>()(
       const state = get();
       if (state.favorites.find(t => t.id === track.id)) return;
       const newFavorites = [...state.favorites, track];
+      const guardSeq = favoritesGuard.touch(favKey(track.id));
       set({ favorites: newFavorites });
       saveToLocalStorage(STORAGE_KEYS.FAVORITES, newFavorites);
 
       if (useAuthStore.getState().isAuthenticated) {
         userApi.addFavorite(track).catch(() => {
+          if (!favoritesGuard.stillOwns(favKey(track.id), guardSeq)) return;
           const merged = get().favorites.filter(t => t.id !== track.id);
           set({ favorites: merged });
           saveToLocalStorage(STORAGE_KEYS.FAVORITES, merged);
@@ -708,12 +740,13 @@ export const usePlayerStore = create<AppStore>()(
       const removedIndex = state.favorites.findIndex(t => t.id === trackId);
       const removedTrack = removedIndex >= 0 ? state.favorites[removedIndex] : null;
       const newFavorites = state.favorites.filter(t => t.id !== trackId);
+      const guardSeq = favoritesGuard.touch(favKey(trackId));
       set({ favorites: newFavorites });
       saveToLocalStorage(STORAGE_KEYS.FAVORITES, newFavorites);
 
       if (useAuthStore.getState().isAuthenticated) {
         userApi.removeFavorite(trackId).catch(() => {
-          if (!removedTrack) return;
+          if (!removedTrack || !favoritesGuard.stillOwns(favKey(trackId), guardSeq)) return;
           const current = get().favorites;
           if (current.some(t => t.id === trackId)) return;
           const insertAt = Math.min(removedIndex, current.length);
@@ -731,15 +764,20 @@ export const usePlayerStore = create<AppStore>()(
 
     clearFavorites: () => {
       const prevFavorites = get().favorites;
+      const guardSeq = favoritesGuard.touch('__all__');
+      for (const t of prevFavorites) {
+        favoritesGuard.touchWith(favKey(t.id), guardSeq);
+      }
       set({ favorites: [] });
       saveToLocalStorage(STORAGE_KEYS.FAVORITES, []);
       if (useAuthStore.getState().isAuthenticated) {
         import('../services/userApi').then(({ userApi }) => {
           userApi.clearFavorites().catch(() => {
-            const current = get().favorites;
-            const merged = [...current];
+            const merged = [...get().favorites];
             for (const t of prevFavorites) {
-              if (!merged.some(x => x.id === t.id)) merged.push(t);
+              if (favoritesGuard.stillOwns(favKey(t.id), guardSeq) && !merged.some(x => x.id === t.id)) {
+                merged.push(t);
+              }
             }
             set({ favorites: merged });
             saveToLocalStorage(STORAGE_KEYS.FAVORITES, merged);
