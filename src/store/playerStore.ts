@@ -691,9 +691,7 @@ export const usePlayerStore = create<AppStore>()(
 
       if (useAuthStore.getState().isAuthenticated) {
         userApi.addFavorite(track).catch(() => {
-          const merged = get().favorites.some(t => t.id === track.id)
-            ? get().favorites
-            : [...get().favorites, track];
+          const merged = get().favorites.filter(t => t.id !== track.id);
           set({ favorites: merged });
           saveToLocalStorage(STORAGE_KEYS.FAVORITES, merged);
           useToastStore.getState().addToast({
