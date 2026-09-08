@@ -1,0 +1,916 @@
+/* Soundrift application shell.
+   The reusable guest surface: MusicCard, ContentSection, the guest sidebar and
+   its conversion panel, plus the header. Loaded last so it wins over the older
+   sheets for the classes it owns — it does not restyle authenticated markup. */
+
+/* ================================================================== *
+ * MusicCard
+ * ================================================================== *
+ * Every track grid in the app renders these. Card height is fixed by
+ * construction (1:1 artwork + two single-line rows), so a long title can never
+ * make one card taller than its neighbours. */
+
+.music-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--card-min), 1fr));
+  gap: var(--card-gap);
+  align-items: start;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.music-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  min-width: 0;
+  position: relative;
+}
+
+.music-card-art {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  padding: 0;
+  border: none;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--surface-2);
+  box-shadow: var(--elev-1);
+  cursor: pointer;
+  isolation: isolate;
+  transition: box-shadow 0.22s var(--smooth), transform 0.22s var(--smooth);
+}
+
+.music-card-art-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.4s var(--smooth), filter 0.22s var(--smooth);
+}
+
+/* Full-artwork scrim. The play button sits dead centre, so the contrast it needs
+   is in the middle of the image, not along the bottom edge. Kept low-alpha: this
+   is a hover affordance, not a filter over the artwork. */
+.music-card-art::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(6, 7, 8, 0.44);
+  opacity: 0;
+  transition: opacity 0.22s var(--smooth);
+  pointer-events: none;
+}
+
+.music-card-art:hover,
+.music-card-art:focus-visible {
+  box-shadow: var(--elev-2);
+}
+
+.music-card-art:hover .music-card-art-img {
+  transform: scale(1.045);
+}
+
+.music-card-art:hover::after,
+.music-card-art:focus-visible::after,
+.music-card.is-current .music-card-art::after {
+  opacity: 1;
+}
+
+/* Primary play affordance: centred on the artwork. This is the one control the
+   whole card exists to offer, so it takes the optical centre — not a corner.
+   Every rule that touches `transform` must re-state the centring translate. */
+.music-card-play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #08090a;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.42);
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.86);
+  transition: opacity 0.2s var(--smooth), transform 0.2s var(--smooth),
+    background-color 0.2s var(--smooth);
+}
+
+.music-card-art:hover .music-card-play,
+.music-card-art:focus-visible .music-card-play,
+.music-card.is-current .music-card-play {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.music-card-art:hover .music-card-play {
+  background: var(--primary-light);
+}
+
+/* Editorial rank, used by ordered surfaces such as Trending. Top-left, clear of
+   the centred play button. */
+.music-card-rank {
+  position: absolute;
+  left: 0.6rem;
+  top: 0.45rem;
+  font-size: 1.5rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: rgba(255, 255, 255, 0.92);
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.75);
+  pointer-events: none;
+}
+
+.music-card-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  padding: 0 0.125rem;
+}
+
+.music-card-title {
+  font-size: var(--type-meta);
+  font-weight: 650;
+  line-height: 1.35;
+  color: var(--text-1);
+  margin: 0;
+}
+
+.music-card-artist {
+  font-size: var(--type-micro);
+  line-height: 1.35;
+  color: var(--text-2);
+  margin: 0;
+}
+
+.music-card.is-current .music-card-title {
+  color: var(--primary-light);
+}
+
+.music-card-menu {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  opacity: 0;
+  transition: opacity 0.2s var(--smooth);
+}
+
+.music-card:hover .music-card-menu,
+.music-card:focus-within .music-card-menu {
+  opacity: 1;
+}
+
+/* Touch: there is no hover, so the play affordance is permanently visible. The
+   centring translate must be restated here — a bare `transform: none` would
+   knock the button back to the top-left corner of the artwork. */
+@media (hover: none) {
+  .music-card-play {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+
+  .music-card-menu {
+    opacity: 1;
+  }
+
+  /* Lighter than the hover scrim: it is always on, so it must not read as a
+     filter dulling every cover in the grid. */
+  .music-card-art::after {
+    opacity: 0.55;
+  }
+
+  .music-card-art:hover .music-card-art-img {
+    transform: none;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Card grid density
+ * ------------------------------------------------------------------ *
+ * Explicit column counts rather than auto-fill: a discovery row should hold a
+ * predictable number of cards at each size, and auto-fill silently drifts to
+ * 7–8 cramped columns on wide monitors. */
+
+@media (min-width: 600px) {
+  .music-card-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 900px) {
+  .music-card-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1200px) {
+  .music-card-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1600px) {
+  .music-card-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+/* Phones: a swipeable rail beats a two-column grid of tiny squares. The scroll
+   is owned by the rail itself, so the page never gains horizontal overflow. */
+@media (max-width: 599px) {
+  .music-card-grid {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: 42%;
+    gap: 0.9rem;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 0.25rem;
+  }
+
+  .music-card-grid::-webkit-scrollbar {
+    display: none;
+  }
+
+  .music-card {
+    scroll-snap-align: start;
+  }
+
+  .music-card-play {
+    width: 42px;
+    height: 42px;
+  }
+}
+
+@media (max-width: 380px) {
+  .music-card-grid {
+    grid-auto-columns: 52%;
+  }
+}
+
+/* ================================================================== *
+ * ContentSection
+ * ================================================================== */
+
+.content-section {
+  margin: 0 0 var(--section-gap) 0;
+}
+
+.content-section:last-child {
+  margin-bottom: 0;
+}
+
+/* Heading sits close to the content it labels — 14px. The larger air belongs
+   between sections (--section-gap), not inside one. */
+.content-section-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.875rem;
+}
+
+.content-section-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.content-section-title {
+  min-width: 0;
+}
+
+.content-section-subtitle {
+  max-width: 62ch;
+  color: var(--text-3);
+}
+
+.content-section-body {
+  min-width: 0;
+}
+
+/* ================================================================== *
+ * Header
+ * ================================================================== */
+
+.app-header .header-actions {
+  gap: 0.6rem;
+}
+
+.header-avatar-wrap {
+  position: relative;
+}
+
+/* The old circular glass chip; flattened to a plain quiet icon button. */
+.app-header .github-link {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: transparent;
+  border: 1px solid var(--line-subtle);
+  color: var(--text-2);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  transition: background-color 0.18s var(--smooth), color 0.18s var(--smooth),
+    border-color 0.18s var(--smooth);
+}
+
+.app-header .github-link:hover {
+  background: var(--surface-hover);
+  border-color: var(--line);
+  color: var(--text-1);
+  transform: none;
+  box-shadow: none;
+}
+
+@media (max-width: 768px) {
+  .app-header {
+    background: var(--surface-0) !important;
+    padding: 0.5rem 1rem;
+  }
+
+  .app-header .github-link {
+    width: 34px;
+    height: 34px;
+  }
+}
+
+/* ================================================================== *
+ * Sidebar
+ * ================================================================== */
+
+.sidebar {
+  background: var(--surface-1);
+  border-right: 1px solid var(--line-subtle);
+}
+
+.sidebar-header {
+  background: var(--surface-1);
+  padding: 1.125rem 1.25rem 0.875rem 1.25rem;
+}
+
+.sidebar-logo {
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.sidebar-logo-icon {
+  border-radius: 7px;
+  filter: none;
+}
+
+.sidebar-logo-icon:hover {
+  transform: none;
+}
+
+/* Wordmark, not a heading shout: small, tracked-in, all caps. */
+.sidebar-title {
+  font-size: 0.9375rem;
+  font-weight: 750;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-1);
+  line-height: 1;
+  margin: 0;
+}
+
+.sidebar-nav {
+  padding: 0.25rem 0.625rem 0.5rem 0.625rem;
+  align-items: stretch;
+}
+
+.sidebar-nav-list {
+  gap: 0.125rem;
+}
+
+.sidebar .sidebar-nav .sidebar-nav-item {
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  color: var(--text-2);
+  font-size: 0.875rem;
+  font-weight: 550;
+  overflow: visible;
+}
+
+.sidebar .sidebar-nav .sidebar-nav-item:hover {
+  background: var(--surface-hover);
+  color: var(--text-1);
+}
+
+.sidebar .sidebar-nav .sidebar-nav-item-active {
+  background: var(--surface-active);
+  color: var(--text-1);
+  font-weight: 650;
+}
+
+/* Replaces the old 3px left rail: the active row is a filled pill instead. */
+.sidebar .sidebar-nav .sidebar-nav-item-active::before {
+  display: none;
+}
+
+.sidebar-nav-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: currentColor;
+}
+
+.sidebar .sidebar-nav .sidebar-nav-item-active .sidebar-nav-icon {
+  color: var(--primary-light);
+}
+
+/* ------------------------------------------------------------------ *
+ * Guest conversion panel
+ * ------------------------------------------------------------------ */
+
+.guest-cta {
+  /* Sits in the space the authenticated library occupies, so the sidebar has no
+     hole in it — but it stays a card, not a billboard. The footer's own
+     margin-top:auto pushes itself to the bottom, so nothing is needed here. */
+  margin: 0.5rem 0.875rem 0 0.875rem;
+  padding: 1rem;
+  background: var(--surface-2);
+  border: 1px solid var(--line-subtle);
+  border-radius: var(--radius-lg);
+  text-align: left;
+  flex-shrink: 0;
+}
+
+.guest-cta-eyebrow {
+  color: var(--text-2);
+  margin-bottom: 0.6rem;
+}
+
+.guest-cta-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.9rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: var(--type-meta);
+  line-height: 1.45;
+  color: var(--text-2);
+}
+
+/* ------------------------------------------------------------------ *
+ * Sidebar footer
+ * ------------------------------------------------------------------ */
+
+.sidebar-footer {
+  padding: 0.75rem 0.875rem;
+  border-top: 1px solid var(--line-subtle);
+  background: transparent;
+}
+
+.sidebar-guest-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+
+.sidebar-footer-link,
+.sidebar-guest-footer .pwa-install-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  margin: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-3);
+  font-family: inherit;
+  font-size: var(--type-meta);
+  font-weight: 500;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 0.18s var(--smooth), color 0.18s var(--smooth);
+}
+
+.sidebar-footer-link:hover,
+.sidebar-guest-footer .pwa-install-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text-1);
+  text-decoration: none;
+  transform: none;
+  box-shadow: none;
+}
+
+.sidebar-guest-footer .pwa-install-btn svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+/* The global .pwa-install-btn rule hides its label under 768px to fit the
+   header. In the sidebar there is room, and an unlabelled icon reads as broken. */
+.sidebar-guest-footer .pwa-install-btn span {
+  display: inline;
+}
+
+.sidebar-footer-legal {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.15rem 0.5rem 0 0.5rem;
+  font-size: var(--type-micro);
+  color: var(--text-3);
+}
+
+.sidebar-footer-legal a {
+  color: var(--text-3);
+  text-decoration: none;
+}
+
+.sidebar-footer-legal a:hover {
+  color: var(--text-2);
+  text-decoration: underline;
+}
+
+@media (max-width: 768px) {
+  .sidebar {
+    background: var(--surface-1) !important;
+  }
+}
+
+/* ================================================================== *
+ * Guest Home
+ * ================================================================== *
+ * Vertical rhythm is fixed and shared, not chosen per section:
+ *   hero -> 36px -> section heading -> 14px -> cards -> 44px -> next section
+ * The 14px lives on .content-section-head and the 44px is --section-gap, so a
+ * section added later inherits the rhythm instead of inventing a margin. */
+
+.guest-home {
+  display: block;
+  min-width: 0;
+}
+
+/* ------------------------------------------------------------------ *
+ * Hero
+ * ------------------------------------------------------------------ */
+
+.guest-hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--line-subtle);
+  background: var(--surface-1);
+  margin-bottom: 2.25rem;
+  isolation: isolate;
+}
+
+/* The featured artwork, blown up and blurred behind the copy. This is where the
+   hero colour comes from — there is no green glow layer, and no gradient
+   invented independently of the cover. */
+.guest-hero-wash {
+  position: absolute;
+  inset: -12%;
+  z-index: -2;
+  background-position: center;
+  background-size: cover;
+  filter: blur(56px) saturate(1.25);
+  opacity: 0.5;
+  transform: scale(1.1);
+  pointer-events: none;
+}
+
+/* Keeps text contrast honest over any cover, light or dark. */
+.guest-hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(
+    100deg,
+    rgba(8, 9, 10, 0.94) 0%,
+    rgba(8, 9, 10, 0.82) 46%,
+    rgba(8, 9, 10, 0.58) 100%
+  );
+  pointer-events: none;
+}
+
+.guest-hero-inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 2rem;
+  padding: 2.25rem;
+}
+
+.guest-hero-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.guest-hero-eyebrow {
+  color: var(--primary-light);
+  margin-bottom: 0.75rem;
+}
+
+.guest-hero-title {
+  margin: 0;
+  /* Two lines maximum: a long track name must not push the CTAs out of the
+     first viewport. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+.guest-hero-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0.6rem 0 0 0;
+  color: var(--text-2);
+}
+
+.guest-hero-artist {
+  font-weight: 650;
+  color: var(--text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.guest-hero-dot {
+  color: var(--text-3);
+}
+
+.guest-hero-blurb {
+  margin: 0.85rem 0 0 0;
+  color: var(--text-3);
+  max-width: 46ch;
+}
+
+.guest-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: 1.5rem;
+}
+
+.guest-hero-play {
+  gap: 0.5rem;
+}
+
+.guest-hero-art {
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--elev-3);
+  line-height: 0;
+  flex-shrink: 0;
+  transition: transform 0.24s var(--smooth);
+}
+
+.guest-hero-art img {
+  display: block;
+  width: 232px;
+  height: 232px;
+  object-fit: cover;
+}
+
+.guest-hero-art:hover {
+  transform: scale(1.02);
+}
+
+/* Reserves the hero footprint while the first payload is in flight, so the page
+   does not jump when it lands. */
+.guest-hero-loading {
+  min-height: 296px;
+  background: var(--surface-1);
+}
+
+/* ------------------------------------------------------------------ *
+ * One clean row per section
+ * ------------------------------------------------------------------ *
+ * Sections render six cards and reveal only as many as the current breakpoint
+ * has columns, so a row never ends in a single orphan on a second line. The
+ * phone rail below overrides this and scrolls through all six.
+ *
+ * Each breakpoint owns one mutually exclusive range. Open-ended min-width rules
+ * would not work here: they hide a different child than the previous rule, so an
+ * unbounded `n + 4` would keep card 4 hidden at every width above it. */
+
+@media (min-width: 600px) and (max-width: 899px) {
+  .music-card-grid-row > :nth-child(n + 4) {
+    display: none;
+  }
+}
+
+@media (min-width: 900px) and (max-width: 1199px) {
+  .music-card-grid-row > :nth-child(n + 5) {
+    display: none;
+  }
+}
+
+@media (min-width: 1200px) and (max-width: 1599px) {
+  .music-card-grid-row > :nth-child(n + 6) {
+    display: none;
+  }
+}
+
+@media (min-width: 1600px) {
+  .music-card-grid-row > :nth-child(n + 7) {
+    display: none;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Conversion panel at the foot of Home
+ * ------------------------------------------------------------------ */
+
+.guest-invite {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  padding: 1.5rem 1.75rem;
+  margin-top: 0.5rem;
+  border: 1px solid var(--line-subtle);
+  border-radius: var(--radius-xl);
+  background: var(--surface-1);
+}
+
+.guest-invite-copy {
+  min-width: 0;
+}
+
+.guest-invite-lines {
+  margin: 0.35rem 0 0 0;
+  color: var(--text-2);
+}
+
+/* ------------------------------------------------------------------ *
+ * Compact notices
+ * ------------------------------------------------------------------ */
+
+.guest-notice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 1.25rem 1.5rem;
+  border: 1px solid var(--line-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+  color: var(--text-2);
+}
+
+.guest-notice-inline {
+  margin-bottom: var(--section-gap);
+  padding: 0.875rem 1.125rem;
+}
+
+/* ------------------------------------------------------------------ *
+ * Route previews (Discover / Trending / New Releases / Genres)
+ * ------------------------------------------------------------------ *
+ * Styled to read as unfinished on purpose: no hero, no card chrome around the
+ * header, and an explicit progress badge. */
+
+.guest-route-head {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 0.5rem 0 0 0;
+  margin-bottom: 2.25rem;
+  max-width: 62ch;
+}
+
+.guest-route-head .t-eyebrow {
+  color: var(--primary-light);
+  margin-bottom: 0.6rem;
+}
+
+.guest-route-head .t-h1 {
+  margin: 0;
+}
+
+.guest-route-promise {
+  margin: 0.7rem 0 0 0;
+  color: var(--text-2);
+}
+
+.guest-route-note {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+  margin: 1.25rem 0;
+  padding: 0.7rem 0.9rem;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+}
+
+.guest-route-note .t-meta {
+  margin: 0;
+  color: var(--text-3);
+}
+
+.guest-route-badge {
+  flex-shrink: 0;
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--radius-full);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  color: var(--primary-light);
+  font-size: var(--type-micro);
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ *
+ * Guest surfaces: responsive
+ * ------------------------------------------------------------------ */
+
+@media (max-width: 1024px) {
+  .guest-hero-inner {
+    padding: 1.875rem;
+    gap: 1.5rem;
+  }
+
+  .guest-hero-art img {
+    width: 180px;
+    height: 180px;
+  }
+}
+
+@media (max-width: 767px) {
+  .guest-hero {
+    margin-bottom: 1.75rem;
+  }
+
+  /* Artwork first, then the copy: on a phone the cover is the hook. */
+  .guest-hero-inner {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: start;
+    padding: 1.25rem;
+    gap: 1.125rem;
+  }
+
+  .guest-hero-art {
+    order: -1;
+  }
+
+  .guest-hero-art img {
+    width: 148px;
+    height: 148px;
+  }
+
+  .guest-hero-actions {
+    margin-top: 1.125rem;
+    width: 100%;
+  }
+
+  .guest-hero-loading {
+    min-height: 320px;
+  }
+
+  .guest-invite {
+    padding: 1.25rem;
+  }
+
+  .guest-invite .sr-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .guest-route-head {
+    margin-bottom: 1.75rem;
+  }
+}

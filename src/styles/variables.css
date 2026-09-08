@@ -1,10 +1,13 @@
 :root {
-  --bg: #000000;
-  --bg-secondary: #121212;
-  --bg-tertiary: #181818;
-  --bg-quaternary: #242424;
-  --bg-hover: #1a1a1a;
-  --bg-active: #282828;
+  /* Legacy aliases. Kept because ~6k lines of existing CSS (including every
+     authenticated page) read them; they now resolve to the same near-black ramp
+     as the --surface-* tokens below so the two systems cannot drift apart. */
+  --bg: #08090a;
+  --bg-secondary: #0e0f11;
+  --bg-tertiary: #16181b;
+  --bg-quaternary: #1f2226;
+  --bg-hover: #16181b;
+  --bg-active: #1f2226;
   
   --primary: #1db954;
   --primary-dark: #1aa34a;
@@ -13,8 +16,8 @@
   --accent: #1db954;
   
   --text: #ffffff;
-  --text-secondary: #b3b3b3;
-  --text-muted: #6a6a6a;
+  --text-secondary: #a8aeb5;
+  --text-muted: #71787f;
   --text-disabled: #535353;
   
   --border: #2a2a2a;
@@ -28,11 +31,42 @@
   --success: #1db954;
   --info: #1e88e5;
   
-  --sidebar-width: 260px;
-  --player-height: 90px;
-  --player-height-mobile: 85px;
-  --header-height: 64px;
-  
+  /* Elevated surfaces. Near-black base, artwork supplies the colour. */
+  --surface-0: #08090a;
+  --surface-1: #0e0f11;
+  --surface-2: #16181b;
+  --surface-3: #1f2226;
+  --surface-hover: rgba(255, 255, 255, 0.055);
+  --surface-active: rgba(255, 255, 255, 0.095);
+
+  --line-subtle: rgba(255, 255, 255, 0.06);
+  --line: rgba(255, 255, 255, 0.1);
+  --line-strong: rgba(255, 255, 255, 0.16);
+
+  /* Text ramp: white primary, muted grey secondary, dim tertiary. */
+  --text-1: #ffffff;
+  --text-2: #a8aeb5;
+  --text-3: #71787f;
+
+  --accent-soft: rgba(29, 185, 84, 0.14);
+  --accent-line: rgba(29, 185, 84, 0.32);
+
+  --elev-1: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --elev-2: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --elev-3: 0 18px 48px rgba(0, 0, 0, 0.55);
+
+  --sidebar-width: 232px;
+  /* Single source of truth for player height. Redefined per breakpoint at the
+     bottom of this file; every layout offset reads this token and nothing else. */
+  --player-height: 72px;
+  --header-height: 60px;
+
+  /* Card + section rhythm */
+  --card-min: 158px;
+  --card-gap: 1.25rem;
+  --content-max: 1560px;
+  --section-gap: 2.75rem;
+
   --spacing-xs: 0.25rem;
   --spacing-sm: 0.5rem;
   --spacing-md: 1rem;
@@ -47,7 +81,25 @@
   --radius-xl: 16px;
   --radius-full: 9999px;
   
-  --font-family: 'Circular', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+
+  /* Editorial type scale. Six steps, each with a fixed role, so headings stop
+     competing with each other. Consumed via the .t-* classes in foundation.css. */
+  --type-display: clamp(2rem, 4.4vw, 3rem);
+  --type-h1: clamp(1.5rem, 2.4vw, 1.875rem);
+  --type-h2: 1.25rem;
+  --type-h3: 1rem;
+  --type-body: 0.9375rem;
+  --type-meta: 0.8125rem;
+  --type-micro: 0.6875rem;
+
+  --leading-display: 1.06;
+  --leading-heading: 1.2;
+  --leading-body: 1.45;
+  --tracking-display: -0.03em;
+  --tracking-heading: -0.015em;
+  --tracking-eyebrow: 0.12em;
+
   --font-size-xs: 0.75rem;
   --font-size-sm: 0.875rem;
   --font-size-base: 1rem;
@@ -77,16 +129,47 @@
   --glass-shadow: rgba(0, 0, 0, 0.3);
 }
 
+/* Soundrift is dark-only; these selectors exist so a stale stored theme value
+   cannot produce a half-light UI. They must mirror the :root ramp above. */
 [data-theme="light"],
 [data-theme="auto"],
 .light-theme,
 .auto-theme {
-  --bg: #000000 !important;
-  --bg-secondary: #121212 !important;
-  --bg-tertiary: #181818 !important;
+  --bg: #08090a !important;
+  --bg-secondary: #0e0f11 !important;
+  --bg-tertiary: #16181b !important;
   --text: #ffffff !important;
-  --text-secondary: #b3b3b3 !important;
-  --text-muted: #6a6a6a !important;
+  --text-secondary: #a8aeb5 !important;
+  --text-muted: #71787f !important;
+}
+
+/* Tablet and small laptops: the sidebar narrows so the content column keeps
+   enough room for a real card row. Redefining the token is the whole change —
+   .app-main's margin and width both read it, so nothing else has to know.
+   Labels stay visible: this is a narrower sidebar, not a mystery-icon rail. */
+@media (min-width: 769px) and (max-width: 1024px) {
+  :root {
+    --sidebar-width: 200px;
+  }
+}
+
+/* --player-height is redefined here and nowhere else. The player card sets its
+   own height from this token, and every layout offset (main padding, sidebar
+   height) reads the same value, so the two can never drift apart again.
+   Mobile is taller because the transport controls wrap to a second row. */
+@media (max-width: 768px) {
+  :root {
+    --player-height: 80px;
+  }
+}
+
+/* Short but wide (landscape tablet, small laptop): the bar is back to a single
+   row here, so it can be compact. Narrow landscape phones stay on the two-row
+   mobile layout above and keep their taller bar. */
+@media (min-width: 769px) and (max-height: 550px) and (orientation: landscape) {
+  :root {
+    --player-height: 64px;
+  }
 }
 
 * {
@@ -99,16 +182,15 @@
 html {
   font-size: 16px;
   scroll-behavior: smooth;
-  background-color: #000000 !important;
+  background-color: #08090a;
   color-scheme: dark only;
 }
 
 body {
   font-family: var(--font-family);
-  background: linear-gradient(135deg, #000000 0%, #121212 100%);
-  background-attachment: fixed;
-  color: #ffffff !important;
-  line-height: 1.5;
+  background: var(--surface-0);
+  color: var(--text-1);
+  line-height: var(--leading-body);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
@@ -121,23 +203,24 @@ body {
 }
 
 ::-webkit-scrollbar {
-  width: 12px;
+  width: 10px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--bg-secondary);
-  border-radius: 6px;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, var(--text-muted) 0%, var(--text-secondary) 100%);
-  border-radius: 6px;
-  border: 2px solid var(--bg-secondary);
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
   transition: background 0.2s ease;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, var(--text-secondary) 0%, var(--text) 100%);
+  background: rgba(255, 255, 255, 0.26);
+  background-clip: padding-box;
 }
 
 .visually-hidden {

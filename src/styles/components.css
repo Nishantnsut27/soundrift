@@ -2492,127 +2492,6 @@
 
 
 
-/* Guest Music Cards Grid */
-.guest-cards-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-  gap: 1.25rem;
-  width: 100%;
-}
-
-.guest-music-card {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 12px;
-  padding: 0.85rem;
-  cursor: pointer;
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-  display: flex;
-  flex-direction: column;
-  position: relative;
-  overflow: hidden;
-}
-
-.guest-music-card:hover {
-  background: rgba(255, 255, 255, 0.09);
-  transform: translateY(-4px);
-  border-color: rgba(29, 185, 84, 0.3);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4);
-}
-
-.guest-music-card.active {
-  border-color: #1ed760;
-  box-shadow: 0 0 16px rgba(29, 185, 84, 0.25);
-}
-
-.guest-card-cover-wrapper {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 1 / 1;
-  border-radius: 8px;
-  overflow: hidden;
-  margin-bottom: 0.75rem;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
-}
-
-.guest-card-cover-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transition: transform 0.3s ease;
-}
-
-.guest-music-card:hover .guest-card-cover-img {
-  transform: scale(1.05);
-}
-
-.guest-card-play-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
-
-.guest-music-card:hover .guest-card-play-overlay,
-.guest-music-card.active .guest-card-play-overlay {
-  opacity: 1;
-}
-
-.guest-card-play-btn {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  background: #1ed760;
-  color: #000000;
-  border: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
-  transform: scale(0.9);
-  transition: transform 0.2s ease;
-}
-
-.guest-music-card:hover .guest-card-play-btn {
-  transform: scale(1);
-}
-
-.guest-card-info {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.guest-card-title {
-  font-size: 0.95rem;
-  font-weight: 700;
-  color: #ffffff;
-  margin: 0;
-}
-
-.guest-card-artist {
-  font-size: 0.8rem;
-  color: #a7a7a7;
-  margin: 0;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  overflow: hidden;
-}
-
-/* Mobile Responsiveness for Guest Cards */
-@media (max-width: 600px) {
-  .guest-cards-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 0.85rem;
-  }
-}
 
 .artist-img-wrapper {
   width: 90px;
@@ -2676,139 +2555,6 @@
   .artist-img-wrapper {
     width: 70px;
     height: 70px;
-  }
-}
-
-/* Guest Music Cards Grid */
-.guest-cards-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-  gap: 1.25rem;
-  width: 100%;
-}
-
-.guest-music-card {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 12px;
-  padding: 0.85rem;
-  cursor: pointer;
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-  display: flex;
-  flex-direction: column;
-  position: relative;
-  overflow: hidden;
-}
-
-.guest-music-card:hover {
-  background: rgba(255, 255, 255, 0.09);
-  transform: translateY(-4px);
-  border-color: rgba(29, 185, 84, 0.3);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4);
-}
-
-.guest-music-card.active {
-  border-color: #1ed760;
-  box-shadow: 0 0 16px rgba(29, 185, 84, 0.25);
-}
-
-.guest-card-cover-wrapper {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 1 / 1;
-  border-radius: 8px;
-  overflow: hidden;
-  margin-bottom: 0.75rem;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
-}
-
-.guest-card-cover-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transition: transform 0.3s ease;
-}
-
-.guest-music-card:hover .guest-card-cover-img {
-  transform: scale(1.05);
-}
-
-.guest-card-play-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
-
-.guest-music-card:hover .guest-card-play-overlay,
-.guest-music-card.active .guest-card-play-overlay {
-  opacity: 1;
-}
-
-.guest-card-play-btn {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  background: #1ed760;
-  color: #000000;
-  border: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
-  transform: scale(0.9);
-  transition: transform 0.2s ease;
-}
-
-.guest-music-card:hover .guest-card-play-btn {
-  transform: scale(1);
-}
-
-.guest-card-info {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.guest-card-title {
-  font-size: 0.95rem;
-  font-weight: 700;
-  color: #ffffff;
-  margin: 0;
-}
-
-.guest-card-artist {
-  font-size: 0.8rem;
-  color: #a7a7a7;
-  margin: 0;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  overflow: hidden;
-}
-
-/* Mobile Responsiveness for Guest Cards */
-@media (max-width: 600px) {
-  .guest-cards-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 0.85rem;
-  }
-
-  .guest-music-card {
-    padding: 0.65rem;
-  }
-  .guest-card-title {
-    font-size: 0.85rem;
-  }
-
-  .guest-card-artist {
-    font-size: 0.75rem;
   }
 }
 
@@ -2876,28 +2622,472 @@
 .search-suggestion small { color:var(--text-muted); font-size:.75rem; }
 .search-suggestion mark { background:transparent; color:#1ed760; padding:0; }
 .search-suggestion > button { border:0; background:transparent; color:var(--text-muted); font-size:1.25rem; padding:.5rem; cursor:pointer; }
-.search-results { display:grid; min-width:0; gap:2rem; padding:0 1rem 2rem; }
-.search-results > section { min-width:0; }
+/* ==========================================================================
+   Search page
+   ==========================================================================
+   Calmer and denser than Home on purpose. Home sells; Search answers. So the
+   type is smaller, the gaps are tighter, artwork is smaller, and the loud green
+   row treatment used elsewhere is damped down here — a list of thirty results
+   cannot afford thirty glowing borders. */
+
+.search-page {
+  display: grid;
+  gap: 1.25rem;
+  min-width: 0;
+}
+
+.search-page-title {
+  margin: 0;
+  color: var(--text-1);
+  font-size: var(--type-h1);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+/* The shared sticky search container is transparent, which is fine when it sits
+   above a hero but not above a scrolling list — results would show through the
+   pinned field. On this page it gets the page background. (Small screens only:
+   on desktop the field is in the app header and this container is hidden.) */
+.search-page .content-search-container {
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  margin-bottom: 0.5rem;
+  background: var(--bg);
+}
+
+/* ---- State A: nothing typed yet ---------------------------------------- */
+
+/* Compact, and offering only what actually exists: a line of guidance plus the
+   listener's own past searches. No filler grid, and no empty black screen. */
+.search-intro {
+  display: grid;
+  gap: 1.75rem;
+  max-width: 620px;
+}
+
+.search-intro-hint {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--type-body);
+}
+
+.search-recent-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.35rem;
+}
+
+.search-recent-head .search-section-title {
+  margin: 0;
+}
+
+.search-recent-list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.search-recent-item {
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius);
+  transition: background-color 0.15s var(--smooth);
+}
+
+.search-recent-item:hover,
+.search-recent-item:focus-within {
+  background: var(--surface-hover);
+}
+
+.search-recent-query {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 0.7rem;
+  min-width: 0;
+  min-height: 42px;
+  padding: 0 0.65rem;
+  border: 0;
+  background: transparent;
+  color: var(--text-1);
+  font: inherit;
+  font-size: var(--type-body);
+  text-align: left;
+  cursor: pointer;
+}
+
+.search-recent-query svg {
+  flex-shrink: 0;
+  color: var(--text-3);
+}
+
+.search-recent-remove {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  margin-right: 0.3rem;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+.search-recent-remove:hover,
+.search-recent-remove:focus-visible {
+  color: var(--text-1);
+  background: var(--surface-active);
+}
+
+/* Revealed on hover only where hovering is possible. On touch it stays visible,
+   because there is no hover to reveal it with. */
+@media (hover: hover) {
+  .search-recent-remove {
+    opacity: 0;
+    transition: opacity 0.15s var(--smooth);
+  }
+
+  .search-recent-item:hover .search-recent-remove,
+  .search-recent-remove:focus-visible {
+    opacity: 1;
+  }
+}
+
+/* ---- Results ----------------------------------------------------------- */
+
+.search-results-shell {
+  min-width: 0;
+  transition: opacity 0.15s var(--smooth);
+}
+
+/* Results for the previous query, while the next one is in flight. Dimmed so it
+   is clear they are not the answer yet. */
+.search-results-shell.is-refreshing {
+  opacity: 0.5;
+}
+
+.search-results {
+  display: grid;
+  min-width: 0;
+  gap: 1.75rem;
+}
+
+.search-results > section {
+  min-width: 0;
+}
+
 .search-results .modern-track-list,
-.search-results .track-list-container-modern { min-width:0; max-width:100%; }
-.search-section-title { margin:0 0 .8rem; color:#fff; font-size:1.35rem; }
-.search-entity-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:.8rem; }
-.search-entity-grid button { min-width:0; text-align:left; border:0; border-radius:10px; background:rgba(255,255,255,.045); color:#fff; padding:.75rem; cursor:pointer; display:grid; gap:.4rem; }
-.search-entity-grid button:hover, .search-entity-grid button:focus-visible { background:rgba(255,255,255,.1); outline:2px solid rgba(29,185,84,.7); outline-offset:2px; }
-.search-entity-grid img { width:100%; aspect-ratio:1; border-radius:7px; object-fit:cover; }
-.search-entity-grid span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }
-.search-entity-grid small { color:var(--text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.search-empty { margin:2rem 1rem; padding:3rem 1rem; text-align:center; border:1px dashed rgba(255,255,255,.2); border-radius:16px; color:var(--text-muted); }
-.search-empty h2 { color:#fff; margin:0 0 .5rem; }
-.search-empty button { margin-top:1rem; border:0; border-radius:999px; background:#1db954; color:#061b0d; font-weight:700; padding:.65rem 1rem; cursor:pointer; }
+.search-results .track-list-container-modern {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.search-section-title {
+  margin: 0 0 0.7rem;
+  color: var(--text-1);
+  font-size: var(--type-h2);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.skeleton-section-title {
+  margin-bottom: 0.7rem;
+}
+
+/* ---- Top result -------------------------------------------------------- */
+
+/* The one result given weight, because a search usually has a single answer. */
+.search-top-result {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+  max-width: 460px;
+  padding: 0.75rem;
+  border: 1px solid var(--line-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  color: var(--text-1);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.18s var(--smooth), border-color 0.18s var(--smooth);
+}
+
+.search-top-result:hover,
+.search-top-result:focus-visible {
+  background: var(--surface-3);
+  border-color: var(--line);
+}
+
+.search-top-result-art {
+  position: relative;
+  flex-shrink: 0;
+  width: 72px;
+  height: 72px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--surface-3);
+}
+
+.search-top-result-art img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Centred on the artwork — never tucked into a corner. */
+.search-play-badge {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #08090a;
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.86);
+  transition: opacity 0.18s var(--smooth), transform 0.18s var(--smooth);
+}
+
+.search-top-result:hover .search-play-badge,
+.search-top-result:focus-visible .search-play-badge,
+.search-top-result.is-current .search-play-badge {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+/* Touch has no hover, so the play affordance is simply always there. */
+@media (hover: none) {
+  .search-play-badge {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+.search-top-result-text {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.search-top-result-name {
+  font-size: 1.0625rem;
+  font-weight: 700;
+}
+
+.search-top-result-meta {
+  color: var(--text-2);
+  font-size: var(--type-meta);
+}
+
+/* ---- Songs ------------------------------------------------------------- */
+
+/* The row treatment on library pages slides, glows and turns its title green.
+   Thirty of those in a row is noise, so inside search results it is damped to a
+   plain background change. */
+.search-results .track-item-modern {
+  margin-bottom: 2px;
+  border-color: transparent;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-radius: var(--radius);
+}
+
+.search-results .track-item-modern:hover,
+.search-results .track-item-modern.hovered {
+  background: var(--surface-hover);
+  border-color: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  transform: none !important;
+}
+
+.search-results .track-item-modern:hover .track-title-modern,
+.search-results .track-item-modern.hovered .track-title-modern {
+  color: var(--text-1);
+}
+
+.search-results .track-item-modern.active {
+  background: var(--surface-active);
+  border-color: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
+.search-results .track-item-modern.active .track-title-modern {
+  color: var(--primary-light);
+}
+
+/* ---- Artists ----------------------------------------------------------- */
+
+/* Fixed-width tracks rather than 1fr: six artists should look the same size on a
+   laptop and on a 1920 monitor instead of stretching into album-sized cards. */
+.search-artist-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 124px);
+  justify-content: start;
+  gap: 0.5rem;
+}
+
+.search-artist,
+.search-artist-skeleton {
+  display: grid;
+  justify-items: center;
+  gap: 0.45rem;
+  width: 124px;
+  padding: 0.7rem 0.5rem;
+  text-align: center;
+}
+
+.search-artist {
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--text-1);
+  cursor: pointer;
+  transition: background-color 0.18s var(--smooth);
+}
+
+.search-artist:hover,
+.search-artist:focus-visible {
+  background: var(--surface-hover);
+}
+
+.search-artist-art {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--surface-3);
+}
+
+.search-artist-name {
+  max-width: 100%;
+  font-size: var(--type-meta);
+  font-weight: 600;
+}
+
+.search-entity-kind {
+  max-width: 100%;
+  color: var(--text-3);
+  font-size: var(--type-micro);
+}
+
+/* ---- Albums ------------------------------------------------------------ */
+
+.search-album-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 148px);
+  justify-content: start;
+  gap: 0.5rem;
+}
+
+.search-album,
+.search-album-skeleton {
+  display: grid;
+  gap: 0.35rem;
+  width: 148px;
+  padding: 0.6rem;
+}
+
+.search-album {
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--text-1);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.18s var(--smooth);
+}
+
+.search-album:hover,
+.search-album:focus-visible {
+  background: var(--surface-hover);
+}
+
+.search-album-art {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--surface-3);
+}
+
+.search-album-art img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.search-album-name {
+  max-width: 100%;
+  font-size: var(--type-meta);
+  font-weight: 600;
+}
+
+/* ---- No results / failed search ---------------------------------------- */
+
+/* Deliberately small: a failure is not a feature, and the field above it keeps
+   its text so retrying costs one click. */
+.search-notice {
+  max-width: 520px;
+  padding: 1.15rem 1.25rem;
+  border: 1px solid var(--line-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+}
+
+.search-notice-error {
+  border-color: rgba(239, 68, 68, 0.32);
+}
+
+.search-notice-title {
+  margin: 0 0 0.4rem;
+  color: var(--text-1);
+  font-size: var(--type-h3);
+  font-weight: 700;
+}
+
+.search-notice-text {
+  margin: 0 0 0.9rem;
+  color: var(--text-2);
+  font-size: var(--type-meta);
+  line-height: 1.5;
+}
 @media (max-width: 768px) {
-  .search-results { gap:1.5rem; padding:0 .75rem calc(1.5rem + env(safe-area-inset-bottom)); overflow-x:hidden; }
+  .search-results { gap:1.5rem; overflow-x:hidden; }
   .search-results .track-item-modern { min-width:0; width:100%; }
   .search-results .track-info-modern { min-width:0; }
   .search-results .track-title-modern,
   .search-results .track-artist-modern { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .search-entity-grid { grid-template-columns:repeat(3,minmax(0,1fr)); gap:.65rem; }
-  .search-entity-grid button { min-height:44px; padding:.6rem; }
+
+  /* Fluid tracks on narrow screens: fixed widths would either overflow or leave
+     a dead column. Three artists, two albums — still legible, never microscopic. */
+  .search-artist-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .search-artist,
+  .search-artist-skeleton { width:auto; padding:.5rem .25rem; }
+  .search-artist-art { width:100%; height:auto; aspect-ratio:1; }
+
+  .search-album-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .search-album,
+  .search-album-skeleton { width:auto; padding:.4rem; }
+
+  .search-top-result { max-width:none; }
+  .search-notice { max-width:none; }
 }
 @media (max-width: 480px) {
   .search-bar-shell { z-index:40; }
@@ -2908,10 +3098,11 @@
   .search-suggestion strong { font-size:.84rem; }
   .search-suggestion small { font-size:.68rem; }
   .search-suggestion > button { padding:.35rem; font-size:1.1rem; }
-  .search-results { gap:1.25rem; padding-inline:.5rem; }
+  .search-results { gap:1.25rem; }
   .search-results .track-item-modern { padding:.5rem; }
-  .search-section-title { font-size:1.15rem; }
-  .search-entity-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .search-page { gap:1rem; }
+  .search-top-result-art { width:60px; height:60px; }
+  .search-top-result-name { font-size:1rem; }
 }
 
 /* ==========================================================================

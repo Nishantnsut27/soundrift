@@ -1,10 +1,89 @@
 import React, { useState } from 'react';
-import { usePlayerStore } from '../store/playerStore';
+import { usePlayerStore, type AppView } from '../store/playerStore';
 import { useAuthStore } from '../store/authStore';
 import { useToastStore } from '../store/toastStore';
 import { ConfirmModal } from './ConfirmModal';
 import { PlaylistMenu } from './PlaylistMenu';
+import { InstallButton } from '../pwa/InstallButton';
+import { SUPPORT_EMAIL } from '../config/constants';
+import { requireAuth } from '../utils/requireAuth';
 import type { Playlist } from '../types/types';
+
+interface NavItem {
+  view: AppView;
+  label: string;
+  icon: React.ReactNode;
+}
+
+/**
+ * Guest navigation. Deliberately discovery-only: favorites, playlists and
+ * listening history are not listed, because a guest has no such library and
+ * showing them as if they existed is the wrong promise.
+ */
+const GUEST_NAV: NavItem[] = [
+  {
+    view: 'home',
+    label: 'Home',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+        <polyline points="9 22 9 12 15 12 15 22" />
+      </svg>
+    ),
+  },
+  {
+    view: 'discover',
+    label: 'Discover',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="9" />
+        <polygon points="15.5 8.5 10.8 10.8 8.5 15.5 13.2 13.2" />
+      </svg>
+    ),
+  },
+  {
+    view: 'search',
+    label: 'Search',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="11" cy="11" r="7" />
+        <line x1="20" y1="20" x2="16" y2="16" />
+      </svg>
+    ),
+  },
+  {
+    view: 'trending',
+    label: 'Trending',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+        <polyline points="17 6 23 6 23 12" />
+      </svg>
+    ),
+  },
+  {
+    view: 'new-releases',
+    label: 'New Releases',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="9" />
+        <circle cx="12" cy="12" r="2.5" />
+      </svg>
+    ),
+  },
+  {
+    view: 'genres',
+    label: 'Genres',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="3" width="7.5" height="7.5" rx="1.5" />
+        <rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5" />
+        <rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5" />
+        <rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5" />
+      </svg>
+    ),
+  },
+];
 
 export function Sidebar() {
   const [isLibraryOpen, setIsLibraryOpen] = useState(true);
@@ -62,7 +141,7 @@ export function Sidebar() {
     };
   }, [isSidebarOpen, closeSidebar]);
 
-  const handleNavClick = (view: 'search' | 'favorites' | 'playlists' | 'recent') => {
+  const handleNavClick = (view: AppView) => {
     setCurrentView(view);
     if (window.innerWidth <= 768) {
       closeSidebar();
@@ -179,62 +258,97 @@ export function Sidebar() {
           <div className="sidebar-logo">
             <img
               src="/Favicon.png"
-              alt="Soundrift Logo"
-              width="32"
-              height="32"
+              alt=""
+              width="28"
+              height="28"
               className="sidebar-logo-icon"
             />
-            <h2 className="sidebar-title" style={{ color: '#ffffff !important' }}>
-              Soundrift
-            </h2>
+            <h2 className="sidebar-title">Soundrift</h2>
           </div>
         </div>
 
         {/* Primary Navigation */}
-        <nav className="sidebar-nav">
+        <nav className="sidebar-nav" aria-label="Primary">
           <ul className="sidebar-nav-list">
-            <li>
-              <button
-                onClick={() => handleNavClick('search')}
-                className={`sidebar-nav-item ${currentView === 'search' ? 'sidebar-nav-item-active' : ''}`}
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                  <polyline points="9 22 9 12 15 12 15 22" />
-                </svg>
-                {isAuthenticated ? 'Home' : 'Discover & Search'}
-              </button>
-            </li>
+            {!isAuthenticated
+              ? GUEST_NAV.map((item) => (
+                  <li key={item.view}>
+                    <button
+                      onClick={() => handleNavClick(item.view)}
+                      className={`sidebar-nav-item ${currentView === item.view ? 'sidebar-nav-item-active' : ''}`}
+                      aria-current={currentView === item.view ? 'page' : undefined}
+                    >
+                      <span className="sidebar-nav-icon">{item.icon}</span>
+                      <span className="truncate">{item.label}</span>
+                    </button>
+                  </li>
+                ))
+              : (
+                <>
+                  <li>
+                    <button
+                      onClick={() => handleNavClick('home')}
+                      className={`sidebar-nav-item ${currentView === 'home' ? 'sidebar-nav-item-active' : ''}`}
+                      aria-current={currentView === 'home' ? 'page' : undefined}
+                    >
+                      <span className="sidebar-nav-icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                          <polyline points="9 22 9 12 15 12 15 22" />
+                        </svg>
+                      </span>
+                      <span className="truncate">Home</span>
+                    </button>
+                  </li>
 
-            {isAuthenticated && (
-              <>
-                <li>
-                  <button
-                    onClick={() => handleNavClick('favorites')}
-                    className={`sidebar-nav-item ${currentView === 'favorites' ? 'sidebar-nav-item-active' : ''}`}
-                  >
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill={currentView === 'favorites' ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-                    </svg>
-                    Favorites
-                  </button>
-                </li>
+                  <li>
+                    <button
+                      onClick={() => handleNavClick('search')}
+                      className={`sidebar-nav-item ${currentView === 'search' ? 'sidebar-nav-item-active' : ''}`}
+                      aria-current={currentView === 'search' ? 'page' : undefined}
+                    >
+                      <span className="sidebar-nav-icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="11" cy="11" r="7" />
+                          <line x1="20" y1="20" x2="16" y2="16" />
+                        </svg>
+                      </span>
+                      <span className="truncate">Search</span>
+                    </button>
+                  </li>
 
-                <li>
-                  <button
-                    onClick={() => handleNavClick('recent')}
-                    className={`sidebar-nav-item ${currentView === 'recent' ? 'sidebar-nav-item-active' : ''}`}
-                  >
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="12" cy="12" r="10" />
-                      <polyline points="12 6 12 12 16 14" />
-                    </svg>
-                    Recently Played
-                  </button>
-                </li>
+                  <li>
+                    <button
+                      onClick={() => handleNavClick('favorites')}
+                      className={`sidebar-nav-item ${currentView === 'favorites' ? 'sidebar-nav-item-active' : ''}`}
+                      aria-current={currentView === 'favorites' ? 'page' : undefined}
+                    >
+                      <span className="sidebar-nav-icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill={currentView === 'favorites' ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+                        </svg>
+                      </span>
+                      <span className="truncate">Favorites</span>
+                    </button>
+                  </li>
 
-              </>
-            )}
+                  <li>
+                    <button
+                      onClick={() => handleNavClick('recent')}
+                      className={`sidebar-nav-item ${currentView === 'recent' ? 'sidebar-nav-item-active' : ''}`}
+                      aria-current={currentView === 'recent' ? 'page' : undefined}
+                    >
+                      <span className="sidebar-nav-icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="9" />
+                          <polyline points="12 7 12 12 16 14" />
+                        </svg>
+                      </span>
+                      <span className="truncate">Recently Played</span>
+                    </button>
+                  </li>
+                </>
+              )}
           </ul>
         </nav>
 
@@ -379,14 +493,19 @@ export function Sidebar() {
             )}
           </div>
         ) : (
-          /* Guest Mode CTA Box */
-          <div className="guest-sidebar-cta">
-            <div className="cta-icon" role="img" aria-label="Music Note">🎵</div>
-            <h4>Sync Your Music</h4>
-            <p>Log in to save favorite tracks, create playlists, and sync across devices.</p>
+          /* Guest conversion panel. Names exactly what signing in unlocks, so the
+             missing library items above read as "not yet" rather than "broken". */
+          <div className="guest-cta">
+            <p className="t-eyebrow guest-cta-eyebrow">Make Soundrift yours</p>
+            <ul className="guest-cta-list">
+              <li>Save favorites.</li>
+              <li>Create playlists.</li>
+              <li>Sync across devices.</li>
+            </ul>
             <button
-              onClick={() => window.dispatchEvent(new CustomEvent('open-auth-modal', { detail: 'login' }))}
-              className="btn btn-primary btn-sm w-full mt-2"
+              type="button"
+              className="sr-btn sr-btn-primary sr-btn-sm sr-btn-block"
+              onClick={() => requireAuth('login')}
             >
               Sign In / Register
             </button>
@@ -419,11 +538,22 @@ export function Sidebar() {
               </div>
             </div>
           ) : (
-            <p className="sidebar-attribution">
-              Powered by <span style={{ color: '#1ed760', fontWeight: 600 }}>Soundrift Engine</span>
-              <br />
-              <span className="text-muted">(Guest Discovery Mode)</span>
-            </p>
+            <div className="sidebar-guest-footer">
+              {/* The real PWA prompt: renders itself only when the browser has an
+                  install offer, which is why this is a component and not a link. */}
+              <InstallButton />
+              <a className="sidebar-footer-link" href={`mailto:${SUPPORT_EMAIL}?subject=Soundrift%20feedback`}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z" />
+                </svg>
+                Help &amp; Feedback
+              </a>
+              <div className="sidebar-footer-legal">
+                <a href="/terms">Terms</a>
+                <span aria-hidden="true">·</span>
+                <a href="/privacy">Privacy</a>
+              </div>
+            </div>
           )}
         </div>
       </aside>

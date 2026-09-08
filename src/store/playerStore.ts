@@ -29,6 +29,7 @@ interface PlayerStore extends PlayerState {
 }
 
 interface SearchStore extends SearchState {
+  setSearchInput: (value: string) => void;
   setQuery: (query: string) => void;
   setResults: (results: Track[]) => void;
   setLoading: (loading: boolean) => void;
@@ -62,14 +63,32 @@ interface PlaylistStore {
   clearRecommendations: () => void;
 }
 
+/**
+ * Every addressable view. `home` and `search` are deliberately separate so the
+ * sidebar can highlight exactly one of them; they were previously both mapped to
+ * `search`, which made two nav items look active at the same time.
+ */
+export type AppView =
+  | 'home'
+  | 'discover'
+  | 'search'
+  | 'playlists'
+  | 'favorites'
+  | 'recently-played'
+  | 'history'
+  | 'recent'
+  | 'trending'
+  | 'new-releases'
+  | 'genres';
+
 interface UIStore {
   isSidebarOpen: boolean;
-  currentView: 'search' | 'playlists' | 'favorites' | 'recently-played' | 'history' | 'recent';
+  currentView: AppView;
   theme: 'light' | 'dark';
 
   toggleSidebar: () => void;
   closeSidebar: () => void;
-  setCurrentView: (view: UIStore['currentView']) => void;
+  setCurrentView: (view: AppView) => void;
   setTheme: (theme: 'light' | 'dark') => void;
 }
 
@@ -131,32 +150,15 @@ const isValidTrack = (t: unknown): t is Track => {
   return (typeof c.id === 'string' || typeof c.id === 'number') && typeof c.name === 'string';
 };
 
-const DEFAULT_PLAYLISTS: Playlist[] = [
-  {
-    id: 'default-playlist-1',
-    name: 'Top Hits',
-    tracks: [
-      {
-        id: 'demo-track-1',
-        name: 'Midnight Groove',
-        artist_name: 'Chill Lounge',
-        artist_id: 'artist-1',
-        album_name: 'Lo-Fi Sessions',
-        album_id: 'album-1',
-        album_image: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300',
-        image: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300',
-        audio: 'https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3?filename=lofi-study-112191.mp3',
-        audiodownload: 'https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3?filename=lofi-study-112191.mp3',
-        duration: 145,
-        license_ccurl: '',
-        musicinfo: { tags: { genres: ['Lofi', 'Chill'], instruments: [], vartags: [] } },
-        addedAt: Date.now()
-      }
-    ],
-    createdAt: Date.now(),
-    updatedAt: Date.now()
-  }
-];
+/**
+ * Playlists start empty. Earlier builds seeded a hardcoded demo playlist ("Top
+ * Hits" / "Midnight Groove") pointing at Unsplash artwork and a Pixabay audio
+ * file. That is not Soundrift catalogue data, so it is no longer created for
+ * anyone. Existing localStorage is left exactly as it is — nothing is deleted or
+ * migrated here — and guest surfaces simply do not read local playlists, so the
+ * legacy seed cannot surface in the guest experience.
+ */
+const INITIAL_PLAYLISTS: Playlist[] = [];
 
 export const usePlayerStore = create<AppStore>()(
   subscribeWithSelector((set, get) => ({
@@ -176,13 +178,14 @@ export const usePlayerStore = create<AppStore>()(
     shufflePosition: 0,
     repeatMode: 'none',
 
+    searchInput: '',
     query: '',
     results: [],
     isLoading: false,
     error: null,
     trending: [],
 
-    playlists: loadFromLocalStorage(STORAGE_KEYS.PLAYLISTS, DEFAULT_PLAYLISTS),
+    playlists: loadFromLocalStorage(STORAGE_KEYS.PLAYLISTS, INITIAL_PLAYLISTS),
     favorites: loadFromLocalStorage(STORAGE_KEYS.FAVORITES, []),
     recentlyPlayed: [],
     listeningHistory: [],
@@ -194,7 +197,7 @@ export const usePlayerStore = create<AppStore>()(
     playbackError: null,
 
     isSidebarOpen: false,
-    currentView: 'search',
+    currentView: 'home',
     theme: loadFromLocalStorage(STORAGE_KEYS.THEME, 'dark'),
 
     playTrack: (track: Track) => {
@@ -421,12 +424,13 @@ export const usePlayerStore = create<AppStore>()(
       sessionId: state.sessionId + 1,
     })),
 
+    setSearchInput: (value: string) => set({ searchInput: value }),
     setQuery: (query: string) => set({ query }),
     setResults: (results: Track[]) => set({ results }),
     setLoading: (loading: boolean) => set({ isLoading: loading }),
     setError: (error: string | null) => set({ error }),
     setTrending: (trending: Track[]) => set({ trending }),
-    clearResults: () => set({ results: [], query: '', error: null }),
+    clearResults: () => set({ searchInput: '', results: [], query: '', error: null, isLoading: false }),
 
     syncCloudUserData: async () => {
       if (!useAuthStore.getState().isAuthenticated) return;

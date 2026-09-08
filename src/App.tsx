@@ -10,13 +10,15 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { EmptyFavorites, EmptyPlaylists, EmptyRecentlyPlayed } from './components/EmptyState';
 
 const PersonalizedHome = lazy(() => import('./components/PersonalizedHome').then(m => ({ default: m.PersonalizedHome })));
-const GuestHome = lazy(() => import('./components/GuestHome').then(m => ({ default: m.GuestHome })));
+const GuestExperience = lazy(() => import('./components/GuestExperience').then(m => ({ default: m.GuestExperience })));
+const SearchPage = lazy(() => import('./components/SearchPage').then(m => ({ default: m.SearchPage })));
 const RelatedMusic = lazy(() => import('./components/RelatedMusic').then(m => ({ default: m.RelatedMusic })));
 const DiscoverySection = lazy(() => import('./components/DiscoverySection').then(m => ({ default: m.DiscoverySection })));
 import { usePlayerStore } from './store/playerStore';
 import { useToastStore } from './store/toastStore';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useRecommendations } from './hooks/useRecommendations';
+import { useSearchEngine } from './hooks/useSearchEngine';
 import { MusicAPI } from './services/musicApi';
 import type { Playlist } from './types/types';
 
@@ -28,9 +30,11 @@ import { InstallButton } from './pwa/InstallButton';
 import { OfflinePage } from './pwa/OfflinePage';
 
 import './styles/variables.css';
+import './styles/foundation.css';
 import './styles/layout.css';
 import './styles/components.css';
 import './styles/player.css';
+import './styles/shell.css';
 import './styles/animations.css';
 import './styles/auth.css';
 import './styles/legal.css';
@@ -128,6 +132,9 @@ function App() {
 
   useKeyboardShortcuts();
   useRecommendations();
+  // Mounted once, at the top: one debounce, one in-flight request, one listener
+  // for the 'music-search' event no matter how many search fields are on screen.
+  useSearchEngine();
 
   useEffect(() => {
     const handleUrlRouting = () => {
@@ -146,7 +153,7 @@ function App() {
         path.includes('/recent');
 
       if (!isAuth && isProtectedRoute) {
-        usePlayerStore.getState().setCurrentView('search');
+        usePlayerStore.getState().setCurrentView('home');
         try {
           window.history.replaceState(null, '', '/');
         } catch {
@@ -160,8 +167,18 @@ function App() {
         usePlayerStore.getState().setCurrentView('playlists');
       } else if (path.includes('/recent')) {
         usePlayerStore.getState().setCurrentView('recent');
-      } else if (path === '/' || path.includes('/search')) {
+      } else if (path === '/') {
+        usePlayerStore.getState().setCurrentView('home');
+      } else if (path.includes('/discover')) {
+        usePlayerStore.getState().setCurrentView('discover');
+      } else if (path.includes('/search')) {
         usePlayerStore.getState().setCurrentView('search');
+      } else if (path.includes('/trending')) {
+        usePlayerStore.getState().setCurrentView('trending');
+      } else if (path.includes('/new-releases')) {
+        usePlayerStore.getState().setCurrentView('new-releases');
+      } else if (path.includes('/genres')) {
+        usePlayerStore.getState().setCurrentView('genres');
       }
     };
 
@@ -173,7 +190,7 @@ function App() {
   useEffect(() => {
     const protectedViews = ['favorites', 'playlists', 'recent'];
     if (!isAuthenticated && protectedViews.includes(currentView)) {
-      setCurrentView('search');
+      setCurrentView('home');
       addToast({
         type: 'info',
         title: 'Sign In Required',
@@ -189,7 +206,7 @@ function App() {
     if (path === '/terms' || path === '/privacy') return;
     if (legalPage) return;
     let targetPath = '/';
-    if (currentView !== 'search') targetPath = `/${currentView}`;
+    if (currentView !== 'home') targetPath = `/${currentView}`;
     if (window.location.pathname !== targetPath) {
       try {
         window.history.pushState(null, '', targetPath);
@@ -330,11 +347,12 @@ function App() {
 
   const theme = usePlayerStore(state => state.theme);
   useEffect(() => {
+    // Soundrift is dark-only. This only mirrors the stored theme onto the root so
+    // the CSS ramp in variables.css stays authoritative; the values below must
+    // match --surface-0 / --text-1 or the shell and the header show a seam.
     document.documentElement.setAttribute('data-theme', theme);
-    document.documentElement.style.setProperty('--bg', theme === 'dark' ? '#000000' : '#ffffff', 'important');
-    document.documentElement.style.setProperty('--text', theme === 'dark' ? '#ffffff' : '#000000', 'important');
-    document.body.style.backgroundColor = theme === 'dark' ? '#000000' : '#ffffff';
-    document.body.style.color = theme === 'dark' ? '#ffffff' : '#000000';
+    document.body.style.backgroundColor = '#08090a';
+    document.body.style.color = '#ffffff';
   }, [theme]);
 
   useEffect(() => {
@@ -345,7 +363,25 @@ function App() {
 
   const renderMainContent = () => {
     switch (currentView) {
+      // Search is one surface for everyone. It is the only view where the
+      // authenticated and guest experiences are identical, because a result list
+      // is a result list — there is no personalisation to add to it.
       case 'search':
+        return (
+          <div className="view-container">
+            <Suspense fallback={null}><SearchPage /></Suspense>
+          </div>
+        );
+
+      // The authenticated home is unchanged. For guests these five views are five
+      // distinct surfaces: GuestExperience owns that split (see
+      // src/config/guestRoutes.ts) so the routes cannot collapse back into one
+      // page shared by every nav item.
+      case 'home':
+      case 'discover':
+      case 'trending':
+      case 'new-releases':
+      case 'genres':
         if (isAuthenticated) {
           return (
             <div className="view-container">
@@ -357,7 +393,7 @@ function App() {
         }
         return (
           <div className="view-container">
-            <Suspense fallback={null}><GuestHome /></Suspense>
+            <Suspense fallback={null}><GuestExperience /></Suspense>
           </div>
         );
 
@@ -387,7 +423,7 @@ function App() {
             {favorites.length === 0 ? (
               <EmptyFavorites
                 onBrowse={() => {
-                  usePlayerStore.getState().setCurrentView('search');
+                  usePlayerStore.getState().setCurrentView('home');
                 }}
               />
             ) : (
@@ -539,7 +575,7 @@ function App() {
         return (
           <div className="view-container">
             <Suspense fallback={null}>
-              {isAuthenticated ? <PersonalizedHome /> : <GuestHome />}
+              {isAuthenticated ? <PersonalizedHome /> : <GuestExperience />}
             </Suspense>
           </div>
         );
@@ -572,9 +608,7 @@ function App() {
             </svg>
           </button>
 
-          <h1 className="app-title" style={{ color: '#ffffff !important' }}>
-            Soundrift
-          </h1>
+          <h1 className="app-title">Soundrift</h1>
 
           <div className="header-search-container">
             <SearchBar />
@@ -582,7 +616,7 @@ function App() {
 
           <div className="header-actions">
             <InstallButton />
-            <div style={{ position: 'relative' }}>
+            <div className="header-avatar-wrap">
               <UserAvatar
                 isOpen={isUserDropdownOpen}
                 onToggle={() => setIsUserDropdownOpen((prev) => !prev)}
@@ -600,7 +634,6 @@ function App() {
         </header>
 
         <div className="app-content">
-          <div className="spotify-gradient-overlay"></div>
           {renderMainContent()}
         </div>
       </main>

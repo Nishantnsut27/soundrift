@@ -11,6 +11,13 @@ export const API_ENDPOINTS = {
   SUGGESTIONS: (id: string) => `${API_BASE_URL}/suggestions/${encodeURIComponent(id)}`,
 } as const;
 
+/**
+ * The real support inbox. Lived only inside LegalPage before; it is shared now so
+ * "Help & Feedback" affordances point somewhere that actually reaches us instead
+ * of at a placeholder link.
+ */
+export const SUPPORT_EMAIL = 'contactsoundrift@gmail.com';
+
 export const STORAGE_KEYS = {
   VOLUME: 'player-volume',
   PLAYLISTS: 'playlists',

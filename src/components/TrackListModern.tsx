@@ -8,7 +8,7 @@ import { EmptySearchResults, EmptyState } from './EmptyState';
 import { ErrorDisplay } from './ErrorDisplay';
 import { useAuthStore } from '../store/authStore';
 import { TrackItemModern } from './TrackItemModern';
-import { formatArtistNames } from '../utils/formatters';
+import { MusicCard } from './MusicCard';
 
 interface TrackListProps {
   tracks: Track[];
@@ -19,15 +19,22 @@ interface TrackListProps {
   playlistId?: string;
   playQueue?: Track[];
   startRelatedRadio?: boolean;
+  /**
+   * 'auto' keeps the existing split: artwork cards for guests, rows for signed-in
+   * users. 'list' forces compact rows for both, which is what search results want
+   * — a result list needs density and a stable row height, not a wall of cards.
+   */
+  variant?: 'auto' | 'list';
 }
 
-export function TrackListModern({ 
-  tracks, 
-  title, 
-  showAddToPlaylist = true, 
-  isLoading = false, 
+export function TrackListModern({
+  tracks,
+  title,
+  showAddToPlaylist = true,
+  isLoading = false,
   error = null,
   playlistId,
+  variant = 'auto',
 }: TrackListProps) {
   const [showPlaylistMenu, setShowPlaylistMenu] = useState<string | null>(null);
   const [hoveredTrack, setHoveredTrack] = useState<string | null>(null);
@@ -201,15 +208,16 @@ export function TrackListModern({
 
   const isCurrentTrack = (track: Track) => currentTrack?.id === track.id;
   const isFavorite = (track: Track) => favorites.some(f => f.id === track.id);
+  const asRows = variant === 'list' || isAuthenticated;
 
   if (isLoading) {
     return (
       <div className="modern-track-list">
         {title && <h2 className="track-list-title-modern">{title}</h2>}
-        {!isAuthenticated ? (
-          <SkeletonGuestCardsGrid count={8} />
-        ) : (
+        {asRows ? (
           <SkeletonTrackList count={8} />
+        ) : (
+          <SkeletonGuestCardsGrid count={8} />
         )}
       </div>
     );
@@ -263,49 +271,17 @@ export function TrackListModern({
     <div className="modern-track-list">
       {title && <h2 className="track-list-title-modern">{title}</h2>}
       
-      {!isAuthenticated ? (
-        <div className="guest-cards-grid">
-          {tracks.map((track, index) => {
-            const isCurrent = isCurrentTrack(track);
-            return (
-              <div
-                key={`${track.id}-${index}`}
-                className={`guest-music-card ${isCurrent ? 'active' : ''}`}
-                onClick={() => handlePlayTrack(track)}
-              >
-                <div className="guest-card-cover-wrapper">
-                  <img
-                    src={track.image || track.album_image || '/Favicon.png'}
-                    alt={track.name}
-                    className="guest-card-cover-img"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = '/Favicon.png';
-                    }}
-                  />
-                  <div className="guest-card-play-overlay">
-                    <button className="guest-card-play-btn" title="Play">
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                        {isCurrent && isPlaying ? (
-                          <>
-                            <rect x="6" y="4" width="4" height="16" />
-                            <rect x="14" y="4" width="4" height="16" />
-                          </>
-                        ) : (
-                          <polygon points="5 3 19 12 5 21 5 3" />
-                        )}
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-                <div className="guest-card-info">
-                  <h4 className="guest-card-title truncate">{track.name}</h4>
-                  <p className="guest-card-artist" title={track.artist_name}>
-                    {formatArtistNames(track.artist_name)}
-                  </p>
-                </div>
-              </div>
-            );
-          })}
+      {!asRows ? (
+        <div className="music-card-grid">
+          {tracks.map((track, index) => (
+            <MusicCard
+              key={`${track.id}-${index}`}
+              track={track}
+              onPlay={handlePlayTrack}
+              isCurrent={isCurrentTrack(track)}
+              isPlaying={isPlaying}
+            />
+          ))}
         </div>
       ) : (
         <div 
@@ -321,7 +297,15 @@ export function TrackListModern({
               isPlaying={isPlaying}
               isFavorite={isFavorite(track)}
               isHovered={hoveredTrack === track.id}
-              blurLevel={hoveredIndex !== null && hoveredIndex !== index ? Math.abs(hoveredIndex - index) : 0}
+              blurLevel={
+                // A result list is for scanning, so the neighbour-blur focus effect
+                // used on library pages is switched off here.
+                variant === 'list'
+                  ? 0
+                  : hoveredIndex !== null && hoveredIndex !== index
+                    ? Math.abs(hoveredIndex - index)
+                    : 0
+              }
               isRemoving={removingFromPlaylist === track.id}
               showAddToPlaylist={showAddToPlaylist}
               playlistId={playlistId}

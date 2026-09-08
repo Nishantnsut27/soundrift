@@ -110,6 +110,13 @@ export interface PlayerState {
 }
 
 export interface SearchState {
+  /**
+   * Live text in the search field. Shared so that every search input on screen
+   * shows the same value and a single search engine can read it. Distinct from
+   * `query` on purpose: this changes on every keystroke.
+   */
+  searchInput: string;
+  /** The query the current `results` actually belong to. Set when a search runs. */
   query: string;
   results: Track[];
   isLoading: boolean;
