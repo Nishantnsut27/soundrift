@@ -914,3 +914,585 @@
     margin-bottom: 1.75rem;
   }
 }
+
+/* ================================================================== *
+ * Discover
+ * ================================================================== *
+ * Shares Home's vertical rhythm (--section-gap, .content-section-head) so the
+ * two routes feel like one product, and differs where it should: no featured
+ * artwork at the top, and a grid of collections to choose between instead of a
+ * stack of rows to scroll past.
+ *
+ * Colour comes from the covers. The only green on this page is the eyebrow, the
+ * open-collection edge and the shared focus ring — no glow, no gradients, no
+ * green outlines around cards. */
+
+.discover-page {
+  display: block;
+  min-width: 0;
+}
+
+/* ------------------------------------------------------------------ *
+ * Hero
+ * ------------------------------------------------------------------ *
+ * Roughly a third the height of the Home hero: it is a heading with an
+ * instruction under it, not a stage for a record. Deliberately unboxed — no
+ * surface, no border — so the collections below are the first object on the
+ * page that looks clickable. */
+
+.discover-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  max-width: 58ch;
+  padding: 0.5rem 0 0 0;
+  margin-bottom: 2.25rem;
+}
+
+.discover-hero-eyebrow {
+  color: var(--primary-light);
+  margin-bottom: 0.6rem;
+}
+
+.discover-hero-title {
+  margin: 0;
+}
+
+.discover-hero-lede {
+  margin: 0.7rem 0 0 0;
+  color: var(--text-2);
+}
+
+.discover-hero-action {
+  margin-top: 1.25rem;
+  gap: 0.5rem;
+}
+
+/* Reserves the hero's height while the catalogue loads, so the sections below
+   do not jump once it arrives. */
+.discover-hero-loading {
+  min-height: 152px;
+  margin-bottom: 2.25rem;
+}
+
+/* ------------------------------------------------------------------ *
+ * Artist chips
+ * ------------------------------------------------------------------ *
+ * A wrapping list, not a rail: with a dozen names the whole set should be
+ * visible at once, and wrapping cannot introduce horizontal overflow. */
+
+.discover-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.discover-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  max-width: 100%;
+  padding: 0.45rem 0.75rem 0.45rem 0.85rem;
+  border: 1px solid var(--line-subtle);
+  border-radius: var(--radius-full);
+  background: var(--surface-1);
+  color: var(--text-2);
+  font-size: var(--type-meta);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.18s var(--smooth), color 0.18s var(--smooth),
+    border-color 0.18s var(--smooth);
+}
+
+.discover-chip svg {
+  flex-shrink: 0;
+  color: var(--text-3);
+  transition: transform 0.18s var(--smooth), color 0.18s var(--smooth);
+}
+
+.discover-chip:hover {
+  background: var(--surface-hover);
+  border-color: var(--line);
+  color: var(--text-1);
+}
+
+.discover-chip:hover svg {
+  color: var(--text-2);
+  transform: translateX(2px);
+}
+
+/* ------------------------------------------------------------------ *
+ * Collections
+ * ------------------------------------------------------------------ *
+ * The one structural difference from Home. Home gives each collection a section
+ * and shows its songs; here the collections sit side by side as objects, and
+ * opening one is the interaction. */
+
+.discover-collection-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 0.75rem;
+}
+
+.discover-collection {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  min-width: 0;
+  padding: 0.7rem;
+  border: 1px solid var(--line-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.18s var(--smooth), border-color 0.18s var(--smooth);
+}
+
+.discover-collection:hover {
+  background: var(--surface-hover);
+  border-color: var(--line);
+}
+
+/* The open collection is marked by a single accent edge — enough to answer
+   "which one am I looking at", short of outlining the card in green. */
+.discover-collection.is-open {
+  background: var(--surface-2);
+  border-color: var(--accent-line);
+}
+
+.discover-collection-art {
+  flex-shrink: 0;
+  display: block;
+  width: 68px;
+  height: 68px;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: var(--surface-3);
+}
+
+.discover-collection-art img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Four covers, so the tile reads as "a set of songs" rather than "one song". */
+.discover-collection-art.is-mosaic {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 1px;
+}
+
+.discover-collection-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.discover-collection-title {
+  font-size: var(--type-body);
+  font-weight: 650;
+  color: var(--text-1);
+  line-height: 1.3;
+}
+
+.discover-collection-facts {
+  font-size: var(--type-micro);
+  color: var(--text-3);
+  line-height: 1.35;
+}
+
+.discover-dot {
+  margin: 0 0.35rem;
+  color: var(--text-3);
+}
+
+/* The disclosed collection. A rule rather than a box: the tracks belong to the
+   grid above them, so a second bordered container would read as a new section. */
+.discover-collection-panel {
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--line-subtle);
+  min-width: 0;
+}
+
+/* ------------------------------------------------------------------ *
+ * Trail
+ * ------------------------------------------------------------------ */
+
+.discover-trail {
+  min-width: 0;
+}
+
+.discover-trail-hint {
+  margin: 0;
+  padding: 1rem 1.125rem;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-lg);
+  color: var(--text-3);
+}
+
+.discover-trail-hint strong {
+  color: var(--text-2);
+  font-weight: 650;
+}
+
+.discover-trail-seed {
+  margin: 0 0 1.25rem 0;
+  color: var(--text-3);
+}
+
+.discover-trail-seed-name {
+  color: var(--text-1);
+  font-weight: 650;
+}
+
+.discover-trail-row {
+  margin-bottom: 1.75rem;
+}
+
+.discover-trail-row:last-child {
+  margin-bottom: 0;
+}
+
+.discover-trail-row-title {
+  margin: 0 0 0.75rem 0;
+  color: var(--text-2);
+}
+
+/* ------------------------------------------------------------------ *
+ * Explore action on a card
+ * ------------------------------------------------------------------ *
+ * Sits in MusicCard's existing overflow slot, which already handles its
+ * reveal on hover, focus-within and touch. Discover is the only surface that
+ * passes it — elsewhere the slot stays empty. */
+
+.music-card-explore {
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-full);
+  background: rgba(8, 9, 10, 0.78);
+  backdrop-filter: blur(6px);
+  color: var(--text-1);
+  font-size: var(--type-micro);
+  font-weight: 650;
+  cursor: pointer;
+  transition: background-color 0.18s var(--smooth), border-color 0.18s var(--smooth);
+}
+
+.music-card-explore:hover {
+  background: var(--surface-3);
+  border-color: var(--line-strong);
+}
+
+/* ------------------------------------------------------------------ *
+ * Discover: responsive
+ * ------------------------------------------------------------------ */
+
+@media (max-width: 767px) {
+  .discover-hero {
+    margin-bottom: 1.75rem;
+  }
+
+  .discover-hero-loading {
+    min-height: 132px;
+    margin-bottom: 1.75rem;
+  }
+
+  .discover-hero-action {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* One per line rather than a rail: the collections are the choice this page
+     asks you to make, and a rail hides half of them off-screen. */
+  .discover-collection-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .discover-collection-art {
+    width: 56px;
+    height: 56px;
+  }
+
+  .discover-collection-panel {
+    margin-top: 1rem;
+    padding-top: 1rem;
+  }
+
+  .discover-trail-row {
+    margin-bottom: 1.5rem;
+  }
+}
+
+/* ================================================================== *
+ * Trending
+ * ================================================================== *
+ * The one page in the product that is a list rather than a grid. Home and
+ * Discover are for looking at artwork; Trending is for scanning an order, so
+ * the layout is a ranked column with the position as its loudest element.
+ *
+ * Hierarchy comes from the ranking itself — the top three are bigger, and #1
+ * carries the only accent on the page. No glow, no row-level gradients, and no
+ * statistics chrome: the data has no numbers beyond position. */
+
+.trending-page {
+  display: block;
+  min-width: 0;
+}
+
+/* ------------------------------------------------------------------ *
+ * Header
+ * ------------------------------------------------------------------ *
+ * Short on purpose: the first ranked row should be visible without scrolling
+ * at 1366x768. */
+
+.trending-header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  max-width: 54ch;
+  padding: 0.5rem 0 0 0;
+  margin-bottom: 1.75rem;
+}
+
+.trending-header-eyebrow {
+  color: var(--primary-light);
+  margin-bottom: 0.6rem;
+}
+
+.trending-header-title {
+  margin: 0;
+}
+
+.trending-header-lede {
+  margin: 0.7rem 0 0 0;
+  color: var(--text-2);
+}
+
+/* The only metadata on the page, and it is a real curation timestamp. */
+.trending-header-stamp {
+  margin: 0.5rem 0 0 0;
+  color: var(--text-3);
+}
+
+/* ------------------------------------------------------------------ *
+ * The ranking
+ * ------------------------------------------------------------------ *
+ * Capped width: a 1920px-wide row puts the duration half a metre from the
+ * title and makes the list unscannable. */
+
+.trending-list,
+.trending-list-shell {
+  max-width: 940px;
+  min-width: 0;
+}
+
+.trending-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.trending-row {
+  display: grid;
+  grid-template-columns: 2.75rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--line-subtle);
+}
+
+.trending-row:last-child {
+  border-bottom: none;
+}
+
+/* The number. Tabular figures so 01 and 11 line up down the column. */
+.trending-rank {
+  justify-self: end;
+  padding-right: 0.35rem;
+  font-size: var(--type-meta);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  color: var(--text-3);
+  transition: color 0.18s var(--smooth);
+}
+
+.trending-row.is-top .trending-rank {
+  font-size: 1.375rem;
+  font-weight: 800;
+  color: var(--text-1);
+}
+
+/* The single accent on the page, and it means something: this is the top of
+   the list the backend returned. */
+.trending-row.is-top:first-child .trending-rank {
+  color: var(--primary-light);
+}
+
+/* The whole row is the play toggle — one action, one target, nothing hidden
+   behind a hover-only control. */
+.trending-row-main {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  border: none;
+  border-radius: var(--radius);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.16s var(--smooth);
+}
+
+.trending-row-main:hover {
+  background: var(--surface-hover);
+}
+
+.trending-row-art {
+  position: relative;
+  flex-shrink: 0;
+  display: block;
+  width: 44px;
+  height: 44px;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+}
+
+.trending-row.is-top .trending-row-art {
+  width: 60px;
+  height: 60px;
+  border-radius: var(--radius);
+}
+
+.trending-row-art img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Compact affordance sized to the row, centred on the thumbnail — the same
+   centred-play language as the cards, at row scale. */
+.trending-row-play {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background: rgba(8, 9, 10, 0.62);
+  opacity: 0;
+  transition: opacity 0.16s var(--smooth);
+}
+
+.trending-row-main:hover .trending-row-play,
+.trending-row-main:focus-visible .trending-row-play,
+.trending-row.is-current .trending-row-play {
+  opacity: 1;
+}
+
+.trending-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.trending-row-title {
+  font-size: var(--type-body);
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text-1);
+}
+
+.trending-row.is-top .trending-row-title {
+  font-weight: 650;
+}
+
+.trending-row.is-current .trending-row-title {
+  color: var(--primary-light);
+}
+
+.trending-row-artist {
+  font-size: var(--type-meta);
+  line-height: 1.35;
+  color: var(--text-2);
+}
+
+.trending-row-duration {
+  padding-left: 0.5rem;
+  font-size: var(--type-meta);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+}
+
+/* The unranked pull. Full content width, unlike the ranking above it — the
+   change of layout is the signal that these are not numbered. */
+.trending-more {
+  margin-top: var(--section-gap);
+  padding-top: var(--section-gap);
+  border-top: 1px solid var(--line-subtle);
+}
+
+/* Touch: no hover, so the play overlay would never appear. Keep the thumbnail
+   readable instead of permanently scrimmed — the whole row is the target. */
+@media (hover: none) {
+  .trending-row-play {
+    opacity: 0;
+  }
+
+  .trending-row.is-current .trending-row-play {
+    opacity: 1;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Trending: responsive
+ * ------------------------------------------------------------------ */
+
+@media (max-width: 767px) {
+  .trending-header {
+    margin-bottom: 1.25rem;
+  }
+
+  .trending-row {
+    grid-template-columns: 1.75rem minmax(0, 1fr) auto;
+    gap: 0.35rem;
+  }
+
+  .trending-row-main {
+    gap: 0.65rem;
+    padding: 0.45rem 0.35rem;
+  }
+
+  /* Rows stay compact so more than three results fit on a phone screen. */
+  .trending-row-art {
+    width: 40px;
+    height: 40px;
+  }
+
+  .trending-row.is-top .trending-row-art {
+    width: 48px;
+    height: 48px;
+  }
+
+  .trending-row.is-top .trending-rank {
+    font-size: 1.125rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .trending-row-duration {
+    display: none;
+  }
+}

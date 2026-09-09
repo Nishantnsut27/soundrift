@@ -12,6 +12,12 @@ interface TrackCardGridProps {
    * scrolls through the full set.
    */
   singleRow?: boolean;
+  /**
+   * Adds a secondary "Explore" action to each card, used by Discover to follow a
+   * song outwards. Omitted everywhere else: the card's overflow slot must stay
+   * empty when there is no action behind it.
+   */
+  onExplore?: (track: Track) => void;
 }
 
 /**
@@ -22,7 +28,12 @@ interface TrackCardGridProps {
  * favorites and playlists are authenticated features, and a menu of things a
  * guest cannot do is worse than no menu.
  */
-export function TrackCardGrid({ tracks, showRank = false, singleRow = false }: TrackCardGridProps) {
+export function TrackCardGrid({
+  tracks,
+  showRank = false,
+  singleRow = false,
+  onExplore,
+}: TrackCardGridProps) {
   const { toggleTrack, currentTrackId, isPlaying } = useTrackPlayback();
 
   return (
@@ -36,6 +47,18 @@ export function TrackCardGrid({ tracks, showRank = false, singleRow = false }: T
           isPlaying={isPlaying}
           rank={index + 1}
           showRank={showRank}
+          menu={
+            onExplore ? (
+              <button
+                type="button"
+                className="music-card-explore"
+                onClick={() => onExplore(track)}
+                aria-label={`Explore music related to ${track.name}`}
+              >
+                Explore
+              </button>
+            ) : undefined
+          }
         />
       ))}
     </div>

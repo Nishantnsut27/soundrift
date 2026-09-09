@@ -8,12 +8,30 @@ export const formatDuration = (seconds: number): string => {
   return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
 };
 
-export const getTrackUrl = (trackId: string): string => {
-  return `https://www.jamendo.com/track/${encodeURIComponent(trackId)}`;
-};
+/**
+ * Turns a timestamp the backend gave us into "just now" / "3 hours ago".
+ *
+ * Returns null for anything unparseable, or for a time in the future, so the
+ * caller omits the line entirely rather than printing "Invalid Date" or a
+ * nonsense freshness. Only ever call this with a real date from the API — a
+ * fabricated "updated" time is worse than no time at all.
+ */
+export const formatRelativeTime = (isoDate: string): string | null => {
+  const then = new Date(isoDate).getTime();
+  if (Number.isNaN(then)) return null;
 
-export const getArtistUrl = (artistId: string): string => {
-  return `https://www.jamendo.com/artist/${encodeURIComponent(artistId)}`;
+  const seconds = Math.round((Date.now() - then) / 1000);
+  if (seconds < 0) return null;
+  if (seconds < 90) return 'just now';
+
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes} minutes ago`;
+
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} ${hours === 1 ? 'hour' : 'hours'} ago`;
+
+  const days = Math.round(hours / 24);
+  return `${days} ${days === 1 ? 'day' : 'days'} ago`;
 };
 
 export const formatArtistNames = (artistName: string, max = 2): string => {

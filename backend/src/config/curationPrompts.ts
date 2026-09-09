@@ -68,6 +68,43 @@ export function buildCurationUserPrompt(sectionId: CuratedSectionId, now: Date =
         'Include a diverse mix of international music.'
       ].join('\n');
 
+    case 'old_hindi_gold':
+      return [
+        `Give me up to ${CANDIDATE_LIMIT} classic Hindi film songs from the 1950s through the 1970s.`,
+        'Draw on the playback singers and composers of that era.',
+        'Prefer the well-loved originals over later remixes, covers or reprise versions.'
+      ].join('\n');
+
+    case 'nineties_bollywood':
+      return [
+        `Give me up to ${CANDIDATE_LIMIT} Bollywood songs released between 1990 and 1999.`,
+        'Stay inside that decade — nothing from the 1980s or the 2000s.',
+        'Prefer the original film versions over remixes and modern remakes.'
+      ].join('\n');
+
+    case 'monsoon':
+      return [
+        `Give me up to ${CANDIDATE_LIMIT} Indian songs about rain, clouds and the monsoon.`,
+        'Mix classic and contemporary tracks; Hindi and regional both welcome.',
+        `Current date and time: ${timestamp}`
+      ].join('\n');
+
+    case 'late_night':
+      return [
+        `Give me up to ${CANDIDATE_LIMIT} songs that suit listening late at night.`,
+        'Aim for calm, slow, low-energy and introspective tracks rather than club music.',
+        'Mix Hindi and international.',
+        `Current date and time: ${timestamp}`
+      ].join('\n');
+
+    case 'morning_commute':
+      return [
+        `Give me up to ${CANDIDATE_LIMIT} upbeat songs for a morning drive to work.`,
+        'Aim for bright, energetic, easy-to-sing-along tracks that wake a listener up.',
+        'Mix Hindi and international.',
+        `Current date and time: ${timestamp}`
+      ].join('\n');
+
     default: {
       const exhaustiveCheck: never = sectionId;
       throw new Error(`No curation prompt defined for section: ${String(exhaustiveCheck)}`);

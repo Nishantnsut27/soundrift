@@ -63,19 +63,17 @@ export const GUEST_ROUTES: Record<GuestRouteView, GuestRouteMeta> = {
 };
 
 /**
- * Routes whose dedicated experience is not built yet. Home and Search both have
- * real surfaces; everything else previews from Home's curated data and says so.
+ * Routes whose dedicated experience is not built yet. Home, Search, Discover and
+ * Trending all have real surfaces; everything else previews from Home's curated
+ * data and says so. A route leaves this list the day its own page ships.
  */
 export type GuestPreviewRouteView = Extract<
   GuestRouteView,
-  'discover' | 'trending' | 'new-releases' | 'genres'
+  'new-releases'
 >;
 
 export const GUEST_PREVIEW_ROUTES: readonly GuestPreviewRouteView[] = [
-  'discover',
-  'trending',
   'new-releases',
-  'genres',
 ];
 
 export function isGuestPreviewRoute(view: AppView): view is GuestPreviewRouteView {

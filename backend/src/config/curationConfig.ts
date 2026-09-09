@@ -1,4 +1,15 @@
-export const CURATED_SECTION_IDS = ['trending', 'editors_picks', 'fresh_releases', 'kpop', 'worldwide'] as const;
+export const CURATED_SECTION_IDS = [
+  'trending',
+  'editors_picks',
+  'fresh_releases',
+  'kpop',
+  'worldwide',
+  'old_hindi_gold',
+  'monsoon',
+  'late_night',
+  'morning_commute',
+  'nineties_bollywood'
+] as const;
 
 export type CuratedSectionId = (typeof CURATED_SECTION_IDS)[number];
 
@@ -8,12 +19,24 @@ export interface CuratedSectionDefinition {
   overlapGroup: string;
 }
 
+/**
+ * Sections sharing an `overlapGroup` are deduplicated against each other, so a
+ * track can only surface in one of them. The themed rows are split into two
+ * groups rather than one: the era rows genuinely compete for the same songs, as
+ * do the time-of-day rows, but a monsoon song and a 90s song overlapping is
+ * fine and forcing them apart would only thin both rows out.
+ */
 export const CURATED_SECTIONS: readonly CuratedSectionDefinition[] = [
   { id: 'trending', title: 'Trending Now', overlapGroup: 'india' },
   { id: 'editors_picks', title: "Editor's Picks", overlapGroup: 'india' },
   { id: 'fresh_releases', title: 'Fresh Releases', overlapGroup: 'india' },
   { id: 'kpop', title: 'K-Pop', overlapGroup: 'kpop' },
-  { id: 'worldwide', title: 'Worldwide', overlapGroup: 'worldwide' }
+  { id: 'worldwide', title: 'Worldwide', overlapGroup: 'worldwide' },
+  { id: 'old_hindi_gold', title: 'Golden Era Hindi', overlapGroup: 'hindi_era' },
+  { id: 'nineties_bollywood', title: '90s Bollywood', overlapGroup: 'hindi_era' },
+  { id: 'monsoon', title: 'Monsoon Songs', overlapGroup: 'mood' },
+  { id: 'late_night', title: 'After Midnight', overlapGroup: 'mood' },
+  { id: 'morning_commute', title: 'Morning Drive', overlapGroup: 'mood' }
 ];
 
 export function isCuratedSectionId(value: string): value is CuratedSectionId {

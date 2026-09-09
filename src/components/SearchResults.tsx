@@ -108,7 +108,13 @@ export function SearchResults({
                 type="button"
                 key={track.artist_id || track.artist_name}
                 className="search-artist"
-                onClick={() => requestSearch(track.artist_name)}
+                onClick={() => {
+                  if (track.artist_id) {
+                    usePlayerStore.getState().openArtist(track.artist_id);
+                  } else {
+                    requestSearch(track.artist_name);
+                  }
+                }}
                 aria-label={`Search for ${track.artist_name}`}
               >
                 <img
@@ -138,7 +144,13 @@ export function SearchResults({
                 type="button"
                 key={track.album_id || track.album_name}
                 className="search-album"
-                onClick={() => requestSearch(track.album_name)}
+                onClick={() => {
+                  if (track.album_id) {
+                    usePlayerStore.getState().openAlbum(track.album_id);
+                  } else {
+                    requestSearch(track.album_name);
+                  }
+                }}
                 aria-label={`Search for the album ${track.album_name}`}
               >
                 <span className="search-album-art">

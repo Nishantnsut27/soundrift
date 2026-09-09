@@ -7,7 +7,13 @@ export const API_ENDPOINTS = {
   CURATED: `${API_BASE_URL}/curated`,
   SONG: (id: string) => `${API_BASE_URL}/song/${encodeURIComponent(id)}`,
   ARTIST: (id: string) => `${API_BASE_URL}/artist/${encodeURIComponent(id)}`,
+  ARTIST_SONGS: (id: string) => `${API_BASE_URL}/artist/${encodeURIComponent(id)}/songs`,
+  ARTIST_ALBUMS: (id: string) => `${API_BASE_URL}/artist/${encodeURIComponent(id)}/albums`,
+  ARTIST_SEARCH: `${API_BASE_URL}/artists/search`,
+  ARTIST_RESOLVE: `${API_BASE_URL}/artists/resolve`,
   ALBUM: (id: string) => `${API_BASE_URL}/album/${encodeURIComponent(id)}`,
+  PLAYLIST: (id: string) => `${API_BASE_URL}/playlist/${encodeURIComponent(id)}`,
+  PLAYLIST_SEARCH: `${API_BASE_URL}/playlists/search`,
   SUGGESTIONS: (id: string) => `${API_BASE_URL}/suggestions/${encodeURIComponent(id)}`,
 } as const;
 

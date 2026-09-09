@@ -1,8 +1,9 @@
 import React, { memo } from 'react';
 import type { Track } from '../types/types';
-import { formatDuration, getArtistUrl, formatArtistNames } from '../utils/formatters';
+import { formatDuration, formatArtistNames } from '../utils/formatters';
 import { AudioVisualizer } from './AudioVisualizer';
 import { useAuthStore } from '../store/authStore';
+import { usePlayerStore } from '../store/playerStore';
 
 function getTrackArtwork(track: Track): string {
   return track.album_image || track.image || '';
@@ -109,16 +110,19 @@ export const TrackItemModern = memo(function TrackItemModern({
       <div className="track-info-modern">
         <h4 className="track-title-modern">{track.name}</h4>
         <p className="track-artist-modern">
-          <a
-            href={getArtistUrl(track.artist_id)}
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            type="button"
             className="artist-link-modern"
             title={track.artist_name}
-            onClick={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (track.artist_id) {
+                usePlayerStore.getState().openArtist(track.artist_id);
+              }
+            }}
           >
             {formatArtistNames(track.artist_name)}
-          </a>
+          </button>
         </p>
         {track.album_name && <p className="track-album-modern">{track.album_name}</p>}
         <div className="track-metadata-modern">

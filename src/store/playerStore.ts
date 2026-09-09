@@ -79,17 +79,23 @@ export type AppView =
   | 'recent'
   | 'trending'
   | 'new-releases'
-  | 'genres';
+  | 'genres'
+  | 'artist'
+  | 'album';
 
 interface UIStore {
   isSidebarOpen: boolean;
   currentView: AppView;
   theme: 'light' | 'dark';
+  /** The artist or album whose dedicated page is on screen, or null for all other views. */
+  detailEntity: { kind: 'artist' | 'album'; id: string } | null;
 
   toggleSidebar: () => void;
   closeSidebar: () => void;
   setCurrentView: (view: AppView) => void;
   setTheme: (theme: 'light' | 'dark') => void;
+  openArtist: (id: string) => void;
+  openAlbum: (id: string) => void;
 }
 
 type AppStore = PlayerStore & SearchStore & PlaylistStore & UIStore;
@@ -198,6 +204,7 @@ export const usePlayerStore = create<AppStore>()(
 
     isSidebarOpen: false,
     currentView: 'home',
+    detailEntity: null,
     theme: loadFromLocalStorage(STORAGE_KEYS.THEME, 'dark'),
 
     playTrack: (track: Track) => {
@@ -685,7 +692,9 @@ export const usePlayerStore = create<AppStore>()(
 
     toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
     closeSidebar: () => set({ isSidebarOpen: false }),
-    setCurrentView: (view) => set({ currentView: view }),
+    setCurrentView: (view) => set({ currentView: view, detailEntity: null }),
+    openArtist: (id: string) => set({ currentView: 'artist', detailEntity: { kind: 'artist', id } }),
+    openAlbum: (id: string) => set({ currentView: 'album', detailEntity: { kind: 'album', id } }),
 
     setTheme: (theme: 'light' | 'dark') => {
       set({ theme });

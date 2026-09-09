@@ -13,10 +13,7 @@ const ROW_LENGTH = 6;
  * when its dedicated experience is built it replaces this component outright.
  */
 const PREVIEW_SOURCE: Record<GuestPreviewRouteView, string> = {
-  discover: 'editors_picks',
-  trending: 'trending',
   'new-releases': 'fresh_releases',
-  genres: 'kpop',
 };
 
 /**

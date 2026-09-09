@@ -13,6 +13,8 @@ export interface Track {
   license_ccurl: string;
   language?: string;
   provider?: string;
+  /** Resolved singer credits — first entry matches artist_id / artist_name. */
+  artists?: { id: string; name: string }[];
   musicinfo: {
     tags: {
       genres: string[];

@@ -1,5 +1,15 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { Song, Album, Artist, Playlist, Suggestion } from '../models/music.model.js';
+import {
+  Song,
+  Album,
+  Artist,
+  Playlist,
+  Suggestion,
+  ArtistCredit,
+  ArtistSummary,
+  PlaylistSummary,
+  SimilarArtist
+} from '../models/music.model.js';
 import { extractBestImage, extractBestAudioUrl } from '../utils/mediaHelper.js';
 
 function cleanText(str: string | undefined | null): string {
@@ -15,36 +25,83 @@ function cleanText(str: string | undefined | null): string {
     .trim();
 }
 
+/** Turns a raw `{ id, name }`-ish entry into a credit, or null if it is unusable. */
+function toCredit(raw: unknown): ArtistCredit | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const entry = raw as { id?: unknown; name?: unknown };
+  const name = cleanText(typeof entry.name === 'string' ? entry.name : '');
+  if (!name) return null;
+  return { id: entry.id ? String(entry.id) : '', name };
+}
+
+function dedupeCredits(credits: ArtistCredit[]): ArtistCredit[] {
+  const seen = new Set<string>();
+  return credits.filter(credit => {
+    const key = credit.name.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/**
+ * Who actually performs a song.
+ *
+ * JioSaavn's `artists.primary` is not ordered by importance — it mixes singers,
+ * composers and lyricists together. For "Gehra Hua" its first entry is Irshad
+ * Kamil, the lyricist, so reading `primary[0]` credited songs to the wrong person
+ * and pointed every artist link at them.
+ *
+ * `artists.all` carries a `role` per credit (`singer`, `music`, `lyricist`,
+ * `starring`), so singers are preferred when the field is present. The remaining
+ * steps are fallbacks for payload shapes that omit it; the last one is a label,
+ * not a guess at a name.
+ */
+function resolveArtistCredits(raw: any): ArtistCredit[] {
+  const all = Array.isArray(raw?.artists?.all) ? raw.artists.all : [];
+  const singers = all
+    .filter((entry: any) => entry && typeof entry === 'object' && entry.role === 'singer')
+    .map(toCredit)
+    .filter((credit: ArtistCredit | null): credit is ArtistCredit => credit !== null);
+  if (singers.length > 0) return dedupeCredits(singers);
+
+  const primary = Array.isArray(raw?.artists?.primary)
+    ? raw.artists.primary
+        .map(toCredit)
+        .filter((credit: ArtistCredit | null): credit is ArtistCredit => credit !== null)
+    : [];
+  if (primary.length > 0) return dedupeCredits(primary);
+
+  if (typeof raw?.primaryArtists === 'string' && raw.primaryArtists.trim()) {
+    const names = raw.primaryArtists
+      .split(',')
+      .map((name: string) => cleanText(name))
+      .filter(Boolean);
+    if (names.length > 0) {
+      const id = typeof raw?.artistId === 'string' ? raw.artistId : '';
+      return names.map((name: string, index: number) => ({ id: index === 0 ? id : '', name }));
+    }
+  }
+
+  if (Array.isArray(raw?.singers)) {
+    const names = raw.singers
+      .filter((name: unknown): name is string => typeof name === 'string')
+      .map((name: string) => cleanText(name))
+      .filter(Boolean);
+    if (names.length > 0) return names.map((name: string) => ({ id: '', name }));
+  }
+
+  return [];
+}
+
 export class MusicNormalizer {
   static normalizeJioSaavnSong(raw: any): Song {
-    let rawArtists: string;
-    if (Array.isArray(raw?.artists?.primary)) {
-      const valid = raw.artists.primary.filter((a: unknown): a is { name?: unknown } => !!a && typeof a === 'object');
-      rawArtists = valid.length > 0
-        ? valid.map((a: { name?: unknown }) => String(a.name ?? '')).filter(Boolean).join(', ')
-        : '';
-    } else {
-      rawArtists = '';
-    }
-    if (!rawArtists) {
-      rawArtists = typeof raw?.primaryArtists === 'string' ? raw.primaryArtists : '';
-    }
-    if (!rawArtists && Array.isArray(raw?.singers)) {
-      rawArtists = raw.singers.filter((s: unknown) => typeof s === 'string').join(', ');
-    }
-    if (!rawArtists) {
-      rawArtists = 'Unknown Artist';
-    }
-
-    let primaryArtistId = typeof raw?.artistId === 'string' ? raw.artistId : '';
-    if (Array.isArray(raw?.artists?.primary)) {
-      for (const artist of raw.artists.primary) {
-        if (artist && typeof artist === 'object' && artist.id) {
-          primaryArtistId = String(artist.id);
-          break;
-        }
-      }
-    }
+    const credits = resolveArtistCredits(raw);
+    const artistName = credits.length > 0
+      ? credits.map(credit => credit.name).join(', ')
+      : 'Unknown Artist';
+    const primaryArtistId = credits.find(credit => credit.id)?.id
+      || (typeof raw?.artistId === 'string' ? raw.artistId : '');
 
     const bestImage = extractBestImage(raw?.image || raw?.album?.image || raw?.images || raw?.thumbnail);
     const audioUrl = extractBestAudioUrl(raw?.downloadUrl || raw?.audio);
@@ -57,8 +114,9 @@ export class MusicNormalizer {
       id: raw?.id || '',
       name: cleanText(raw.name || raw.title || 'Untitled Track'),
       duration: typeof raw.duration === 'number' ? raw.duration : parseInt(raw.duration || '0', 10),
-      artist_name: cleanText(rawArtists),
+      artist_name: artistName,
       artist_id: primaryArtistId,
+      artists: credits.length > 0 ? credits : undefined,
       album_name: cleanText(raw.album?.name || (typeof raw.album === 'string' ? raw.album : '')),
       album_id: raw.album?.id || '',
       album_image: bestImage,
@@ -156,6 +214,19 @@ export class MusicNormalizer {
     const topAlbums = Array.isArray(raw.topAlbums)
       ? raw.topAlbums.map((album: any) => this.normalizeJioSaavnAlbum(album))
       : [];
+    const singles = Array.isArray(raw.singles)
+      ? raw.singles.map((song: any) => this.normalizeJioSaavnSong(song))
+      : [];
+    const similarArtists = Array.isArray(raw.similarArtists)
+      ? raw.similarArtists
+          .filter((entry: unknown) => !!entry && typeof entry === 'object')
+          .map((entry: any): SimilarArtist => ({
+            id: entry.id ? String(entry.id) : '',
+            name: cleanText(entry.name || ''),
+            image: extractBestImage(entry.image)
+          }))
+          .filter((entry: SimilarArtist) => entry.id && entry.name)
+      : [];
 
     return {
       id: raw.id || '',
@@ -167,6 +238,33 @@ export class MusicNormalizer {
       bio: cleanText(Array.isArray(raw.bio) ? raw.bio.map((b: any) => b.text).join(' ') : (raw.bio || '')),
       topSongs,
       topAlbums,
+      singles,
+      similarArtists,
+      provider: 'jiosaavn'
+    };
+  }
+
+  /**
+   * An artist search hit. `/api/search/artists` returns no songs or bio, so this
+   * is deliberately thin — enough to render a row and open the full profile.
+   */
+  static normalizeJioSaavnArtistSummary(raw: any): ArtistSummary {
+    return {
+      id: raw?.id ? String(raw.id) : '',
+      name: cleanText(raw?.name || ''),
+      image: extractBestImage(raw?.image),
+      role: typeof raw?.role === 'string' ? raw.role : undefined,
+      provider: 'jiosaavn'
+    };
+  }
+
+  static normalizeJioSaavnPlaylistSummary(raw: any): PlaylistSummary {
+    return {
+      id: raw?.id ? String(raw.id) : '',
+      name: cleanText(raw?.name || raw?.title || ''),
+      image: extractBestImage(raw?.image),
+      songCount: typeof raw?.songCount === 'number' ? raw.songCount : undefined,
+      language: typeof raw?.language === 'string' ? cleanText(raw.language) : undefined,
       provider: 'jiosaavn'
     };
   }

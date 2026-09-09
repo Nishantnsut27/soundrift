@@ -1,9 +1,23 @@
+/** One credited person, with the id needed to open their artist page. */
+export interface ArtistCredit {
+  id: string;
+  name: string;
+}
+
 export interface Song {
   id: string;
   name: string;
   duration: number;
   artist_name: string;
   artist_id: string;
+  /**
+   * Every credited performer, in order, each with its own id.
+   *
+   * `artist_name` is a display string and `artist_id` is only the first entry here,
+   * so neither can link a song with several singers to more than one artist page.
+   * Optional: Jamendo rows and songs already stored in Mongo do not carry it.
+   */
+  artists?: ArtistCredit[];
   album_name: string;
   album_id: string;
   album_image: string;
@@ -47,7 +61,45 @@ export interface Artist {
   bio?: string;
   topSongs?: Song[];
   topAlbums?: Album[];
+  /** Solo releases, separate from the album list. Present on JioSaavn only. */
+  singles?: Song[];
+  /**
+   * Populated inconsistently upstream — some artists return several, many return
+   * none. Callers render it only when non-empty; there is nothing to substitute.
+   */
+  similarArtists?: SimilarArtist[];
   provider?: 'jiosaavn' | 'jamendo';
+}
+
+export interface SimilarArtist {
+  id: string;
+  name: string;
+  image: string;
+}
+
+/** A search hit for an artist: enough to list and open, without the full profile. */
+export interface ArtistSummary {
+  id: string;
+  name: string;
+  image: string;
+  role?: string;
+  provider?: 'jiosaavn' | 'jamendo';
+}
+
+/** A search hit for a playlist. The songs arrive only when one is opened by id. */
+export interface PlaylistSummary {
+  id: string;
+  name: string;
+  image: string;
+  songCount?: number;
+  language?: string;
+  provider?: 'jiosaavn' | 'jamendo';
+}
+
+/** A page of results plus the true size of the collection behind it. */
+export interface PagedResult<T> {
+  total: number;
+  items: T[];
 }
 
 export interface Playlist {

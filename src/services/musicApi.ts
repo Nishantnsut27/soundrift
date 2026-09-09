@@ -1,7 +1,7 @@
 import type { Track, Artist, Album, CuratedSection, RelatedMusic } from '../types/types';
 import { API_ENDPOINTS, PLAYER_DEFAULTS } from '../config/constants';
 import { fetchJson, type ApiResponse } from './apiClient';
-import { formatDuration, getTrackUrl, getArtistUrl } from '../utils/formatters';
+import { formatDuration } from '../utils/formatters';
 
 const searchCache = new Map<string, { timestamp: number; tracks: Track[] }>();
 const CACHE_TTL_MS = 300000;
@@ -119,7 +119,11 @@ export class MusicAPI {
       return cached.tracks;
     }
     const tracks = await this.searchTracks(artistName, limit);
-    const filtered = tracks.filter(t => (t.artist_name || '').toLowerCase() === artistName.toLowerCase());
+    const filtered = tracks.filter(t => {
+      const songArtists = (t.artist_name || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+      const targetArtists = artistName.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+      return targetArtists.some(a => songArtists.includes(a));
+    });
     searchCache.set(cacheKey, { timestamp: Date.now(), tracks: filtered });
     if (searchCache.size > CACHE_MAX_ENTRIES) {
       const oldestKey = searchCache.keys().next().value;
@@ -137,7 +141,7 @@ export class MusicAPI {
     }
     const query = artistName ? `${albumName} ${artistName}` : albumName;
     const tracks = await this.searchTracks(query, limit);
-    const filtered = tracks.filter(t => (t.album_name || '').toLowerCase() === albumName.toLowerCase());
+    const filtered = tracks.filter(t => (t.album_name || '').toLowerCase().includes(albumName.toLowerCase()) || albumName.toLowerCase().includes((t.album_name || '').toLowerCase()));
     searchCache.set(cacheKey, { timestamp: Date.now(), tracks: filtered });
     return filtered;
   }
@@ -199,6 +203,4 @@ export class MusicAPI {
 }
 
 export const JamendoAPI = MusicAPI;
-export { formatDuration, getTrackUrl, getArtistUrl };
-export const getJamendoTrackUrl = getTrackUrl;
-export const getJamendoArtistUrl = getArtistUrl;
+export { formatDuration };
