@@ -19,9 +19,6 @@ export function SearchPage() {
   const searchInput = usePlayerStore((state) => state.searchInput);
   const query = usePlayerStore((state) => state.query);
   const results = usePlayerStore((state) => state.results);
-  const artistResults = usePlayerStore((state) => state.artistResults);
-  const albumResults = usePlayerStore((state) => state.albumResults);
-  const searchScope = usePlayerStore((state) => state.searchScope);
   const isLoading = usePlayerStore((state) => state.isLoading);
   const error = usePlayerStore((state) => state.error);
 
@@ -39,19 +36,9 @@ export function SearchPage() {
    * screen keeps the previous results in place and dims them instead: tearing the
    * whole list down and rebuilding it on every extra letter is a worse answer than
    * a visibly stale one, and the field's own spinner says work is happening.
-   *
-   * Counted against the active scope's own slot: in the Artists scope the song
-   * list is empty by design, and reading it would put skeletons over a grid of
-   * artists that is already on screen.
    */
-  const shownCount =
-    searchScope === 'artists'
-      ? artistResults.length
-      : searchScope === 'albums'
-        ? albumResults.length
-        : results.length;
-  const showSkeleton = searching && shownCount === 0;
-  const isRefreshing = searching && shownCount > 0;
+  const showSkeleton = searching && results.length === 0;
+  const isRefreshing = searching && results.length > 0;
 
   return (
     <div className="search-page">

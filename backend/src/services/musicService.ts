@@ -1,12 +1,10 @@
-import { IMusicProvider, ArtistCatalogueOptions, ArtistDetailOptions } from '../providers/musicProvider.interface.js';
+import { IMusicProvider, ArtistCatalogueOptions } from '../providers/musicProvider.interface.js';
 import { JioSaavnProvider } from '../providers/jiosaavnProvider.js';
 import { JamendoProvider } from '../providers/jamendoProvider.js';
 import {
   Song,
   Album,
-  Artist,
   Playlist,
-  ArtistSummary,
   PlaylistSummary,
   PagedResult
 } from '../models/music.model.js';
@@ -90,35 +88,6 @@ export class MusicService {
     }, MUSIC_ENGINE_CONFIG.metadataCacheTtlMs);
   }
 
-  async getArtistById(id: string, options: ArtistDetailOptions = {}): Promise<Artist | null> {
-    if (!id) return null;
-    const { songCount = 25, albumCount = 15 } = options;
-    const cacheKey = `artist:${id}:${songCount}:${albumCount}`;
-
-    return globalCacheService.getOrFetch(cacheKey, async () => {
-      const artist = await this.jiosaavnProvider.getArtistById(id, { songCount, albumCount });
-      if (artist) {
-        return artist;
-      }
-
-      return this.jamendoProvider.getArtistById(id);
-    }, MUSIC_ENGINE_CONFIG.metadataCacheTtlMs);
-  }
-
-  async getArtistSongs(id: string, options: ArtistCatalogueOptions = {}): Promise<PagedResult<Song>> {
-    if (!id) return { total: 0, items: [] };
-    const { page = 0, sortBy = 'popularity', sortOrder = 'desc' } = options;
-    const cacheKey = `artist-songs:${id}:${page}:${sortBy}:${sortOrder}`;
-
-    const result = await globalCacheService.getOrFetch(
-      cacheKey,
-      () => this.jiosaavnProvider.getArtistSongs(id, { page, sortBy, sortOrder }),
-      MUSIC_ENGINE_CONFIG.metadataCacheTtlMs
-    );
-
-    return result ?? { total: 0, items: [] };
-  }
-
   async getArtistAlbums(id: string, options: ArtistCatalogueOptions = {}): Promise<PagedResult<Album>> {
     if (!id) return { total: 0, items: [] };
     const { page = 0, sortBy = 'popularity', sortOrder = 'desc' } = options;
@@ -131,63 +100,6 @@ export class MusicService {
     );
 
     return result ?? { total: 0, items: [] };
-  }
-
-  async searchArtists(query: string, limit = 10): Promise<ArtistSummary[]> {
-    if (!query || !query.trim()) return [];
-    const cacheKey = `artist-search:${normalizeStringForSearch(query)}:${limit}`;
-
-    const result = await globalCacheService.getOrFetch(
-      cacheKey,
-      () => this.jiosaavnProvider.searchArtists(query.trim(), limit),
-      MUSIC_ENGINE_CONFIG.metadataCacheTtlMs
-    );
-
-    return result ?? [];
-  }
-
-  /**
-   * Turns an artist name into an artist id.
-   *
-   * Needed because a track's `artist_id` can be empty — Jamendo rows never had
-   * one, and songs cached before the credit fix may carry the wrong person's.
-   * Rather than dropping the link, the name is looked up as an entity. Returns
-   * null when nothing matches; the caller then shows no artist link at all.
-   */
-  async resolveArtistByName(name: string): Promise<ArtistSummary | null> {
-    if (!name || !name.trim()) return null;
-
-    // Only the first credit: "Arijit Singh, Shreya Ghoshal" is two people, and
-    // the whole string matches neither of them.
-    const primaryName = name.split(',')[0].trim();
-    if (!primaryName) return null;
-
-    const matches = await this.searchArtists(primaryName, 3);
-    if (matches.length === 0) return null;
-
-    const normalizedTarget = normalizeStringForSearch(primaryName);
-    const exact = matches.find(artist => normalizeStringForSearch(artist.name) === normalizedTarget);
-    return exact ?? matches[0];
-  }
-
-  /**
-   * Albums as entities rather than as a name on a song.
-   *
-   * The search page's Albums scope. Distinct from deriving album names out of a
-   * song search: that can only ever show albums whose songs happened to rank,
-   * and it carries the song's artwork rather than the album's.
-   */
-  async searchAlbums(query: string, limit = 10): Promise<Album[]> {
-    if (!query || !query.trim()) return [];
-    const cacheKey = `album-search:${normalizeStringForSearch(query)}:${limit}`;
-
-    const result = await globalCacheService.getOrFetch(
-      cacheKey,
-      () => this.jiosaavnProvider.searchAlbums(query.trim(), limit),
-      MUSIC_ENGINE_CONFIG.metadataCacheTtlMs
-    );
-
-    return result ?? [];
   }
 
   async searchPlaylists(query: string, limit = 10): Promise<PlaylistSummary[]> {

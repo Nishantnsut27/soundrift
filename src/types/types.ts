@@ -103,6 +103,23 @@ export interface PlaylistTrack extends Track {
   addedAt: number;
 }
 
+/**
+ * One occurrence of a track in the queue.
+ *
+ * A queue is a running order, not a set: the same song may legitimately appear
+ * three times, and removing the second occurrence must leave the other two. A
+ * track id cannot express that, so each occurrence carries an identity of its
+ * own. Extending Track keeps every existing reader typed `Track[]` working.
+ */
+export interface QueueEntry extends Track {
+  queueEntryId: string;
+}
+
+/** A play that actually happened, with the real time it happened at. */
+export interface HistoryEntry extends Track {
+  playedAt: number;
+}
+
 export interface Playlist {
   id: string;
   name: string;
@@ -120,9 +137,9 @@ export interface PlayerState {
   isMuted: boolean;
   isBuffering: boolean;
   playbackError: string | null;
-  queue: Track[];
+  queue: QueueEntry[];
   currentIndex: number;
-  playbackHistory: Track[];
+  playbackHistory: QueueEntry[];
   sessionId: number;
   isShuffling: boolean;
   repeatMode: 'none' | 'one' | 'all';

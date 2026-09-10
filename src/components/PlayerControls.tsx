@@ -75,6 +75,8 @@ export function PlayerControls() {
     favorites,
     toggleShuffle,
     setRepeatMode,
+    isQueueOpen,
+    toggleQueue,
   } = usePlayerStore();
 
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
@@ -245,7 +247,7 @@ export function PlayerControls() {
   const handleClosePlayer = () => {
     const store = usePlayerStore.getState();
     store.pauseTrack();
-    store.clearQueue();
+    store.stopPlayback();
   };
 
   const getVolumeIcon = () => {
@@ -434,6 +436,22 @@ export function PlayerControls() {
 
       {/* Region 3 — track and session actions */}
       <div className="player-actions">
+        <button
+          className={`control-btn queue-btn ${isQueueOpen ? 'is-on' : ''}`}
+          onClick={toggleQueue}
+          title="Queue"
+          aria-label="Queue"
+          aria-expanded={isQueueOpen}
+          aria-controls="queue-panel"
+        >
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <line x1="3" y1="6" x2="15" y2="6" />
+            <line x1="3" y1="12" x2="15" y2="12" />
+            <line x1="3" y1="18" x2="11" y2="18" />
+            <polygon points="18,7 18,17 23,12" fill="currentColor" stroke="none" />
+          </svg>
+        </button>
+
         <button
           className={`control-btn favorite-btn ${isFavorite ? 'is-favorite' : ''}`}
           onClick={handleToggleFavorite}

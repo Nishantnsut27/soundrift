@@ -162,71 +162,6 @@ export class MusicController {
     }
   }
 
-  static async getArtistById(req: Request, res: Response): Promise<void> {
-    try {
-      const artistId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-      if (!artistId) {
-        res.status(400).json({
-          success: false,
-          data: null,
-          error: 'Artist ID is required.'
-        });
-        return;
-      }
-
-      const artist = await musicService.getArtistById(artistId, {
-        songCount: parsePositiveInt(req.query.songCount, 25, 50),
-        albumCount: parsePositiveInt(req.query.albumCount, 15, 50)
-      });
-      if (!artist) {
-        res.status(404).json({
-          success: false,
-          data: null,
-          error: `Artist with ID "${artistId}" was not found.`
-        });
-        return;
-      }
-
-      res.status(200).json({
-        success: true,
-        data: artist,
-        provider: artist.provider
-      });
-    } catch (error) {
-      logger.error('MusicController', 'Get artist error', { error: serializeError(error) });
-      res.status(500).json({
-        success: false,
-        data: null,
-        error: 'Failed to retrieve artist details.'
-      });
-    }
-  }
-
-  static async getArtistSongs(req: Request, res: Response): Promise<void> {
-    try {
-      const artistId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-      if (!artistId) {
-        res.status(400).json({ success: false, data: null, error: 'Artist ID is required.' });
-        return;
-      }
-
-      const page = await musicService.getArtistSongs(artistId, {
-        page: parsePositiveInt(req.query.page, 0, 50),
-        sortBy: parseArtistSortBy(req.query.sortBy),
-        sortOrder: parseArtistSortOrder(req.query.sortOrder)
-      });
-
-      res.status(200).json({ success: true, data: page });
-    } catch (error) {
-      logger.error('MusicController', 'Get artist songs error', { error: serializeError(error) });
-      res.status(500).json({
-        success: false,
-        data: null,
-        error: 'Failed to retrieve songs for this artist.'
-      });
-    }
-  }
-
   static async getArtistAlbums(req: Request, res: Response): Promise<void> {
     try {
       const artistId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
@@ -249,61 +184,6 @@ export class MusicController {
         data: null,
         error: 'Failed to retrieve albums for this artist.'
       });
-    }
-  }
-
-  /**
-   * Name to artist entity.
-   *
-   * The one lookup that makes an artist page reachable from a track whose
-   * `artist_id` is missing. Returns `data: null` rather than an error when
-   * nothing matches — no match is an ordinary outcome, not a failure.
-   */
-  static async resolveArtist(req: Request, res: Response): Promise<void> {
-    try {
-      const query = (req.query.q || req.query.query || '').toString().trim();
-      if (!query) {
-        res.status(400).json({ success: false, data: null, error: 'Search query parameter "q" is required.' });
-        return;
-      }
-
-      const artist = await musicService.resolveArtistByName(query);
-      res.status(200).json({ success: true, data: artist });
-    } catch (error) {
-      logger.error('MusicController', 'Resolve artist error', { error: serializeError(error) });
-      res.status(500).json({ success: false, data: null, error: 'Failed to resolve artist.' });
-    }
-  }
-
-  static async searchArtists(req: Request, res: Response): Promise<void> {
-    try {
-      const query = (req.query.q || req.query.query || '').toString().trim();
-      if (!query) {
-        res.status(400).json({ success: false, data: [], error: 'Search query parameter "q" is required.' });
-        return;
-      }
-
-      const artists = await musicService.searchArtists(query, parsePositiveInt(req.query.limit, 10, 30));
-      res.status(200).json({ success: true, data: artists } as StandardApiResponse<typeof artists>);
-    } catch (error) {
-      logger.error('MusicController', 'Search artists error', { error: serializeError(error) });
-      res.status(500).json({ success: false, data: [], error: 'Failed to search artists.' } as StandardApiResponse<[]>);
-    }
-  }
-
-  static async searchAlbums(req: Request, res: Response): Promise<void> {
-    try {
-      const query = (req.query.q || req.query.query || '').toString().trim();
-      if (!query) {
-        res.status(400).json({ success: false, data: [], error: 'Search query parameter "q" is required.' });
-        return;
-      }
-
-      const albums = await musicService.searchAlbums(query, parsePositiveInt(req.query.limit, 10, 30));
-      res.status(200).json({ success: true, data: albums } as StandardApiResponse<typeof albums>);
-    } catch (error) {
-      logger.error('MusicController', 'Search albums error', { error: serializeError(error) });
-      res.status(500).json({ success: false, data: [], error: 'Failed to search albums.' } as StandardApiResponse<[]>);
     }
   }
 

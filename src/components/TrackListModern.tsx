@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import type { QueueContext, Track } from '../types/types';
 import { usePlayerStore } from '../store/playerStore';
 import { useToastStore } from '../store/toastStore';
@@ -8,6 +8,7 @@ import { EmptySearchResults, EmptyState } from './EmptyState';
 import { ErrorDisplay } from './ErrorDisplay';
 import { useAuthStore } from '../store/authStore';
 import { TrackItemModern } from './TrackItemModern';
+import { TrackContextMenu } from './TrackContextMenu';
 import { MusicCard } from './MusicCard';
 
 interface TrackListProps {
@@ -33,6 +34,12 @@ interface TrackListProps {
    * — a result list needs density and a stable row height, not a wall of cards.
    */
   variant?: 'auto' | 'list';
+  /**
+   * Makes the rows movable. Only lists whose order belongs to the listener — a
+   * playlist — pass this; everywhere else the order is the catalogue's and a
+   * handle would promise something the surface cannot keep.
+   */
+  onReorder?: (fromIndex: number, toIndex: number) => void;
 }
 
 export function TrackListModern({
@@ -45,28 +52,25 @@ export function TrackListModern({
   playQueue,
   queueContext,
   variant = 'auto',
+  onReorder,
 }: TrackListProps) {
-  const [showPlaylistMenu, setShowPlaylistMenu] = useState<string | null>(null);
   const [hoveredTrack, setHoveredTrack] = useState<string | null>(null);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-  const [showCreatePlaylist, setShowCreatePlaylist] = useState(false);
-  const [newPlaylistName, setNewPlaylistName] = useState('');
-  const [addingToPlaylist, setAddingToPlaylist] = useState<string | null>(null);
   const [removingFromPlaylist, setRemovingFromPlaylist] = useState<string | null>(null);
   const [trackToRemove, setTrackToRemove] = useState<Track | null>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
+  const [dropIndex, setDropIndex] = useState<number | null>(null);
+  const [reorderAnnouncement, setReorderAnnouncement] = useState('');
   const addToast = useToastStore((state) => state.addToast);
   const { isAuthenticated } = useAuthStore();
-  const { 
-    playTrack, 
+  const {
+    playTrack,
     pauseTrack,
     setIsPlaying,
-    currentTrack, 
+    currentTrack,
     isPlaying,
     playlists,
-    addTrackToPlaylist,
     removeTrackFromPlaylist,
-    createPlaylist,
     addToFavorites,
     removeFromFavorites,
     favorites
@@ -104,33 +108,6 @@ export function TrackListModern({
   };
 
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setShowPlaylistMenu(null);
-        setShowCreatePlaylist(false);
-        setNewPlaylistName('');
-      }
-    };
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setShowPlaylistMenu(null);
-        setShowCreatePlaylist(false);
-        setNewPlaylistName('');
-      }
-    };
-
-    if (showPlaylistMenu) {
-      document.addEventListener('mousedown', handleClickOutside);
-      window.addEventListener('keydown', handleKeyDown);
-      return () => {
-        document.removeEventListener('mousedown', handleClickOutside);
-        window.removeEventListener('keydown', handleKeyDown);
-      };
-    }
-  }, [showPlaylistMenu]);
-
-  useEffect(() => {
     const handleOutsideTap = (e: MouseEvent | TouchEvent) => {
       const target = e.target as HTMLElement | null;
       if (!target || !target.closest('.track-list-container-modern')) {
@@ -146,46 +123,6 @@ export function TrackListModern({
       document.removeEventListener('touchstart', handleOutsideTap);
     };
   }, []);
-
-  const handleAddToPlaylist = async (pId: string, track: Track) => {
-    setAddingToPlaylist(pId);
-    addTrackToPlaylist(pId, track);
-    const targetPlaylist = playlists.find(p => p.id === pId);
-
-    addToast({
-      type: 'success',
-      title: 'Added to Playlist',
-      message: `"${track.name}" added to ${targetPlaylist?.name || 'playlist'}`,
-    });
-    
-    setTimeout(() => {
-      setAddingToPlaylist(null);
-      setShowPlaylistMenu(null);
-    }, 500);
-  };
-
-  const handleCreatePlaylist = (track?: Track) => {
-    if (newPlaylistName.trim()) {
-      const created = createPlaylist(newPlaylistName.trim());
-      if (track && created) {
-        addTrackToPlaylist(created.id, track);
-        addToast({
-          type: 'success',
-          title: 'Playlist Created & Song Added',
-          message: `Created "${created.name}" and added "${track.name}"`,
-        });
-      } else {
-        addToast({
-          type: 'success',
-          title: 'Playlist Created',
-          message: `Created "${newPlaylistName.trim()}"`,
-        });
-      }
-      setNewPlaylistName('');
-      setShowCreatePlaylist(false);
-      setShowPlaylistMenu(null);
-    }
-  };
 
   const handleRemoveFromPlaylist = (track: Track) => {
     if (playlistId) {
@@ -211,11 +148,6 @@ export function TrackListModern({
     }
   };
 
-  const isTrackInPlaylist = (track: Track, pId: string) => {
-    const playlist = playlists.find(p => p.id === pId);
-    return playlist?.tracks.some(t => t.id === track.id) || false;
-  };
-
   const handleToggleFavorite = (track: Track) => {
     const isFav = favorites.some(f => f.id === track.id);
     if (isFav) {
@@ -238,6 +170,13 @@ export function TrackListModern({
   const isCurrentTrack = (track: Track) => currentTrack?.id === track.id;
   const isFavorite = (track: Track) => favorites.some(f => f.id === track.id);
   const asRows = variant === 'list' || isAuthenticated;
+
+  const moveTrack = (fromIndex: number, toIndex: number) => {
+    if (!onReorder) return;
+    if (toIndex < 0 || toIndex >= tracks.length || fromIndex === toIndex) return;
+    onReorder(fromIndex, toIndex);
+    setReorderAnnouncement(`${tracks[fromIndex].name} moved to position ${toIndex + 1} of ${tracks.length}`);
+  };
 
   if (isLoading) {
     return (
@@ -309,11 +248,20 @@ export function TrackListModern({
               onPlay={handlePlayTrack}
               isCurrent={isCurrentTrack(track)}
               isPlaying={isPlaying}
+              menu={
+                <TrackContextMenu
+                  track={track}
+                  onPlay={handlePlayTrack}
+                  showAddToPlaylist={showAddToPlaylist}
+                  playlistId={playlistId}
+                  onRemoveFromPlaylist={playlistId ? handleRemoveFromPlaylist : undefined}
+                />
+              }
             />
           ))}
         </div>
       ) : (
-        <div 
+        <div
           className={`track-list-container-modern ${hoveredTrack ? 'has-hovered-track' : ''}`}
           onMouseLeave={() => { setHoveredTrack(null); setHoveredIndex(null); }}
         >
@@ -338,25 +286,35 @@ export function TrackListModern({
               isRemoving={removingFromPlaylist === track.id}
               showAddToPlaylist={showAddToPlaylist}
               playlistId={playlistId}
-              showPlaylistMenu={showPlaylistMenu === track.id}
-              playlists={playlists}
-              addingToPlaylist={addingToPlaylist}
-              newPlaylistName={newPlaylistName}
-              showCreatePlaylist={showCreatePlaylist}
-              menuRef={menuRef}
+              reorder={
+                onReorder
+                  ? {
+                    total: tracks.length,
+                    isDragging: draggingIndex === index,
+                    isDropTarget: dropIndex === index && draggingIndex !== index,
+                    onMove: moveTrack,
+                    onDragStart: setDraggingIndex,
+                    onDragEnd: () => { setDraggingIndex(null); setDropIndex(null); },
+                    onDragOver: setDropIndex,
+                    onDrop: (targetIndex: number) => {
+                      if (draggingIndex !== null) moveTrack(draggingIndex, targetIndex);
+                      setDraggingIndex(null);
+                      setDropIndex(null);
+                    },
+                  }
+                  : undefined
+              }
               onPlay={handlePlayTrack}
               onToggleFavorite={handleToggleFavorite}
               onRemoveFromPlaylist={handleRemoveFromPlaylist}
               onMouseEnter={(id: string) => { setHoveredTrack(id); setHoveredIndex(index); }}
-              onToggleMenu={(id) => setShowPlaylistMenu(showPlaylistMenu === id ? null : id)}
-              onAddToPlaylist={handleAddToPlaylist}
-              onCreatePlaylist={handleCreatePlaylist}
-              onShowCreatePlaylist={setShowCreatePlaylist}
-              onNewPlaylistNameChange={setNewPlaylistName}
-              isTrackInPlaylist={isTrackInPlaylist}
             />
           ))}
         </div>
+      )}
+
+      {onReorder && (
+        <p className="visually-hidden" role="status" aria-live="polite">{reorderAnnouncement}</p>
       )}
 
       {trackToRemove && (

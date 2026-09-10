@@ -1,4 +1,5 @@
 import { MusicCard } from './MusicCard';
+import { TrackContextMenu } from './TrackContextMenu';
 import { useTrackPlayback } from '../hooks/useTrackPlayback';
 import type { QueueContext, Track } from '../types/types';
 
@@ -14,8 +15,8 @@ interface TrackCardGridProps {
   singleRow?: boolean;
   /**
    * Adds a secondary "Explore" action to each card, used by Discover to follow a
-   * song outwards. Omitted everywhere else: the card's overflow slot must stay
-   * empty when there is no action behind it.
+   * song outwards. Omitted everywhere else, where the card carries the overflow
+   * menu alone.
    */
   onExplore?: (track: Track) => void;
   /**
@@ -31,9 +32,9 @@ interface TrackCardGridProps {
  * The grid every card row on Home renders into.
  *
  * It owns layout and the play wiring only — the card itself is MusicCard, and
- * the play gesture is the shared store action. No overflow menu is passed:
- * favorites and playlists are authenticated features, and a menu of things a
- * guest cannot do is worse than no menu.
+ * the play gesture is the shared store action. Every card carries the shared
+ * overflow menu, whose queue actions work signed in or out; the items that need
+ * an account route through the auth gate rather than being hidden.
  */
 export function TrackCardGrid({
   tracks,
@@ -60,16 +61,19 @@ export function TrackCardGrid({
           rank={index + 1}
           showRank={showRank}
           menu={
-            onExplore ? (
-              <button
-                type="button"
-                className="music-card-explore"
-                onClick={() => onExplore(track)}
-                aria-label={`Explore music related to ${track.name}`}
-              >
-                Explore
-              </button>
-            ) : undefined
+            <>
+              {onExplore && (
+                <button
+                  type="button"
+                  className="music-card-explore"
+                  onClick={() => onExplore(track)}
+                  aria-label={`Explore music related to ${track.name}`}
+                >
+                  Explore
+                </button>
+              )}
+              <TrackContextMenu track={track} onPlay={toggleTrack} />
+            </>
           }
         />
       ))}

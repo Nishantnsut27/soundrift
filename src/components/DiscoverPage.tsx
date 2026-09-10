@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { ContentSection } from './ContentSection';
 import { ErrorBoundary } from './ErrorBoundary';
 import { CollectionCard } from './CollectionCard';
@@ -59,9 +59,22 @@ export function DiscoverPage() {
 
   const artists = useMemo(() => collectArtists(pool, ARTIST_LIMIT), [pool]);
 
+  /* Surprise me seeds the trail at the bottom of the page, which on a tall
+     screen is below the fold — so the button looks inert unless we also move
+     the listener to what it just changed. */
+  const trailRef = useRef<HTMLDivElement>(null);
+
   const surprise = () => {
     if (pool.length === 0) return;
     trail.explore(pool[Math.floor(Math.random() * pool.length)]);
+    /* After the commit, so the trail has swapped its hint for the seed line and
+       loading grid and the section is its real height before we scroll to it. */
+    requestAnimationFrame(() => {
+      trailRef.current?.scrollIntoView({
+        behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+        block: 'start',
+      });
+    });
   };
 
   if (isLoading && collections.length === 0) {
@@ -146,22 +159,32 @@ export function DiscoverPage() {
         </ContentSection>
       </Slot>
 
-      <Slot>
-        <ContentSection
-          title="Follow the thread"
-          subtitle="One song, and whatever the catalogue puts next to it."
-        >
-          <DiscoverTrail
-            seed={trail.seed}
-            related={trail.related}
-            isLoading={trail.isLoading}
-            isExhausted={trail.isExhausted}
-            onExplore={trail.explore}
-          />
-        </ContentSection>
-      </Slot>
+      <div className="discover-trail-anchor" ref={trailRef}>
+        <Slot>
+          <ContentSection
+            title="Follow the thread"
+            subtitle="One song, and whatever the catalogue puts next to it."
+          >
+            <DiscoverTrail
+              seed={trail.seed}
+              related={trail.related}
+              isLoading={trail.isLoading}
+              isExhausted={trail.isExhausted}
+              onExplore={trail.explore}
+            />
+          </ContentSection>
+        </Slot>
+      </div>
     </div>
   );
+}
+
+/**
+ * Honoured in JS because a smooth `scrollIntoView` is not a CSS transition, so
+ * the global `prefers-reduced-motion` rule in variables.css cannot reach it.
+ */
+function prefersReducedMotion(): boolean {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
 /** Keeps one failing section from taking the rest of Discover down with it. */

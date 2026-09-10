@@ -40,7 +40,7 @@ export const GUEST_ROUTES: Record<GuestRouteView, GuestRouteMeta> = {
     view: 'search',
     label: 'Search',
     question: 'I know what I am looking for.',
-    promise: 'Direct lookup across songs, artists and albums.',
+    promise: 'Direct lookup by song, artist or album name.',
   },
   trending: {
     view: 'trending',

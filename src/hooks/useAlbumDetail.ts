@@ -19,8 +19,7 @@ export function useAlbumDetail(albumId: string | null): AlbumDetailState {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  /* Same guard as useArtistDetail: a stale response must not replace the album
-     the listener is looking at now. */
+  /* A stale response must not replace the album the listener is looking at now. */
   const sequenceRef = useRef(0);
 
   useEffect(() => {

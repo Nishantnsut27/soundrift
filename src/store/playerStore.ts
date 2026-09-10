@@ -8,13 +8,88 @@ import type {
   SearchState,
   RelatedMusic,
   QueueContext,
+  QueueEntry,
+  HistoryEntry,
 } from '../types/types';
 import { STORAGE_KEYS, PLAYER_DEFAULTS } from '../config/constants';
 import { userApi } from '../services/userApi';
+import type { RawHistoryEntry } from '../services/userApi';
 import { useAuthStore } from './authStore';
 
 /** One loose track: the only shape the suggestion engine is allowed to extend. */
 const SINGLE_CONTEXT: QueueContext = { kind: 'single' };
+
+let queueEntryCounter = 0;
+
+/**
+ * Stamps a track with an identity for its position in the queue.
+ *
+ * A counter rather than a uuid because the queue is session state that is never
+ * persisted or sent anywhere — uniqueness only has to hold for this tab's
+ * lifetime, and a counter is cheaper and easier to read while debugging.
+ */
+function toQueueEntry(track: Track): QueueEntry {
+  queueEntryCounter += 1;
+  return { ...track, queueEntryId: `q${queueEntryCounter}` };
+}
+
+function toQueueEntries(tracks: Track[]): QueueEntry[] {
+  return tracks.map(toQueueEntry);
+}
+
+/**
+ * Re-maps a shuffle order after the queue array has changed shape.
+ *
+ * `shuffleOrder` holds queue indices, so any insert, removal or move invalidates
+ * it. Rather than reshuffling — which would visibly change what plays next for
+ * no reason the listener asked for — the walk is rewritten to point at the same
+ * entries in their new positions.
+ */
+function remapShuffleOrder(
+  shuffleOrder: number[],
+  previousQueue: QueueEntry[],
+  nextQueue: QueueEntry[],
+): number[] {
+  const positionOf = new Map<string, number>();
+  nextQueue.forEach((entry, index) => positionOf.set(entry.queueEntryId, index));
+
+  const remapped: number[] = [];
+  for (const index of shuffleOrder) {
+    const entry = previousQueue[index];
+    if (!entry) continue;
+    const position = positionOf.get(entry.queueEntryId);
+    if (position !== undefined) remapped.push(position);
+  }
+
+  const seen = new Set(remapped);
+  nextQueue.forEach((_, index) => {
+    if (!seen.has(index)) remapped.push(index);
+  });
+
+  return remapped;
+}
+
+/**
+ * Turns the server's history payload into local entries.
+ *
+ * `playedAt` crosses the wire as an ISO string because it is a Mongo date, and
+ * every reader here wants a millisecond number to group and sort by. Rows whose
+ * timestamp will not parse are dropped rather than shown at the epoch, since an
+ * invented listening time is worse than a missing one.
+ */
+function normalizeHistory(entries: RawHistoryEntry[]): HistoryEntry[] {
+  const normalized: HistoryEntry[] = [];
+
+  for (const entry of entries) {
+    const playedAt = typeof entry.playedAt === 'number'
+      ? entry.playedAt
+      : Date.parse(entry.playedAt);
+    if (Number.isNaN(playedAt)) continue;
+    normalized.push({ ...entry, playedAt });
+  }
+
+  return normalized;
+}
 
 /**
  * A shuffled walk over `length` positions that begins on `startIndex`.
@@ -56,8 +131,18 @@ interface PlayerStore extends PlayerState {
   toggleShuffle: () => void;
   setRepeatMode: (mode: 'none' | 'one' | 'all') => void;
   addToQueue: (track: Track) => void;
-  removeFromQueue: (index: number) => void;
+  /** Inserts directly after the current track, ahead of everything queued. */
+  playNext: (track: Track) => void;
+  /** Removes one occurrence, addressed by its queue identity rather than by track id. */
+  removeFromQueue: (queueEntryId: string) => void;
+  reorderQueue: (fromIndex: number, toIndex: number) => void;
+  /**
+   * Empties what is queued up next. The current track keeps playing — clearing a
+   * queue is a statement about what comes after, not a stop button.
+   */
   clearQueue: () => void;
+  /** Tears playback down completely: used by the close button and by logout. */
+  stopPlayback: () => void;
   setBuffering: (buffering: boolean) => void;
   setPlaybackError: (error: string | null) => void;
   shuffleOrder: number[];
@@ -79,7 +164,7 @@ interface PlaylistStore {
   playlists: Playlist[];
   favorites: Track[];
   recentlyPlayed: Track[];
-  listeningHistory: Track[];
+  listeningHistory: HistoryEntry[];
   relatedMusic: RelatedMusic | null;
   recommendations: Track[];
   autoplayEnabled: boolean;
@@ -90,6 +175,8 @@ interface PlaylistStore {
   renamePlaylist: (id: string, name: string) => void;
   addTrackToPlaylist: (playlistId: string, track: Track) => void;
   removeTrackFromPlaylist: (playlistId: string, trackId: string) => void;
+  /** Moves one track within a playlist. The order is the playlist's running order. */
+  reorderPlaylistTracks: (playlistId: string, fromIndex: number, toIndex: number) => void;
   addToFavorites: (track: Track) => void;
   removeFromFavorites: (trackId: string) => void;
   clearFavorites: () => void;
@@ -118,17 +205,20 @@ export type AppView =
   | 'new-releases'
   | 'genres'
   | 'album'
-  | 'genre';
+  | 'genre'
+  | 'playlist';
 
 interface UIStore {
   isSidebarOpen: boolean;
   currentView: AppView;
   theme: 'light' | 'dark';
   /**
-   * The album or genre whose dedicated page is on screen, or null for all other
-   * views. A genre's id is its category key, not a catalogue id.
+   * The album, genre or playlist whose dedicated page is on screen, or null for
+   * all other views. A genre's id is its category key, not a catalogue id.
    */
-  detailEntity: { kind: 'album' | 'genre'; id: string } | null;
+  detailEntity: { kind: 'album' | 'genre' | 'playlist'; id: string } | null;
+  /** Whether the queue drawer is on screen. Session-only, like the queue itself. */
+  isQueueOpen: boolean;
 
   toggleSidebar: () => void;
   closeSidebar: () => void;
@@ -136,6 +226,9 @@ interface UIStore {
   setTheme: (theme: 'light' | 'dark') => void;
   openAlbum: (id: string) => void;
   openGenre: (id: string) => void;
+  openPlaylist: (id: string) => void;
+  toggleQueue: () => void;
+  closeQueue: () => void;
 }
 
 type AppStore = PlayerStore & SearchStore & PlaylistStore & UIStore;
@@ -246,6 +339,7 @@ export const usePlayerStore = create<AppStore>()(
     isSidebarOpen: false,
     currentView: 'home',
     detailEntity: null,
+    isQueueOpen: false,
     theme: loadFromLocalStorage(STORAGE_KEYS.THEME, 'dark'),
 
     playTrack: (track: Track, queue?: Track[], index?: number, context: QueueContext = SINGLE_CONTEXT) => {
@@ -253,15 +347,17 @@ export const usePlayerStore = create<AppStore>()(
 
       /* A list is only a list when one was handed over. A search hit or a card
          on Home arrives alone, stays alone, and gets topped up by the radio. */
-      const newQueue = queue && queue.length > 0 ? queue : [track];
+      const sourceTracks = queue && queue.length > 0 ? queue : [track];
       const requested = typeof index === 'number' ? index : -1;
       const newIndex = requested >= 0
-        && requested < newQueue.length
-        && String(newQueue[requested]?.id) === String(track.id)
+        && requested < sourceTracks.length
+        && String(sourceTracks[requested]?.id) === String(track.id)
         ? requested
-        : Math.max(0, newQueue.findIndex(t => String(t.id) === String(track.id)));
+        : Math.max(0, sourceTracks.findIndex(t => String(t.id) === String(track.id)));
 
+      const newQueue = toQueueEntries(sourceTracks);
       const updatedRecentlyPlayed = [track, ...state.recentlyPlayed.filter(t => t.id !== track.id)].slice(0, 30);
+      const historyEntry: HistoryEntry = { ...track, playedAt: Date.now() };
 
       const shuffleOrder = state.isShuffling ? buildShuffleOrder(newQueue.length, newIndex) : [];
       const shufflePosition = 0;
@@ -277,7 +373,7 @@ export const usePlayerStore = create<AppStore>()(
         currentTime: 0,
         duration: track.duration || 0,
         recentlyPlayed: updatedRecentlyPlayed,
-        listeningHistory: [track, ...state.listeningHistory].slice(0, 50),
+        listeningHistory: [historyEntry, ...state.listeningHistory].slice(0, 50),
         shuffleOrder,
         shufflePosition,
       });
@@ -305,16 +401,18 @@ export const usePlayerStore = create<AppStore>()(
       const newTracks = tracks.filter(t => t && t.audio && !knownIds.has(String(t.id)));
       if (newTracks.length === 0) return;
 
+      const newEntries = toQueueEntries(newTracks);
+
       let shuffleOrder = state.shuffleOrder;
       const shufflePosition = state.shufflePosition;
       if (state.isShuffling) {
         shuffleOrder = [...state.shuffleOrder];
-        for (let i = 0; i < newTracks.length; i++) shuffleOrder.push(state.queue.length + i);
+        for (let i = 0; i < newEntries.length; i++) shuffleOrder.push(state.queue.length + i);
       }
 
       set({
         recommendations: tracks,
-        queue: [...state.queue, ...newTracks],
+        queue: [...state.queue, ...newEntries],
         shuffleOrder,
         shufflePosition,
       });
@@ -360,7 +458,7 @@ export const usePlayerStore = create<AppStore>()(
       }
 
       const history = state.currentIndex >= 0
-        ? [...state.playbackHistory, state.queue[state.currentIndex]].filter(Boolean) as Track[]
+        ? [...state.playbackHistory, state.queue[state.currentIndex]].filter(Boolean) as QueueEntry[]
         : state.playbackHistory;
 
       const nextTrack = state.queue[nextIndex];
@@ -381,7 +479,10 @@ export const usePlayerStore = create<AppStore>()(
       if (state.playbackHistory.length === 0) return;
 
       const prevTrack = state.playbackHistory[state.playbackHistory.length - 1];
-      const prevIndex = state.queue.findIndex(t => String(t.id) === String(prevTrack.id));
+      /* Matched on queue identity, not track id: the same song can sit in the
+         queue more than once, and Previous must return to the occurrence that
+         actually played. */
+      const prevIndex = state.queue.findIndex(t => t.queueEntryId === prevTrack.queueEntryId);
       const newHistory = state.playbackHistory.slice(0, -1);
 
       set({
@@ -428,39 +529,106 @@ export const usePlayerStore = create<AppStore>()(
 
     addToQueue: (track: Track) => {
       const state = get();
-      if (state.queue.some(t => String(t.id) === String(track.id))) return;
+      const entry = toQueueEntry(track);
 
       let shuffleOrder = state.shuffleOrder;
       if (state.isShuffling) shuffleOrder = [...state.shuffleOrder, state.queue.length];
 
-      set({ queue: [...state.queue, track], shuffleOrder });
+      set({ queue: [...state.queue, entry], shuffleOrder });
     },
 
-    removeFromQueue: (index: number) => {
+    playNext: (track: Track) => {
       const state = get();
-      const newQueue = state.queue.filter((_, i) => i !== index);
+      const entry = toQueueEntry(track);
+      const insertAt = state.currentIndex >= 0 ? state.currentIndex + 1 : 0;
 
-      if (newQueue.length === 0) {
-        set({ queue: [], currentIndex: -1, currentTrack: null, isPlaying: false, playbackHistory: [] });
-        return;
-      }
+      const newQueue = [...state.queue];
+      newQueue.splice(insertAt, 0, entry);
 
-      let newCurrentIndex = state.currentIndex;
-
-      if (index < state.currentIndex) {
-        newCurrentIndex--;
-      } else if (index === state.currentIndex) {
-        newCurrentIndex = Math.min(newCurrentIndex, newQueue.length - 1);
+      let shuffleOrder = state.shuffleOrder;
+      let shufflePosition = state.shufflePosition;
+      if (state.isShuffling && state.shuffleOrder.length > 0) {
+        shuffleOrder = state.shuffleOrder.map(i => (i >= insertAt ? i + 1 : i));
+        shufflePosition = Math.min(state.shufflePosition, shuffleOrder.length);
+        shuffleOrder.splice(shufflePosition + 1, 0, insertAt);
       }
 
       set({
         queue: newQueue,
-        currentIndex: newCurrentIndex,
-        currentTrack: newQueue[newCurrentIndex] || null
+        currentIndex: state.currentIndex >= insertAt ? state.currentIndex + 1 : state.currentIndex,
+        shuffleOrder,
+        shufflePosition,
       });
     },
 
-    clearQueue: () => set((state) => ({
+    removeFromQueue: (queueEntryId: string) => {
+      const state = get();
+      const index = state.queue.findIndex(entry => entry.queueEntryId === queueEntryId);
+      if (index === -1) return;
+
+      const newQueue = state.queue.filter((_, i) => i !== index);
+      const shuffleOrder = state.isShuffling
+        ? remapShuffleOrder(state.shuffleOrder, state.queue, newQueue)
+        : state.shuffleOrder;
+
+      /* Removing the track that is playing takes it out of the running order but
+         leaves it playing: the listener asked to drop it from the queue, not to
+         be cut off mid-song. Next then continues from where it now sits. */
+      let currentIndex = state.currentIndex;
+      if (index < state.currentIndex) currentIndex -= 1;
+      else if (index === state.currentIndex) currentIndex = Math.min(index, newQueue.length - 1);
+
+      set({
+        queue: newQueue,
+        currentIndex: newQueue.length === 0 ? -1 : currentIndex,
+        shuffleOrder,
+        shufflePosition: state.isShuffling
+          ? Math.min(state.shufflePosition, Math.max(0, shuffleOrder.length - 1))
+          : state.shufflePosition,
+      });
+    },
+
+    reorderQueue: (fromIndex: number, toIndex: number) => {
+      const state = get();
+      if (fromIndex === toIndex) return;
+      if (fromIndex < 0 || fromIndex >= state.queue.length) return;
+      if (toIndex < 0 || toIndex >= state.queue.length) return;
+
+      const newQueue = [...state.queue];
+      const [moved] = newQueue.splice(fromIndex, 1);
+      newQueue.splice(toIndex, 0, moved);
+
+      const currentEntryId = state.queue[state.currentIndex]?.queueEntryId;
+      const currentIndex = currentEntryId
+        ? newQueue.findIndex(entry => entry.queueEntryId === currentEntryId)
+        : state.currentIndex;
+
+      set({
+        queue: newQueue,
+        currentIndex,
+        shuffleOrder: state.isShuffling
+          ? remapShuffleOrder(state.shuffleOrder, state.queue, newQueue)
+          : state.shuffleOrder,
+      });
+    },
+
+    clearQueue: () => set((state) => {
+      const current = state.currentIndex >= 0 ? state.queue[state.currentIndex] : undefined;
+
+      return {
+        queue: current ? [current] : [],
+        currentIndex: current ? 0 : -1,
+        recommendations: [],
+        shuffleOrder: state.isShuffling && current ? [0] : [],
+        shufflePosition: 0,
+        queueContext: SINGLE_CONTEXT,
+        /* Bumped so a suggestion request already in flight cannot land and refill
+           the queue that was just emptied. */
+        sessionId: state.sessionId + 1,
+      };
+    }),
+
+    stopPlayback: () => set((state) => ({
       queue: [],
       currentIndex: -1,
       currentTrack: null,
@@ -490,10 +658,11 @@ export const usePlayerStore = create<AppStore>()(
     syncCloudUserData: async () => {
       if (!useAuthStore.getState().isAuthenticated) return;
       try {
-        const [cloudFavorites, cloudPlaylists, cloudRecentlyPlayed] = await Promise.all([
+        const [cloudFavorites, cloudPlaylists, cloudRecentlyPlayed, cloudHistory] = await Promise.all([
           userApi.getFavorites().catch(() => null),
           userApi.getPlaylists().catch(() => null),
           userApi.getRecentlyPlayed().catch(() => null),
+          userApi.getHistory().catch(() => null),
         ]);
         if (cloudFavorites !== null) {
           set({ favorites: cloudFavorites });
@@ -504,7 +673,10 @@ export const usePlayerStore = create<AppStore>()(
           saveToLocalStorage(STORAGE_KEYS.PLAYLISTS, cloudPlaylists);
         }
         if (cloudRecentlyPlayed !== null) {
-          set({ recentlyPlayed: cloudRecentlyPlayed, listeningHistory: cloudRecentlyPlayed });
+          set({ recentlyPlayed: cloudRecentlyPlayed });
+        }
+        if (cloudHistory !== null) {
+          set({ listeningHistory: normalizeHistory(cloudHistory) });
         }
       } catch (err) {
         console.error('Failed to sync cloud user data:', err);
@@ -651,6 +823,33 @@ export const usePlayerStore = create<AppStore>()(
       }
     },
 
+    reorderPlaylistTracks: (playlistId: string, fromIndex: number, toIndex: number) => {
+      const state = get();
+      const playlist = state.playlists.find(p => p.id === playlistId);
+      if (!playlist) return;
+      if (fromIndex === toIndex) return;
+      if (fromIndex < 0 || fromIndex >= playlist.tracks.length) return;
+      if (toIndex < 0 || toIndex >= playlist.tracks.length) return;
+
+      const tracks = [...playlist.tracks];
+      const [moved] = tracks.splice(fromIndex, 1);
+      tracks.splice(toIndex, 0, moved);
+
+      const newPlaylists = state.playlists.map(p =>
+        p.id === playlistId ? { ...p, tracks, updatedAt: Date.now() } : p
+      );
+      set({ playlists: newPlaylists });
+      saveToLocalStorage(STORAGE_KEYS.PLAYLISTS, newPlaylists);
+
+      /* Playlists created offline carry a local id the server has never seen, so
+         there is nothing to reorder there yet. The pending-tracks file already
+         holds them in order and is replayed on the next successful sync. */
+      const isTempId = playlistId.startsWith('pl_') || playlistId.startsWith('default-playlist-');
+      if (useAuthStore.getState().isAuthenticated && !isTempId) {
+        userApi.reorderPlaylistTracks(playlistId, tracks).catch(() => { });
+      }
+    },
+
     addToFavorites: (track: Track) => {
       const state = get();
       if (!state.favorites.find(t => t.id === track.id)) {
@@ -743,6 +942,10 @@ export const usePlayerStore = create<AppStore>()(
     setCurrentView: (view) => set({ currentView: view, detailEntity: null }),
     openAlbum: (id: string) => set({ currentView: 'album', detailEntity: { kind: 'album', id } }),
     openGenre: (id: string) => set({ currentView: 'genre', detailEntity: { kind: 'genre', id } }),
+    openPlaylist: (id: string) => set({ currentView: 'playlist', detailEntity: { kind: 'playlist', id } }),
+
+    toggleQueue: () => set((state) => ({ isQueueOpen: !state.isQueueOpen })),
+    closeQueue: () => set({ isQueueOpen: false }),
 
     setTheme: (theme: 'light' | 'dark') => {
       set({ theme });

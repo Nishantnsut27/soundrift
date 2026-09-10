@@ -51,41 +51,6 @@ export interface Album {
   provider?: 'jiosaavn' | 'jamendo';
 }
 
-export interface Artist {
-  id: string;
-  name: string;
-  website?: string;
-  joindate?: string;
-  image: string;
-  followerCount?: number;
-  bio?: string;
-  topSongs?: Song[];
-  topAlbums?: Album[];
-  /** Solo releases, separate from the album list. Present on JioSaavn only. */
-  singles?: Song[];
-  /**
-   * Populated inconsistently upstream — some artists return several, many return
-   * none. Callers render it only when non-empty; there is nothing to substitute.
-   */
-  similarArtists?: SimilarArtist[];
-  provider?: 'jiosaavn' | 'jamendo';
-}
-
-export interface SimilarArtist {
-  id: string;
-  name: string;
-  image: string;
-}
-
-/** A search hit for an artist: enough to list and open, without the full profile. */
-export interface ArtistSummary {
-  id: string;
-  name: string;
-  image: string;
-  role?: string;
-  provider?: 'jiosaavn' | 'jamendo';
-}
-
 /** A search hit for a playlist. The songs arrive only when one is opened by id. */
 export interface PlaylistSummary {
   id: string;

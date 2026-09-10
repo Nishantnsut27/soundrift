@@ -1,16 +1,9 @@
 import { useMemo, useState } from 'react';
 import { clearSearchHistory, removeSearch, useSearchHistory } from '../services/searchHistory';
 import { usePlayerStore } from '../store/playerStore';
-import type { SearchScope, Track } from '../types/types';
+import type { Track } from '../types/types';
 
 type DropdownItem = { label: string; kind: 'Song' | 'Artist' | 'Album' | 'Recent'; track: Track | null };
-
-/** The scopes, in the order they appear in the selector. Songs is the default. */
-const SCOPES: { value: SearchScope; label: string; placeholder: string }[] = [
-  { value: 'songs', label: 'Songs', placeholder: 'Search songs…' },
-  { value: 'artists', label: 'Artists', placeholder: 'Search artists…' },
-  { value: 'albums', label: 'Albums', placeholder: 'Search albums…' },
-];
 
 /**
  * The search field.
@@ -44,18 +37,12 @@ export function SearchBar() {
 
   const searchInput = usePlayerStore((state) => state.searchInput);
   const results = usePlayerStore((state) => state.results);
-  const searchScope = usePlayerStore((state) => state.searchScope);
   const isLoading = usePlayerStore((state) => state.isLoading);
   const setSearchInput = usePlayerStore((state) => state.setSearchInput);
-  const setSearchScope = usePlayerStore((state) => state.setSearchScope);
   const clearResults = usePlayerStore((state) => state.clearResults);
   const history = useSearchHistory();
 
   const hasInput = searchInput.trim().length > 0;
-  const scope = SCOPES.find((item) => item.value === searchScope) ?? SCOPES[0];
-  /* Suggestions are built from song results, so they only exist in the Songs
-     scope. In the other two the field falls back to recent searches, which is
-     right: there are no song titles to suggest for an artist lookup. */
   const suggestions = useMemo(() => (hasInput ? makeSuggestions(results) : []), [hasInput, results]);
   const dropdownItems: DropdownItem[] = suggestions.length
     ? suggestions
@@ -124,34 +111,15 @@ export function SearchBar() {
                 setIsOpen(false);
               }
             }}
-            placeholder={scope.placeholder}
+            placeholder="Search songs, artists or albums…"
             className="search-bar-input"
-            aria-label={`Search ${scope.label.toLowerCase()}`}
+            aria-label="Search"
             aria-autocomplete="list"
             aria-expanded={isOpen && dropdownItems.length > 0}
             aria-controls="search-suggestions"
             aria-activedescendant={activeIndex >= 0 ? `search-suggestion-${activeIndex}` : undefined}
             autoComplete="off"
           />
-
-          {/* Native on purpose: keyboard, touch and screen-reader behaviour for
-              free, and on a phone it opens the OS picker rather than a menu we
-              would have to reimplement. */}
-          <div className="search-scope">
-            <select
-              value={searchScope}
-              onChange={(event) => setSearchScope(event.target.value as SearchScope)}
-              className="search-scope-select"
-              aria-label="What to search for"
-            >
-              {SCOPES.map((item) => (
-                <option key={item.value} value={item.value}>{item.label}</option>
-              ))}
-            </select>
-            <svg className="search-scope-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="m6 9 6 6 6-6" />
-            </svg>
-          </div>
 
           {searchInput && (
             <button

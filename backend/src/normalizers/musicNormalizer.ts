@@ -2,13 +2,10 @@
 import {
   Song,
   Album,
-  Artist,
   Playlist,
   Suggestion,
   ArtistCredit,
-  ArtistSummary,
-  PlaylistSummary,
-  SimilarArtist
+  PlaylistSummary
 } from '../models/music.model.js';
 import { extractBestImage, extractBestAudioUrl } from '../utils/mediaHelper.js';
 
@@ -206,58 +203,6 @@ export class MusicNormalizer {
     };
   }
 
-  static normalizeJioSaavnArtist(raw: any): Artist {
-    const image = extractBestImage(raw.image);
-    const topSongs = Array.isArray(raw.topSongs)
-      ? raw.topSongs.map((song: any) => this.normalizeJioSaavnSong(song))
-      : [];
-    const topAlbums = Array.isArray(raw.topAlbums)
-      ? raw.topAlbums.map((album: any) => this.normalizeJioSaavnAlbum(album))
-      : [];
-    const singles = Array.isArray(raw.singles)
-      ? raw.singles.map((song: any) => this.normalizeJioSaavnSong(song))
-      : [];
-    const similarArtists = Array.isArray(raw.similarArtists)
-      ? raw.similarArtists
-          .filter((entry: unknown) => !!entry && typeof entry === 'object')
-          .map((entry: any): SimilarArtist => ({
-            id: entry.id ? String(entry.id) : '',
-            name: cleanText(entry.name || ''),
-            image: extractBestImage(entry.image)
-          }))
-          .filter((entry: SimilarArtist) => entry.id && entry.name)
-      : [];
-
-    return {
-      id: raw.id || '',
-      name: cleanText(raw.name || raw.title || 'Unknown Artist'),
-      website: raw.wiki || raw.url || '',
-      joindate: raw.dob || '',
-      image,
-      followerCount: raw.followerCount || 0,
-      bio: cleanText(Array.isArray(raw.bio) ? raw.bio.map((b: any) => b.text).join(' ') : (raw.bio || '')),
-      topSongs,
-      topAlbums,
-      singles,
-      similarArtists,
-      provider: 'jiosaavn'
-    };
-  }
-
-  /**
-   * An artist search hit. `/api/search/artists` returns no songs or bio, so this
-   * is deliberately thin — enough to render a row and open the full profile.
-   */
-  static normalizeJioSaavnArtistSummary(raw: any): ArtistSummary {
-    return {
-      id: raw?.id ? String(raw.id) : '',
-      name: cleanText(raw?.name || ''),
-      image: extractBestImage(raw?.image),
-      role: typeof raw?.role === 'string' ? raw.role : undefined,
-      provider: 'jiosaavn'
-    };
-  }
-
   static normalizeJioSaavnPlaylistSummary(raw: any): PlaylistSummary {
     return {
       id: raw?.id ? String(raw.id) : '',
@@ -266,17 +211,6 @@ export class MusicNormalizer {
       songCount: typeof raw?.songCount === 'number' ? raw.songCount : undefined,
       language: typeof raw?.language === 'string' ? cleanText(raw.language) : undefined,
       provider: 'jiosaavn'
-    };
-  }
-
-  static normalizeJamendoArtist(raw: any): Artist {
-    return {
-      id: raw.id || '',
-      name: cleanText(raw.name || 'Unknown Artist'),
-      website: raw.website || '',
-      joindate: raw.joindate || '',
-      image: raw.image || '/placeholder-artist.svg',
-      provider: 'jamendo'
     };
   }
 

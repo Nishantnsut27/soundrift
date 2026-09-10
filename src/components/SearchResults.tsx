@@ -1,26 +1,19 @@
 import { TrackListModern } from './TrackListModern';
-import { BrowseCard } from './BrowseCard';
-import { SkeletonSearchResults, SkeletonGuestCardsGrid } from './Skeletons';
+import { SkeletonSearchResults } from './Skeletons';
 import { usePlayerStore } from '../store/playerStore';
 import { useAuthStore } from '../store/authStore';
-import type { Album, ArtistSummary, QueueContext, Track } from '../types/types';
+import type { QueueContext, Track } from '../types/types';
 
 const FALLBACK_ART = '/Favicon.png';
 
 /**
  * Search results, ranked by type rather than laid out as one flat grid.
  *
- * What is shown follows the scope chosen in the field. In the default Songs
- * scope, songs come first and get the density of a list, because a song is the
- * thing a search is nearly always for; artists and albums follow as secondary
- * rows derived from those songs — ways to widen the search, not results to play.
+ * Songs come first and get the density of a list, because a song is the thing a
+ * search is nearly always for; artists and albums follow as secondary rows
+ * derived from those songs — ways to widen the search, not results to play.
  * Every section is conditional, so a query that only matches songs shows only
  * songs — no reserved blank regions.
- *
- * The Artists and Albums scopes are different in kind: they query the
- * catalogue's own entity endpoints, so the rows are real artists and real albums
- * with their own artwork, including ones whose songs never ranked in a song
- * search.
  */
 export function SearchResults({
   tracks,
@@ -37,24 +30,7 @@ export function SearchResults({
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const currentTrack = usePlayerStore((state) => state.currentTrack);
   const isPlaying = usePlayerStore((state) => state.isPlaying);
-  const searchScope = usePlayerStore((state) => state.searchScope);
-  const artistResults = usePlayerStore((state) => state.artistResults);
-  const albumResults = usePlayerStore((state) => state.albumResults);
-
   if (error) return <SearchFailed message={error} />;
-
-  if (searchScope === 'artists') {
-    if (isLoading) return <SkeletonGuestCardsGrid count={8} />;
-    if (!artistResults.length) return <SearchNoResults query={query} />;
-    return <ArtistScopeResults artists={artistResults} />;
-  }
-
-  if (searchScope === 'albums') {
-    if (isLoading) return <SkeletonGuestCardsGrid count={8} />;
-    if (!albumResults.length) return <SearchNoResults query={query} />;
-    return <AlbumScopeResults albums={albumResults} />;
-  }
-
   if (isLoading) return <SkeletonSearchResults />;
   if (!tracks.length) return <SearchNoResults query={query} />;
 
@@ -142,18 +118,8 @@ export function SearchResults({
                 type="button"
                 key={track.artist_id || track.artist_name}
                 className="search-artist"
-                onClick={() => {
-                  if (track.artist_id) {
-                    usePlayerStore.getState().openArtist(track.artist_id);
-                  } else {
-                    requestSearch(track.artist_name);
-                  }
-                }}
-                aria-label={
-                  track.artist_id
-                    ? `Open the artist ${track.artist_name}`
-                    : `Search for ${track.artist_name}`
-                }
+                onClick={() => requestSearch(track.artist_name)}
+                aria-label={`Search for ${track.artist_name}`}
               >
                 <img
                   className="search-artist-art"
@@ -245,80 +211,6 @@ export function SearchResults({
           </div>
         </section>
       )}
-    </div>
-  );
-}
-
-/**
- * The Artists scope: real artists from the catalogue's artist index.
- *
- * Circular artwork, matching the similar-artists row elsewhere, because an
- * artist photo is not cover art and should not be squared off like one. The
- * whole card opens the artist — there is no play button, since we hold no track
- * list here and would have to fetch one to honour the promise a play glyph makes.
- */
-function ArtistScopeResults({ artists }: { artists: ArtistSummary[] }) {
-  const openArtist = usePlayerStore((state) => state.openArtist);
-
-  return (
-    <div className="search-results">
-      <section className="search-section">
-        <h2 className="search-section-title">Artists</h2>
-        <div className="browse-card-grid">
-          {artists.map((artist) => (
-            <button
-              type="button"
-              key={artist.id}
-              className="artist-chip"
-              onClick={() => openArtist(artist.id)}
-              aria-label={`Open the artist ${artist.name}`}
-            >
-              <img
-                className="artist-chip-art"
-                src={artist.image || FALLBACK_ART}
-                alt=""
-                loading="lazy"
-                decoding="async"
-                onError={onArtError}
-              />
-              <span className="artist-chip-name truncate" title={artist.name}>
-                {artist.name}
-              </span>
-            </button>
-          ))}
-        </div>
-      </section>
-    </div>
-  );
-}
-
-/**
- * The Albums scope: real albums, each playable from its cover and openable from
- * its name — the same card the Genres, New Releases and artist pages use.
- */
-function AlbumScopeResults({ albums }: { albums: Album[] }) {
-  const openAlbum = usePlayerStore((state) => state.openAlbum);
-
-  return (
-    <div className="search-results">
-      <section className="search-section">
-        <h2 className="search-section-title">Albums</h2>
-        <div className="browse-card-grid">
-          {albums.map((album) => (
-            <BrowseCard
-              key={album.id}
-              kind="album"
-              id={album.id}
-              name={album.name}
-              image={album.image}
-              meta={[album.artist_name, album.year ? String(album.year) : null]
-                .filter(Boolean)
-                .join(' · ')}
-              onOpen={() => openAlbum(album.id)}
-            />
-          ))}
-        </div>
-      </section>
     </div>
   );
 }

@@ -5,7 +5,6 @@ import { TrendingPage } from './TrendingPage';
 import { NewReleasesPage } from './NewReleasesPage';
 import { GenresPage } from './GenresPage';
 import { GenrePage } from './GenrePage';
-import { ArtistPage } from './ArtistPage';
 import { AlbumPage } from './AlbumPage';
 import { usePlayerStore } from '../store/playerStore';
 
@@ -18,9 +17,9 @@ import { usePlayerStore } from '../store/playerStore';
  * listeners, Discover is the exploration surface, Trending is the ranking, New
  * Releases is freshness, and Genres is category browsing.
  *
- * Artist, album and genre are entity routes rather than navigation items: they
- * carry an id in `detailEntity` and are reached by opening something, so they
- * fall back to Home if that slot is somehow empty.
+ * Album and genre are entity routes rather than navigation items: they carry an
+ * id in `detailEntity` and are reached by opening something, so they fall back to
+ * Home if that slot is somehow empty.
  */
 export function GuestExperience() {
   const currentView = usePlayerStore((state) => state.currentView);
@@ -33,9 +32,6 @@ export function GuestExperience() {
   if (currentView === 'genres') return <GenresPage />;
   if (currentView === 'genre' && detailEntity?.kind === 'genre') {
     return <GenrePage genreId={detailEntity.id} />;
-  }
-  if (currentView === 'artist' && detailEntity?.kind === 'artist') {
-    return <ArtistPage artistId={detailEntity.id} />;
   }
   if (currentView === 'album' && detailEntity?.kind === 'album') {
     return <AlbumPage albumId={detailEntity.id} />;

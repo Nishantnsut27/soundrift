@@ -30,7 +30,6 @@ function albumYear(album: Album): string | null {
  */
 export function AlbumPage({ albumId }: { albumId: string }) {
   const { album, isLoading, error } = useAlbumDetail(albumId);
-  const openArtist = usePlayerStore((state) => state.openArtist);
   const setCurrentView = usePlayerStore((state) => state.setCurrentView);
 
   if (isLoading && !album) {
@@ -85,18 +84,7 @@ export function AlbumPage({ albumId }: { albumId: string }) {
 
           {album.artist_name && (
             <p className="album-header-artist">
-              {album.artist_id ? (
-                <button
-                  type="button"
-                  className="artist-link-modern"
-                  onClick={() => openArtist(album.artist_id)}
-                  title={album.artist_name}
-                >
-                  {album.artist_name}
-                </button>
-              ) : (
-                <span className="t-body">{album.artist_name}</span>
-              )}
+              <span className="t-body">{album.artist_name}</span>
             </p>
           )}
 

@@ -107,26 +107,17 @@
   transition: color 0.2s ease;
 }
 
+/* The artist credit is plain text again. The truncation below moved up from the
+   `.artist-link-modern` button that used to sit inside this element and open an
+   artist page; without it a long credit wraps the row out of alignment. */
 .track-artist-modern {
   margin: 0;
   font-size: 0.7rem;
   line-height: 1.2;
   color: #b3b3b3;
-}
-
-.artist-link-modern {
-  color: #b3b3b3;
-  text-decoration: none;
-  transition: all 0.2s ease;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  display: block;
-}
-
-.artist-link-modern:hover {
-  color: #ffffff;
-  text-decoration: underline;
 }
 
 .modern-loading {
@@ -635,12 +626,14 @@
 
 /* Toggle state: accent fill plus a dot, so it does not rely on colour alone. */
 .shuffle-btn.is-on,
-.repeat-btn.is-on {
+.repeat-btn.is-on,
+.queue-btn.is-on {
   color: var(--primary-light);
 }
 
 .shuffle-btn.is-on::after,
-.repeat-btn.is-on::after {
+.repeat-btn.is-on::after,
+.queue-btn.is-on::after {
   content: '';
   position: absolute;
   bottom: 2px;

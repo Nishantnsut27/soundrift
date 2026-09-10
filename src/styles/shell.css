@@ -160,6 +160,9 @@
   position: absolute;
   top: 0.5rem;
   right: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
   opacity: 0;
   transition: opacity 0.2s var(--smooth);
 }
@@ -167,6 +170,13 @@
 .music-card:hover .music-card-menu,
 .music-card:focus-within .music-card-menu {
   opacity: 1;
+}
+
+/* The menu slot must stay clickable while its own dropdown is open, even after
+   the pointer has left the card — otherwise moving down the list closes it. */
+.music-card-menu:has(.action-menu-trigger.is-open) {
+  opacity: 1;
+  z-index: 2;
 }
 
 /* Touch: there is no hover, so the play affordance is permanently visible. The
@@ -390,6 +400,21 @@
 .sidebar-nav {
   padding: 0.25rem 0.625rem 0.5rem 0.625rem;
   align-items: stretch;
+}
+
+/* Group label above each nav list. Quiet by design — it orients, it is not a
+   destination, so it must never read louder than the items beneath it. */
+.sidebar-nav-heading {
+  margin: 0.875rem 0 0.375rem 0.75rem;
+  font-size: var(--type-micro);
+  font-weight: 700;
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.sidebar-nav-heading:first-child {
+  margin-top: 0.25rem;
 }
 
 .sidebar-nav-list {
@@ -1118,6 +1143,13 @@
  * Trail
  * ------------------------------------------------------------------ */
 
+/* Wrapper exists purely as the scroll target for Surprise me. Layout-neutral:
+   `.discover-page` is a block container, so this adds a box and nothing else.
+   The margin keeps the heading off the very top edge once we land on it. */
+.discover-trail-anchor {
+  scroll-margin-top: 1rem;
+}
+
 .discover-trail {
   min-width: 0;
 }
@@ -1490,30 +1522,14 @@
 }
 
 /* ================================================================== *
- * Artist and album pages
+ * Album pages
  * ================================================================== *
- * Both open from a track row, a search result or a card, so they share one
- * header shape: artwork on the left, identity on the right, content below.
- * Every line in these headers is provider data — there are no invented
- * listener counts, ranks or placeholder biographies, because the upstream
- * API returns none of those. */
+ * An album opens from a track row, a search result or a card, so it has one
+ * header shape wherever it is reached: artwork on the left, identity on the
+ * right, tracks below. Every line in the header is provider data — there are no
+ * invented listener counts, ranks or placeholder text, because the upstream API
+ * returns none of those. */
 
-/* The artist credit on a track row is a button now that it opens the artist
-   page in-app; it was an anchor to a Jamendo URL that always 404'd. This
-   resets the button chrome so it still reads as the link it looks like. */
-button.artist-link-modern {
-  background: none;
-  border: none;
-  padding: 0;
-  margin: 0;
-  font: inherit;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-  max-width: 100%;
-}
-
-.artist-page,
 .album-page,
 .genres-page,
 .genre-page,
@@ -1526,7 +1542,6 @@ button.artist-link-modern {
   margin: 0 auto;
 }
 
-.artist-header,
 .album-header {
   display: flex;
   align-items: flex-end;
@@ -1534,7 +1549,6 @@ button.artist-link-modern {
   min-width: 0;
 }
 
-.artist-header-art,
 .album-header-art {
   flex: 0 0 auto;
   width: 200px;
@@ -1542,19 +1556,9 @@ button.artist-link-modern {
   overflow: hidden;
   background: var(--surface-2);
   box-shadow: var(--elev-2);
-}
-
-/* Round for a person, square for a record — the shape says which kind of
-   page you are on before the eyebrow is read. */
-.artist-header-art {
-  border-radius: var(--radius-full);
-}
-
-.album-header-art {
   border-radius: var(--radius-lg);
 }
 
-.artist-header-art img,
 .album-header-art img {
   width: 100%;
   height: 100%;
@@ -1562,7 +1566,6 @@ button.artist-link-modern {
   display: block;
 }
 
-.artist-header-body,
 .album-header-body {
   display: flex;
   flex-direction: column;
@@ -1571,46 +1574,21 @@ button.artist-link-modern {
   padding-bottom: 0.25rem;
 }
 
-.artist-header-name,
 .album-header-name {
   margin: 0;
   overflow-wrap: anywhere;
 }
 
-.artist-header-followers,
 .album-header-meta {
   margin: 0;
   color: var(--text-2);
 }
 
-/* Bios run long upstream. Clamped so the songs stay above the fold; the full
-   text is still in the DOM for screen readers and for text search. */
-.artist-header-bio {
-  margin: 0.25rem 0 0;
-  max-width: 68ch;
-  color: var(--text-2);
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
 .album-header-artist {
   margin: 0;
   font-size: 0.95rem;
-}
-
-.album-header-artist .artist-link-modern {
   color: var(--text-1);
   font-weight: 600;
-  display: inline;
-}
-
-.artist-songs-more {
-  display: flex;
-  justify-content: center;
-  margin-top: 1.25rem;
 }
 
 /* ================================================================== *
@@ -1758,71 +1736,16 @@ button.artist-link-modern {
   color: var(--text-2);
 }
 
-/* ================================================================== *
- * Similar artists
- * ================================================================== *
- * Present for only some artists upstream, so this row is rendered only when
- * the payload actually carries entries — never padded with substitutes. */
-
-.artist-chip-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: var(--card-gap);
-}
-
-.artist-chip {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0;
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: inherit;
-  min-width: 0;
-}
-
-.artist-chip-art {
-  width: 100%;
-  aspect-ratio: 1 / 1;
-  border-radius: var(--radius-full);
-  object-fit: cover;
-  background: var(--surface-2);
-  box-shadow: var(--elev-1);
-  transition: transform 0.22s var(--smooth), box-shadow 0.22s var(--smooth);
-}
-
-.artist-chip:hover .artist-chip-art,
-.artist-chip:focus-visible .artist-chip-art {
-  transform: translateY(-2px);
-  box-shadow: var(--elev-2);
-}
-
-.artist-chip-name {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--text-1);
-  text-align: center;
-  max-width: 100%;
-}
-
 @media (max-width: 768px) {
-  .artist-header,
   .album-header {
     flex-direction: column;
     align-items: flex-start;
     gap: 1.25rem;
   }
 
-  .artist-header-art,
   .album-header-art {
     width: 148px;
     height: 148px;
-  }
-
-  .artist-chip-grid {
-    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
   }
 }
 
@@ -1929,4 +1852,925 @@ button.artist-link-modern {
    over the content, so it is in the tab order where it reads. */
 .genre-head-actions {
   margin-top: 1.125rem;
+}
+
+/* ================================================================== *
+ * Track overflow menu
+ * ================================================================== *
+ * One menu, two presentations: a dropdown on pointer devices and a bottom
+ * sheet below 768px, matching the pattern PlaylistMenu already established.
+ * The trigger is a real 32px button on cards and a 40px one in rows, so it
+ * clears the touch target minimum wherever it lands. */
+
+.action-menu-root {
+  position: relative;
+  display: inline-flex;
+}
+
+.action-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-full);
+  background: rgba(0, 0, 0, 0.62);
+  color: var(--text-1);
+  cursor: pointer;
+  transition: background 0.16s var(--smooth), transform 0.16s var(--smooth);
+}
+
+.action-menu-trigger:hover,
+.action-menu-trigger.is-open {
+  background: rgba(0, 0, 0, 0.85);
+  transform: scale(1.06);
+}
+
+.track-actions-modern .action-menu-trigger {
+  width: 40px;
+  height: 40px;
+  background: transparent;
+  color: var(--text-2);
+}
+
+.track-actions-modern .action-menu-trigger:hover,
+.track-actions-modern .action-menu-trigger.is-open {
+  background: var(--surface-hover);
+  color: var(--text-1);
+  transform: none;
+}
+
+.action-menu {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  z-index: var(--z-popover);
+  width: 244px;
+  padding: 0.35rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  box-shadow: var(--elev-3);
+}
+
+.action-menu-right {
+  right: 0;
+}
+
+.action-menu-left {
+  left: 0;
+}
+
+.action-menu-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.action-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  width: 100%;
+  padding: 0.6rem 0.7rem;
+  border: none;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-1);
+  font-family: inherit;
+  font-size: var(--type-meta);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.14s var(--smooth);
+}
+
+.action-menu-item:hover:not(:disabled),
+.action-menu-item:focus-visible {
+  background: var(--surface-hover);
+}
+
+.action-menu-item:disabled {
+  color: var(--text-3);
+  cursor: default;
+}
+
+.action-menu-item svg {
+  flex-shrink: 0;
+  color: var(--text-2);
+}
+
+.action-menu-item-danger {
+  color: var(--error);
+}
+
+.action-menu-item-danger svg {
+  color: var(--error);
+}
+
+.action-menu-item-submenu .action-menu-chevron {
+  margin-left: auto;
+}
+
+.action-menu-back {
+  font-weight: 650;
+}
+
+.action-menu-divider {
+  height: 1px;
+  margin: 0.3rem 0.2rem;
+  background: var(--line-subtle);
+}
+
+.action-menu-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  max-height: 210px;
+  overflow-y: auto;
+}
+
+.action-menu-empty {
+  padding: 0.7rem;
+  color: var(--text-3);
+  font-size: var(--type-meta);
+  margin: 0;
+}
+
+.action-menu-tag {
+  margin-left: auto;
+  color: var(--primary-light);
+  font-size: var(--type-micro);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-eyebrow);
+}
+
+.action-menu-form {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.35rem 0.2rem 0.2rem;
+}
+
+.action-menu-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-1);
+  color: var(--text-1);
+  font-family: inherit;
+  font-size: var(--type-meta);
+}
+
+.action-menu-input::placeholder {
+  color: var(--text-3);
+}
+
+.action-menu-sheet-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: flex-end;
+  background: rgba(0, 0, 0, 0.62);
+  backdrop-filter: blur(2px);
+  animation: action-menu-fade 0.16s var(--smooth);
+}
+
+.action-menu-sheet {
+  width: 100%;
+  max-height: 82vh;
+  overflow-y: auto;
+  padding: 0.5rem 0.9rem calc(1rem + env(safe-area-inset-bottom));
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  border-top: 1px solid var(--line);
+  background: var(--surface-2);
+  box-shadow: var(--elev-3);
+  animation: action-menu-rise 0.2s var(--smooth);
+}
+
+.action-menu-sheet-handle {
+  width: 38px;
+  height: 4px;
+  margin: 0.3rem auto 0.75rem;
+  border-radius: var(--radius-full);
+  background: var(--line-strong);
+}
+
+.action-menu-sheet-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid var(--line-subtle);
+  margin-bottom: 0.35rem;
+}
+
+.action-menu-sheet-art {
+  width: 46px;
+  height: 46px;
+  flex-shrink: 0;
+  border-radius: var(--radius);
+  object-fit: cover;
+}
+
+.action-menu-sheet-text {
+  min-width: 0;
+}
+
+.action-menu-sheet-title {
+  margin: 0;
+  font-size: var(--type-body);
+  font-weight: 650;
+  color: var(--text-1);
+}
+
+.action-menu-sheet-artist {
+  margin: 0;
+  font-size: var(--type-meta);
+  color: var(--text-2);
+}
+
+.action-menu-sheet .action-menu-item {
+  min-height: var(--touch-target-min);
+  padding: 0.75rem 0.5rem;
+  font-size: var(--type-body);
+}
+
+.action-menu-sheet .action-menu-scroll {
+  max-height: 42vh;
+}
+
+@keyframes action-menu-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes action-menu-rise {
+  from { transform: translateY(14px); }
+  to { transform: translateY(0); }
+}
+
+/* ==========================================================================
+   Queue panel
+   Desktop: a right-side drawer that stops at the player bar, so transport
+   controls stay reachable while the queue is open. Below 768px the same
+   markup becomes a bottom sheet. The scrim deliberately stops short of the
+   player for the same reason — dimming the page must not disable playback.
+   ========================================================================== */
+
+.queue-scrim {
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
+  bottom: var(--player-height);
+  background: rgba(0, 0, 0, 0.42);
+  z-index: var(--z-modal-backdrop);
+  animation: queue-fade 0.18s var(--smooth);
+}
+
+.queue-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: var(--player-height);
+  width: 368px;
+  max-width: 100vw;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-1);
+  border-left: 1px solid var(--line);
+  box-shadow: var(--elev-3);
+  z-index: var(--z-modal);
+  animation: queue-slide-in 0.22s var(--smooth);
+}
+
+.queue-panel:focus {
+  outline: none;
+}
+
+.queue-panel-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1rem 1rem 0.85rem;
+  border-bottom: 1px solid var(--line-subtle);
+}
+
+.queue-panel-titles {
+  flex: 1;
+  min-width: 0;
+}
+
+.queue-panel-title {
+  margin: 0;
+  font-size: var(--type-h3);
+  font-weight: 700;
+  letter-spacing: var(--tracking-heading);
+  color: var(--text-1);
+}
+
+.queue-panel-context {
+  margin: 0.15rem 0 0;
+  font-size: var(--type-meta);
+  color: var(--text-3);
+}
+
+.queue-panel-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.queue-panel-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background 0.15s var(--smooth), color 0.15s var(--smooth);
+}
+
+.queue-panel-close:hover {
+  background: var(--surface-hover);
+  color: var(--text-1);
+}
+
+.queue-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.5rem 0.5rem 1rem;
+}
+
+.queue-panel-empty {
+  margin: 0;
+  padding: 0.85rem 0.5rem;
+  font-size: var(--type-meta);
+  line-height: var(--leading-body);
+  color: var(--text-3);
+}
+
+.queue-group + .queue-group {
+  margin-top: 0.85rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--line-subtle);
+}
+
+.queue-group-title {
+  margin: 0 0 0.35rem;
+  padding: 0 0.5rem;
+  font-size: var(--type-micro);
+  font-weight: 700;
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.queue-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.queue-row {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto 28px;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.5rem;
+  border-radius: var(--radius);
+  transition: background 0.15s var(--smooth);
+}
+
+.queue-row:hover {
+  background: var(--surface-hover);
+}
+
+.queue-row.is-current {
+  background: var(--accent-soft);
+  grid-template-columns: 22px 40px minmax(0, 1fr) auto;
+  padding: 0.4rem 0.5rem;
+}
+
+.queue-row.is-dragging {
+  opacity: 0.45;
+}
+
+.queue-row.is-drop-target {
+  box-shadow: inset 0 2px 0 0 var(--accent);
+}
+
+.queue-row-handle-slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+}
+
+.queue-row-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 13px;
+}
+
+.queue-row-bars i {
+  width: 2px;
+  height: 4px;
+  border-radius: 1px;
+  background: var(--accent);
+}
+
+.queue-row-bars.is-playing i {
+  animation: queue-bar 0.9s ease-in-out infinite;
+}
+
+.queue-row-bars.is-playing i:nth-child(2) {
+  animation-delay: 0.18s;
+}
+
+.queue-row-bars.is-playing i:nth-child(3) {
+  animation-delay: 0.36s;
+}
+
+.queue-row-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 30px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-3);
+  cursor: grab;
+}
+
+.queue-row-handle:hover {
+  color: var(--text-1);
+}
+
+.queue-row-handle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  color: var(--text-1);
+}
+
+.queue-row-handle:active {
+  cursor: grabbing;
+}
+
+.queue-row-play {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+  padding: 0.2rem;
+  border: none;
+  border-radius: var(--radius);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.queue-row-play:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.queue-row-art {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  background: var(--surface-2);
+}
+
+.queue-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.queue-row-title {
+  font-size: var(--type-meta);
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.queue-row.is-current .queue-row-title {
+  color: var(--accent);
+}
+
+.queue-row-artist {
+  font-size: var(--type-micro);
+  color: var(--text-3);
+}
+
+.queue-row-duration {
+  flex-shrink: 0;
+  font-size: var(--type-micro);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+}
+
+.queue-row-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  transition: background 0.15s var(--smooth), color 0.15s var(--smooth);
+}
+
+.queue-row-remove:hover {
+  background: var(--surface-active);
+  color: var(--text-1);
+}
+
+.queue-row-remove:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+@keyframes queue-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes queue-slide-in {
+  from { transform: translateX(24px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes queue-slide-up {
+  from { transform: translateY(28px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes queue-bar {
+  0%, 100% { height: 4px; }
+  50% { height: 13px; }
+}
+
+/* Touch and narrow screens: a bottom sheet, sized so the list is the thing you
+   see and the reorder / remove controls clear the 44px touch target. */
+@media (max-width: 768px) {
+  .queue-panel {
+    top: auto;
+    left: 0;
+    right: 0;
+    width: auto;
+    max-height: min(72vh, calc(100vh - var(--player-height) - 1rem));
+    border-left: none;
+    border-top: 1px solid var(--line);
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    animation: queue-slide-up 0.22s var(--smooth);
+  }
+
+  .queue-panel-head {
+    padding: 0.85rem 0.9rem 0.75rem;
+  }
+
+  .queue-row {
+    grid-template-columns: var(--touch-target-min) minmax(0, 1fr) auto var(--touch-target-min);
+    gap: 0.25rem;
+    padding: 0.25rem 0.35rem;
+  }
+
+  .queue-row.is-current {
+    grid-template-columns: var(--touch-target-min) 44px minmax(0, 1fr) auto;
+  }
+
+  .queue-row-handle-slot,
+  .queue-row-handle {
+    width: var(--touch-target-min);
+    height: var(--touch-target-min);
+  }
+
+  .queue-row-remove {
+    width: var(--touch-target-min);
+    height: var(--touch-target-min);
+  }
+
+  .queue-row-art {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .queue-scrim,
+  .queue-panel {
+    animation: none;
+  }
+
+  .queue-row-bars.is-playing i {
+    animation: none;
+    height: 9px;
+  }
+}
+
+/* ==========================================================================
+   Personal library
+   Favorites, Playlists, History and a single playlist all share one page
+   frame, so moving between them feels like moving inside one library rather
+   than between four separately-built screens.
+   ========================================================================== */
+
+.library-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* Actions belong to the collection, not to a row, so they sit with the
+   heading. Wrapping is the point: at 320px they stack instead of scrolling. */
+.library-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1.125rem;
+}
+
+.library-create-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.library-create-form .input {
+  min-width: 0;
+  flex: 1 1 180px;
+}
+
+/* The card's name and its ⋮ share a row, so the menu never covers the label
+   and the label keeps the whole width it can. */
+.library-card-foot {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.library-card-foot .browse-card-label {
+  flex: 1 1 auto;
+}
+
+.library-card-menu {
+  position: relative;
+  flex-shrink: 0;
+}
+
+/* ------------------------------------------------------------------ *
+ * Playlist detail
+ * ------------------------------------------------------------------ *
+ * Artwork beside the title on desktop, artwork above it on phones. The art
+ * is borrowed from the first track that has any, so an empty playlist shows
+ * the app mark rather than a broken image. */
+
+.playlist-detail-head {
+  display: flex;
+  align-items: flex-end;
+  gap: 1.5rem;
+  padding-top: 0.5rem;
+}
+
+.playlist-detail-art {
+  width: 184px;
+  height: 184px;
+  flex-shrink: 0;
+  border-radius: var(--radius-lg);
+  object-fit: cover;
+  background: var(--surface-2);
+  box-shadow: var(--elev-2);
+}
+
+.playlist-detail-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.playlist-detail-meta .t-eyebrow {
+  color: var(--primary-light);
+  margin-bottom: 0.6rem;
+}
+
+.playlist-detail-meta .t-h1 {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.playlist-detail-stats {
+  margin: 0.65rem 0 0 0;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 768px) {
+  .playlist-detail-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1.125rem;
+  }
+
+  .playlist-detail-art {
+    width: 148px;
+    height: 148px;
+  }
+
+  .library-head-actions .sr-btn {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 380px) {
+  .playlist-detail-art {
+    width: 120px;
+    height: 120px;
+  }
+
+  .library-head-actions .sr-btn {
+    flex-basis: 100%;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Row reordering
+ * ------------------------------------------------------------------ *
+ * Only playlists get a handle, because only a playlist's order belongs to
+ * the listener. The handle is a real button so it is reachable by Tab and
+ * movable with the arrow keys — dragging is the shortcut, never the only
+ * way in. */
+
+.track-reorder-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 32px;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-3);
+  cursor: grab;
+  transition: color 0.15s var(--smooth), background 0.15s var(--smooth);
+}
+
+.track-reorder-handle:hover {
+  color: var(--text-1);
+  background: var(--surface-hover);
+}
+
+.track-reorder-handle:active {
+  cursor: grabbing;
+}
+
+.track-reorder-handle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  color: var(--text-1);
+}
+
+.track-item-modern.is-dragging {
+  opacity: 0.45;
+}
+
+.track-item-modern.is-drop-target {
+  box-shadow: inset 0 2px 0 0 var(--accent);
+}
+
+@media (max-width: 768px) {
+  .track-reorder-handle {
+    width: var(--touch-target-min);
+    height: var(--touch-target-min);
+  }
+}
+
+/* ==========================================================================
+   Authenticated Home
+   The greeting and the three doors into the listener's own music. Deliberately
+   short: the first shelf of real songs should be reachable without scrolling
+   at 1366x768, so this is a heading with links, not a banner.
+   ========================================================================== */
+
+.home-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 0.5rem 0 0 0;
+  margin-bottom: 0.5rem;
+}
+
+.home-hero .t-eyebrow {
+  color: var(--primary-light);
+  margin-bottom: 0.6rem;
+}
+
+.home-hero-greeting {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.home-hero-name {
+  color: var(--primary-light);
+}
+
+/* Wraps rather than scrolls: three links should never push the page sideways
+   at 320px, and a hidden third door is not a door. */
+.home-quick-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.625rem;
+  margin-top: 1.25rem;
+  width: 100%;
+}
+
+.home-quick-link {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1 1 190px;
+  min-width: 0;
+  padding: 0.7rem 0.95rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+  color: var(--text-1);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.18s var(--smooth), border-color 0.18s var(--smooth);
+}
+
+.home-quick-link:hover,
+.home-quick-link:focus-visible {
+  background: var(--surface-hover);
+  border-color: var(--line-strong);
+}
+
+.home-quick-link-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 9px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  color: var(--primary-light);
+}
+
+.home-quick-link-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.home-quick-link-label {
+  font-size: var(--type-meta);
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.home-quick-link-hint {
+  color: var(--text-2);
+  line-height: 1.3;
+}
+
+.home-load-more {
+  display: flex;
+  justify-content: center;
+  margin-top: 1.25rem;
+}
+
+@media (max-width: 599px) {
+  .home-quick-link {
+    flex-basis: 100%;
+  }
 }
