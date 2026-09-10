@@ -80,7 +80,10 @@ export function TrendingPage() {
               title="More trending"
               subtitle="A wider pull from what's playing. This selection isn't ranked."
             >
-              <TrackCardGrid tracks={more.slice(0, MORE_LIMIT)} />
+              <TrackCardGrid
+                tracks={more.slice(0, MORE_LIMIT)}
+                queueContext={{ kind: 'section', id: 'trending-more', name: 'More trending' }}
+              />
             </ContentSection>
           </div>
         </ErrorBoundary>

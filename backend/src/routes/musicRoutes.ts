@@ -15,6 +15,7 @@ musicRouter.get('/curated/:section', metadataLimiter, CurationController.getSect
    `/artists/search` would otherwise be read as an artist whose id is "search". */
 musicRouter.get('/artists/search', searchLimiter, validateSearchQuery, MusicController.searchArtists);
 musicRouter.get('/artists/resolve', searchLimiter, validateSearchQuery, MusicController.resolveArtist);
+musicRouter.get('/albums/search', searchLimiter, validateSearchQuery, MusicController.searchAlbums);
 musicRouter.get('/playlists/search', searchLimiter, validateSearchQuery, MusicController.searchPlaylists);
 
 musicRouter.get('/song/:id', metadataLimiter, validateIdParameter, MusicController.getSongById);

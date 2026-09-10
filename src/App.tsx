@@ -14,6 +14,11 @@ const GuestExperience = lazy(() => import('./components/GuestExperience').then(m
 const SearchPage = lazy(() => import('./components/SearchPage').then(m => ({ default: m.SearchPage })));
 const RelatedMusic = lazy(() => import('./components/RelatedMusic').then(m => ({ default: m.RelatedMusic })));
 const DiscoverySection = lazy(() => import('./components/DiscoverySection').then(m => ({ default: m.DiscoverySection })));
+const ArtistPage = lazy(() => import('./components/ArtistPage').then(m => ({ default: m.ArtistPage })));
+const AlbumPage = lazy(() => import('./components/AlbumPage').then(m => ({ default: m.AlbumPage })));
+const GenresPage = lazy(() => import('./components/GenresPage').then(m => ({ default: m.GenresPage })));
+const GenrePage = lazy(() => import('./components/GenrePage').then(m => ({ default: m.GenrePage })));
+const NewReleasesPage = lazy(() => import('./components/NewReleasesPage').then(m => ({ default: m.NewReleasesPage })));
 import { usePlayerStore } from './store/playerStore';
 import { useToastStore } from './store/toastStore';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
@@ -112,6 +117,7 @@ function App() {
   const [renameInput, setRenameInput] = useState('');
   const [playlistToDelete, setPlaylistToDelete] = useState<{ id: string; name: string } | null>(null);
   const [showClearFavoritesModal, setShowClearFavoritesModal] = useState(false);
+  const detailEntity = usePlayerStore((state) => state.detailEntity);
 
   const {
     currentView,
@@ -138,7 +144,8 @@ function App() {
 
   useEffect(() => {
     const handleUrlRouting = () => {
-      const path = window.location.pathname.toLowerCase();
+      const rawPath = window.location.pathname;
+      const path = rawPath.toLowerCase();
       const isAuth = useAuthStore.getState().isAuthenticated;
 
       if (path === '/terms' || path === '/privacy') {
@@ -146,6 +153,21 @@ function App() {
         return;
       }
       setLegalPage(null);
+
+      /* Entity routes carry an id, so they are matched exactly and before the
+         prefix chain below — `path.includes('/artist')` would otherwise swallow
+         the id and open the wrong view. Matched against the raw path because
+         catalogue ids are case-sensitive; only the prefix is lower-cased. */
+      const entityMatch = rawPath.match(/^\/(artist|album|genre)\/([^/]+)$/i);
+      if (entityMatch) {
+        const id = decodeURIComponent(entityMatch[2]);
+        const kind = entityMatch[1].toLowerCase();
+        const store = usePlayerStore.getState();
+        if (kind === 'artist') store.openArtist(id);
+        else if (kind === 'album') store.openAlbum(id);
+        else store.openGenre(id);
+        return;
+      }
 
       const isProtectedRoute =
         path.includes('/favorites') ||
@@ -205,8 +227,22 @@ function App() {
     const path = window.location.pathname.toLowerCase();
     if (path === '/terms' || path === '/privacy') return;
     if (legalPage) return;
+
+    /* Read the store rather than this render's values. On first mount the URL
+       parser above runs in an earlier effect of the same commit, so the closure
+       here still holds the pre-parse defaults — writing those would push a "/"
+       over a deep link before React re-rendered with the real view. The deps
+       stay on the rendered values, which is what makes this re-run at all. */
+    const { currentView: view, detailEntity: entity } = usePlayerStore.getState();
+
     let targetPath = '/';
-    if (currentView !== 'home') targetPath = `/${currentView}`;
+    // Entity views need their id in the path, so a reload or a shared link lands
+    // back on the same artist, album or genre rather than on a bare /artist.
+    if (entity) {
+      targetPath = `/${entity.kind}/${encodeURIComponent(entity.id)}`;
+    } else if (view !== 'home') {
+      targetPath = `/${view}`;
+    }
     if (window.location.pathname !== targetPath) {
       try {
         window.history.pushState(null, '', targetPath);
@@ -214,7 +250,7 @@ function App() {
         void e;
       }
     }
-  }, [currentView, legalPage]);
+  }, [currentView, detailEntity, legalPage]);
 
   const handleEditPlaylist = (playlistId: string, currentName: string) => {
     setPlaylistToRename({ id: playlistId, name: currentName });
@@ -373,15 +409,61 @@ function App() {
           </div>
         );
 
-      // The authenticated home is unchanged. For guests these five views are five
-      // distinct surfaces: GuestExperience owns that split (see
-      // src/config/guestRoutes.ts) so the routes cannot collapse back into one
-      // page shared by every nav item.
+      // Artist, album and genres are the same surface for everyone: an artist
+      // page is the artist's catalogue, and there is no personalisation to layer
+      // onto it. They sit outside the home group so a signed-in listener opening
+      // an artist from a track row gets the artist, not their own home.
+      case 'artist':
+        return (
+          <div className="view-container">
+            {detailEntity?.kind === 'artist' ? (
+              <Suspense fallback={null}><ArtistPage artistId={detailEntity.id} /></Suspense>
+            ) : null}
+          </div>
+        );
+
+      case 'album':
+        return (
+          <div className="view-container">
+            {detailEntity?.kind === 'album' ? (
+              <Suspense fallback={null}><AlbumPage albumId={detailEntity.id} /></Suspense>
+            ) : null}
+          </div>
+        );
+
+      case 'genres':
+        return (
+          <div className="view-container">
+            <Suspense fallback={null}><GenresPage /></Suspense>
+          </div>
+        );
+
+      case 'genre':
+        return (
+          <div className="view-container">
+            {detailEntity?.kind === 'genre' ? (
+              <Suspense fallback={null}><GenrePage genreId={detailEntity.id} /></Suspense>
+            ) : null}
+          </div>
+        );
+
+      // New Releases is the catalogue's arrivals feed, not a personalised one, so
+      // it renders the same page for everyone. It used to fall through to the
+      // home group, which meant a signed-in listener clicking it got their own
+      // home instead of the releases.
+      case 'new-releases':
+        return (
+          <div className="view-container">
+            <Suspense fallback={null}><NewReleasesPage /></Suspense>
+          </div>
+        );
+
+      // The authenticated home is unchanged. For guests these views are distinct
+      // surfaces: GuestExperience owns that split (see src/config/guestRoutes.ts)
+      // so the routes cannot collapse back into one page shared by every nav item.
       case 'home':
       case 'discover':
       case 'trending':
-      case 'new-releases':
-      case 'genres':
         if (isAuthenticated) {
           return (
             <div className="view-container">
@@ -427,7 +509,11 @@ function App() {
                 }}
               />
             ) : (
-              <TrackListModern tracks={favorites} showAddToPlaylist={true} />
+              <TrackListModern
+                tracks={favorites}
+                showAddToPlaylist={true}
+                queueContext={{ kind: 'playlist', id: 'favorites', name: 'Favorites' }}
+              />
             )}
           </div>
         );
@@ -550,7 +636,11 @@ function App() {
                 }}
               />
             ) : (
-              <TrackListModern tracks={recentlyPlayed} showAddToPlaylist={true} />
+              <TrackListModern
+                tracks={recentlyPlayed}
+                showAddToPlaylist={true}
+                queueContext={{ kind: 'section', id: 'recently-played', name: 'Recently Played' }}
+              />
             )}
           </div>
         );
@@ -567,6 +657,7 @@ function App() {
             <TrackListModern
               tracks={usePlayerStore.getState().listeningHistory}
               showAddToPlaylist={true}
+              queueContext={{ kind: 'section', id: 'history', name: 'Listening History' }}
             />
           </div>
         );

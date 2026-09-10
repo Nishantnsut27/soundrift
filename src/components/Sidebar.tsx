@@ -85,6 +85,18 @@ const GUEST_NAV: NavItem[] = [
   },
 ];
 
+/**
+ * The nav item a view sits under.
+ *
+ * A single genre is a child of Genres, so opening one keeps Genres lit instead
+ * of leaving the sidebar with nothing selected. Artist and album pages are
+ * reachable from every surface and belong under none of them, so they
+ * deliberately light nothing. Exactly one item is active either way.
+ */
+function navViewFor(view: AppView): AppView {
+  return view === 'genre' ? 'genres' : view;
+}
+
 export function Sidebar() {
   const [isLibraryOpen, setIsLibraryOpen] = useState(true);
   const [showCreatePlaylist, setShowCreatePlaylist] = useState(false);
@@ -275,8 +287,8 @@ export function Sidebar() {
                   <li key={item.view}>
                     <button
                       onClick={() => handleNavClick(item.view)}
-                      className={`sidebar-nav-item ${currentView === item.view ? 'sidebar-nav-item-active' : ''}`}
-                      aria-current={currentView === item.view ? 'page' : undefined}
+                      className={`sidebar-nav-item ${navViewFor(currentView) === item.view ? 'sidebar-nav-item-active' : ''}`}
+                      aria-current={navViewFor(currentView) === item.view ? 'page' : undefined}
                     >
                       <span className="sidebar-nav-icon">{item.icon}</span>
                       <span className="truncate">{item.label}</span>

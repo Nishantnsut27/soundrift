@@ -84,9 +84,8 @@ export function buildCurationUserPrompt(sectionId: CuratedSectionId, now: Date =
 
     case 'monsoon':
       return [
-        `Give me up to ${CANDIDATE_LIMIT} Indian songs about rain, clouds and the monsoon.`,
-        'Mix classic and contemporary tracks; Hindi and regional both welcome.',
-        `Current date and time: ${timestamp}`
+        `Give me up to ${CANDIDATE_LIMIT} well-known Hindi film songs about rain, clouds and the monsoon.`,
+        'Mix classic and contemporary, and stay with songs that were widely popular.'
       ].join('\n');
 
     case 'late_night':

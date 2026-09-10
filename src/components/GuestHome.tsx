@@ -9,7 +9,7 @@ import { useTrackPlayback } from '../hooks/useTrackPlayback';
 import { usePlayerStore } from '../store/playerStore';
 import { requireAuth } from '../utils/requireAuth';
 import type { AppView } from '../store/playerStore';
-import type { CuratedSection, Track } from '../types/types';
+import type { CuratedSection, QueueContext, Track } from '../types/types';
 
 /** One clean row per section; the phone rail scrolls through the rest. */
 const ROW_LENGTH = 6;
@@ -19,6 +19,13 @@ const TRENDING_ID = 'trending';
 const FRESH_ID = 'fresh_releases';
 const EDITORS_ID = 'editors_picks';
 const FEATURED_IDS = [TRENDING_ID, FRESH_ID, EDITORS_ID];
+
+/** Shared by the hero and the trending row, which play the same list. */
+const TRENDING_CONTEXT: QueueContext = {
+  kind: 'section',
+  id: TRENDING_ID,
+  name: 'Trending now',
+};
 
 /**
  * Guest Home: "what should I listen to?"
@@ -36,7 +43,6 @@ export function GuestHome() {
   const { sections, isLoading, error } = useCuratedSections();
   const storeTrending = usePlayerStore((state) => state.trending);
   const setCurrentView = usePlayerStore((state) => state.setCurrentView);
-  const { toggleTrack, currentTrackId, isPlaying } = useTrackPlayback();
 
   const trendingSection = findCuratedSection(sections, TRENDING_ID);
   const freshSection = findCuratedSection(sections, FRESH_ID);
@@ -54,6 +60,13 @@ export function GuestHome() {
   // second request.
   const trendingTracks = trendingSection?.tracks ?? storeTrending;
   const featured: Track | undefined = trendingTracks[0];
+
+  /* The hero is the top of the trending list, so playing it starts the list
+     there rather than stranding one track with nothing behind it. */
+  const { toggleTrack, currentTrackId, isPlaying } = useTrackPlayback(
+    trendingTracks,
+    TRENDING_CONTEXT,
+  );
 
   const hasAnything = trendingTracks.length > 0 || Boolean(freshSection || editorsSection);
 
@@ -109,7 +122,13 @@ export function GuestHome() {
             subtitle="What listeners are playing today."
             action={{ label: 'See all', onClick: () => setCurrentView('trending') }}
           >
-            <TrackCardGrid tracks={trendingTracks.slice(0, ROW_LENGTH)} showRank singleRow />
+            <TrackCardGrid
+              tracks={trendingTracks.slice(0, ROW_LENGTH)}
+              queue={trendingTracks}
+              queueContext={TRENDING_CONTEXT}
+              showRank
+              singleRow
+            />
           </ContentSection>
         </SectionSlot>
       )}
@@ -204,7 +223,14 @@ function CuratedRow({ section, title, subtitle, eyebrow, seeAll, setCurrentView 
 
   return (
     <ContentSection title={title} subtitle={subtitle} eyebrow={eyebrow} action={action}>
-      <TrackCardGrid tracks={section.tracks.slice(0, ROW_LENGTH)} singleRow />
+      {/* The row shows six; the queue is the whole section, so Next reaches the
+          rest of it before the suggestion engine gets a turn. */}
+      <TrackCardGrid
+        tracks={section.tracks.slice(0, ROW_LENGTH)}
+        queue={section.tracks}
+        queueContext={{ kind: 'section', id: section.sectionId, name: title }}
+        singleRow
+      />
     </ContentSection>
   );
 }

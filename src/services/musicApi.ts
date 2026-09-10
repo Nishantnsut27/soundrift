@@ -1,4 +1,12 @@
-import type { Track, Artist, Album, CuratedSection, RelatedMusic } from '../types/types';
+import type {
+  Track,
+  Album,
+  CuratedSection,
+  RelatedMusic,
+  PlaylistSummary,
+  PagedResult,
+  CataloguePlaylist,
+} from '../types/types';
 import { API_ENDPOINTS, PLAYER_DEFAULTS } from '../config/constants';
 import { fetchJson, type ApiResponse } from './apiClient';
 import { formatDuration } from '../utils/formatters';
@@ -74,13 +82,43 @@ export class MusicAPI {
     }
   }
 
-  static async getArtistById(id: string): Promise<Artist | null> {
+  /**
+   * An artist's albums, latest-first when asked for.
+   *
+   * There is no artist page any more; this survives because New Releases builds
+   * its arrivals feed from the featured artists' newest albums, and the
+   * catalogue offers no global new-releases endpoint to replace it.
+   */
+  static async getArtistAlbums(id: string, page = 0, sortBy = 'popularity'): Promise<PagedResult<Album>> {
     try {
-      const url = API_ENDPOINTS.ARTIST(id);
-      const body = await fetchJson<ApiResponse<Artist>>(url);
+      const url = `${API_ENDPOINTS.ARTIST_ALBUMS(id)}?page=${page}&sortBy=${encodeURIComponent(sortBy)}`;
+      const body = await fetchJson<ApiResponse<PagedResult<Album>>>(url);
+      return body.success && body.data ? body.data : { total: 0, items: [] };
+    } catch (error) {
+      console.error('[MusicAPI] Get artist albums error:', error);
+      return { total: 0, items: [] };
+    }
+  }
+
+  static async searchPlaylists(query: string, limit = 10): Promise<PlaylistSummary[]> {
+    if (!query || !query.trim()) return [];
+    try {
+      const url = `${API_ENDPOINTS.PLAYLIST_SEARCH}?q=${encodeURIComponent(query.trim())}&limit=${limit}`;
+      const body = await fetchJson<ApiResponse<PlaylistSummary[]>>(url);
+      return body.success && Array.isArray(body.data) ? body.data : [];
+    } catch (error) {
+      console.error('[MusicAPI] Search playlists error:', error);
+      return [];
+    }
+  }
+
+  static async getPlaylistById(id: string, limit = 50): Promise<CataloguePlaylist | null> {
+    try {
+      const url = `${API_ENDPOINTS.PLAYLIST(id)}?limit=${limit}`;
+      const body = await fetchJson<ApiResponse<CataloguePlaylist>>(url);
       return body.success ? body.data : null;
     } catch (error) {
-      console.error('[MusicAPI] Get artist by ID error:', error);
+      console.error('[MusicAPI] Get playlist error:', error);
       return null;
     }
   }

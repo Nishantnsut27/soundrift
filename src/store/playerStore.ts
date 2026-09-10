@@ -1,12 +1,49 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
-import type { Track, Playlist, PlaylistTrack, PlayerState, SearchState, RelatedMusic } from '../types/types';
+import type {
+  Track,
+  Playlist,
+  PlaylistTrack,
+  PlayerState,
+  SearchState,
+  RelatedMusic,
+  QueueContext,
+} from '../types/types';
 import { STORAGE_KEYS, PLAYER_DEFAULTS } from '../config/constants';
 import { userApi } from '../services/userApi';
 import { useAuthStore } from './authStore';
 
+/** One loose track: the only shape the suggestion engine is allowed to extend. */
+const SINGLE_CONTEXT: QueueContext = { kind: 'single' };
+
+/**
+ * A shuffled walk over `length` positions that begins on `startIndex`.
+ *
+ * Fisher–Yates, then rotated so the track the listener actually clicked plays
+ * first instead of being jumped over.
+ */
+function buildShuffleOrder(length: number, startIndex: number): number[] {
+  const order = Array.from({ length }, (_, i) => i);
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+  if (startIndex >= 0 && startIndex < length) {
+    const pos = order.indexOf(startIndex);
+    if (pos > 0) return [...order.slice(pos), ...order.slice(0, pos)];
+  }
+  return order;
+}
+
 interface PlayerStore extends PlayerState {
-  playTrack: (track: Track, _queue?: Track[], _index?: number) => void;
+  /**
+   * Starts playback.
+   *
+   * Pass `queue` and `index` to play a track *within* a list — an album, a
+   * playlist — and `context` to say which. Called with a track alone it plays
+   * one loose track, which is what the suggestion engine then tops up.
+   */
+  playTrack: (track: Track, queue?: Track[], index?: number, context?: QueueContext) => void;
   pauseTrack: () => void;
   nextTrack: () => void;
   previousTrack: () => void;
@@ -80,22 +117,25 @@ export type AppView =
   | 'trending'
   | 'new-releases'
   | 'genres'
-  | 'artist'
-  | 'album';
+  | 'album'
+  | 'genre';
 
 interface UIStore {
   isSidebarOpen: boolean;
   currentView: AppView;
   theme: 'light' | 'dark';
-  /** The artist or album whose dedicated page is on screen, or null for all other views. */
-  detailEntity: { kind: 'artist' | 'album'; id: string } | null;
+  /**
+   * The album or genre whose dedicated page is on screen, or null for all other
+   * views. A genre's id is its category key, not a catalogue id.
+   */
+  detailEntity: { kind: 'album' | 'genre'; id: string } | null;
 
   toggleSidebar: () => void;
   closeSidebar: () => void;
   setCurrentView: (view: AppView) => void;
   setTheme: (theme: 'light' | 'dark') => void;
-  openArtist: (id: string) => void;
   openAlbum: (id: string) => void;
+  openGenre: (id: string) => void;
 }
 
 type AppStore = PlayerStore & SearchStore & PlaylistStore & UIStore;
@@ -183,6 +223,7 @@ export const usePlayerStore = create<AppStore>()(
     shuffleOrder: [] as number[],
     shufflePosition: 0,
     repeatMode: 'none',
+    queueContext: SINGLE_CONTEXT,
 
     searchInput: '',
     query: '',
@@ -207,26 +248,30 @@ export const usePlayerStore = create<AppStore>()(
     detailEntity: null,
     theme: loadFromLocalStorage(STORAGE_KEYS.THEME, 'dark'),
 
-    playTrack: (track: Track) => {
+    playTrack: (track: Track, queue?: Track[], index?: number, context: QueueContext = SINGLE_CONTEXT) => {
       const state = get();
 
-      const newQueue = [track];
-      const newIndex = 0;
+      /* A list is only a list when one was handed over. A search hit or a card
+         on Home arrives alone, stays alone, and gets topped up by the radio. */
+      const newQueue = queue && queue.length > 0 ? queue : [track];
+      const requested = typeof index === 'number' ? index : -1;
+      const newIndex = requested >= 0
+        && requested < newQueue.length
+        && String(newQueue[requested]?.id) === String(track.id)
+        ? requested
+        : Math.max(0, newQueue.findIndex(t => String(t.id) === String(track.id)));
 
       const updatedRecentlyPlayed = [track, ...state.recentlyPlayed.filter(t => t.id !== track.id)].slice(0, 30);
 
-      let shuffleOrder: number[] = [];
-      let shufflePosition = 0;
-      if (state.isShuffling) {
-        shuffleOrder = [0];
-        shufflePosition = 0;
-      }
+      const shuffleOrder = state.isShuffling ? buildShuffleOrder(newQueue.length, newIndex) : [];
+      const shufflePosition = 0;
 
       set({
         currentTrack: track,
         isPlaying: true,
         queue: newQueue,
         currentIndex: newIndex,
+        queueContext: context,
         playbackHistory: [],
         sessionId: state.sessionId + 1,
         currentTime: 0,
@@ -247,6 +292,11 @@ export const usePlayerStore = create<AppStore>()(
 
     setRecommendations: async (tracks: Track[]) => {
       const state = get();
+      /* An album or a playlist is a finite thing the listener opened on purpose,
+         and it ends where it ends. A loose track and a rendered section both
+         take radio — the section only once Next has walked it to the end. */
+      if (state.queueContext.kind === 'album' || state.queueContext.kind === 'playlist') return;
+
       const knownIds = new Set<string>();
       for (const t of state.queue) knownIds.add(String(t.id));
       for (const t of state.playbackHistory) knownIds.add(String(t.id));
@@ -366,21 +416,12 @@ export const usePlayerStore = create<AppStore>()(
     toggleShuffle: () => set((state) => {
       if (state.isShuffling) {
         return { isShuffling: false, shuffleOrder: [], shufflePosition: 0 };
-      } else {
-        let shuffleOrder = Array.from({ length: state.queue.length }, (_, i) => i);
-        for (let i = shuffleOrder.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [shuffleOrder[i], shuffleOrder[j]] = [shuffleOrder[j], shuffleOrder[i]];
-        }
-        const shufflePosition = 0;
-        if (state.currentIndex >= 0 && state.currentIndex < state.queue.length) {
-          const pos = shuffleOrder.indexOf(state.currentIndex);
-          if (pos > 0) {
-            shuffleOrder = [...shuffleOrder.slice(pos), ...shuffleOrder.slice(0, pos)];
-          }
-        }
-        return { isShuffling: true, shuffleOrder, shufflePosition };
       }
+      return {
+        isShuffling: true,
+        shuffleOrder: buildShuffleOrder(state.queue.length, state.currentIndex),
+        shufflePosition: 0,
+      };
     }),
 
     setRepeatMode: (mode: 'none' | 'one' | 'all') => set({ repeatMode: mode }),
@@ -428,6 +469,7 @@ export const usePlayerStore = create<AppStore>()(
       recommendations: [],
       shuffleOrder: [],
       shufflePosition: 0,
+      queueContext: SINGLE_CONTEXT,
       sessionId: state.sessionId + 1,
     })),
 
@@ -437,7 +479,13 @@ export const usePlayerStore = create<AppStore>()(
     setLoading: (loading: boolean) => set({ isLoading: loading }),
     setError: (error: string | null) => set({ error }),
     setTrending: (trending: Track[]) => set({ trending }),
-    clearResults: () => set({ searchInput: '', results: [], query: '', error: null, isLoading: false }),
+    clearResults: () => set({
+      searchInput: '',
+      results: [],
+      query: '',
+      error: null,
+      isLoading: false,
+    }),
 
     syncCloudUserData: async () => {
       if (!useAuthStore.getState().isAuthenticated) return;
@@ -693,8 +741,8 @@ export const usePlayerStore = create<AppStore>()(
     toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
     closeSidebar: () => set({ isSidebarOpen: false }),
     setCurrentView: (view) => set({ currentView: view, detailEntity: null }),
-    openArtist: (id: string) => set({ currentView: 'artist', detailEntity: { kind: 'artist', id } }),
     openAlbum: (id: string) => set({ currentView: 'album', detailEntity: { kind: 'album', id } }),
+    openGenre: (id: string) => set({ currentView: 'genre', detailEntity: { kind: 'genre', id } }),
 
     setTheme: (theme: 'light' | 'dark') => {
       set({ theme });

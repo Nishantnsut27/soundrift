@@ -48,6 +48,8 @@ export function CuratedSections() {
           </div>
           <TrackListModern
             tracks={section.tracks.slice(0, section.initialVisibleCount)}
+            playQueue={section.tracks}
+            queueContext={{ kind: 'section', id: section.sectionId, name: section.title }}
             isLoading={isLoading}
             showAddToPlaylist
           />

@@ -291,6 +291,22 @@ export class MusicController {
     }
   }
 
+  static async searchAlbums(req: Request, res: Response): Promise<void> {
+    try {
+      const query = (req.query.q || req.query.query || '').toString().trim();
+      if (!query) {
+        res.status(400).json({ success: false, data: [], error: 'Search query parameter "q" is required.' });
+        return;
+      }
+
+      const albums = await musicService.searchAlbums(query, parsePositiveInt(req.query.limit, 10, 30));
+      res.status(200).json({ success: true, data: albums } as StandardApiResponse<typeof albums>);
+    } catch (error) {
+      logger.error('MusicController', 'Search albums error', { error: serializeError(error) });
+      res.status(500).json({ success: false, data: [], error: 'Failed to search albums.' } as StandardApiResponse<[]>);
+    }
+  }
+
   static async searchPlaylists(req: Request, res: Response): Promise<void> {
     try {
       const query = (req.query.q || req.query.query || '').toString().trim();

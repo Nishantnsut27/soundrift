@@ -170,6 +170,26 @@ export class MusicService {
     return exact ?? matches[0];
   }
 
+  /**
+   * Albums as entities rather than as a name on a song.
+   *
+   * The search page's Albums scope. Distinct from deriving album names out of a
+   * song search: that can only ever show albums whose songs happened to rank,
+   * and it carries the song's artwork rather than the album's.
+   */
+  async searchAlbums(query: string, limit = 10): Promise<Album[]> {
+    if (!query || !query.trim()) return [];
+    const cacheKey = `album-search:${normalizeStringForSearch(query)}:${limit}`;
+
+    const result = await globalCacheService.getOrFetch(
+      cacheKey,
+      () => this.jiosaavnProvider.searchAlbums(query.trim(), limit),
+      MUSIC_ENGINE_CONFIG.metadataCacheTtlMs
+    );
+
+    return result ?? [];
+  }
+
   async searchPlaylists(query: string, limit = 10): Promise<PlaylistSummary[]> {
     if (!query || !query.trim()) return [];
     const cacheKey = `playlist-search:${normalizeStringForSearch(query)}:${limit}`;

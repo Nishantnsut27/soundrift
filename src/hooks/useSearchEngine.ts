@@ -35,7 +35,7 @@ export function useSearchEngine() {
 
   const requestRef = useRef<AbortController | null>(null);
   const sequenceRef = useRef(0);
-  /** Last query a request was started for, so the same one is never fetched twice. */
+  /** The last query a request was started for, so the same search never runs twice. */
   const lastRunRef = useRef('');
   const debouncedInput = useDebounce(searchInput, 300);
 
@@ -96,8 +96,8 @@ export function useSearchEngine() {
     if (searchInput.trim() && searchInput !== debouncedInput) setLoading(true);
   }, [searchInput, debouncedInput, currentView, setLoading]);
 
-  // Explicit search requests: submitting a field, picking a suggestion, opening an
-  // artist or album, retrying after an error. These run immediately.
+  // Explicit search requests: submitting a field, picking a suggestion, following
+  // an artist or album name, retrying after an error. These run immediately.
   useEffect(() => {
     const runRequestedSearch = (event: Event) => {
       const value = (event as CustomEvent<string>).detail;
@@ -115,6 +115,7 @@ export function useSearchEngine() {
   // the address bar is what the page restores from.
   useEffect(() => {
     if (currentView !== 'search') return;
+
     const fromUrl = readQueryFromUrl();
     if (!fromUrl) return;
     if (usePlayerStore.getState().searchInput.trim() === fromUrl) return;
@@ -134,7 +135,7 @@ export function useSearchEngine() {
     if (currentView !== 'search') return;
 
     const clean = query.trim();
-    const target = clean ? `${SEARCH_PATH}?${new URLSearchParams({ q: clean })}` : SEARCH_PATH;
+    const target = clean ? `${SEARCH_PATH}?q=${encodeURIComponent(clean)}` : SEARCH_PATH;
     if (`${window.location.pathname}${window.location.search}` === target) return;
 
     try {

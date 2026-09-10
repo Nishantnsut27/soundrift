@@ -1,6 +1,6 @@
 import { MusicCard } from './MusicCard';
 import { useTrackPlayback } from '../hooks/useTrackPlayback';
-import type { Track } from '../types/types';
+import type { QueueContext, Track } from '../types/types';
 
 interface TrackCardGridProps {
   tracks: Track[];
@@ -18,6 +18,13 @@ interface TrackCardGridProps {
    * empty when there is no action behind it.
    */
   onExplore?: (track: Track) => void;
+  /**
+   * The list Next should walk after a card here is played, and what that list
+   * is. Usually the full section, of which `tracks` is the visible row.
+   * Without both, a card plays alone and the suggestion engine takes over.
+   */
+  queue?: Track[];
+  queueContext?: QueueContext;
 }
 
 /**
@@ -33,8 +40,13 @@ export function TrackCardGrid({
   showRank = false,
   singleRow = false,
   onExplore,
+  queue,
+  queueContext,
 }: TrackCardGridProps) {
-  const { toggleTrack, currentTrackId, isPlaying } = useTrackPlayback();
+  const { toggleTrack, currentTrackId, isPlaying } = useTrackPlayback(
+    queueContext ? queue ?? tracks : undefined,
+    queueContext,
+  );
 
   return (
     <div className={`music-card-grid${singleRow ? ' music-card-grid-row' : ''}`}>

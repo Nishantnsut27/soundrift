@@ -1,10 +1,13 @@
 import { TrendingRow } from './TrendingRow';
 import { useTrackPlayback } from '../hooks/useTrackPlayback';
-import type { Track } from '../types/types';
+import type { QueueContext, Track } from '../types/types';
 
 interface TrendingListProps {
   tracks: Track[];
 }
+
+/** The ranking is the queue: playing #4 means #5 follows it. */
+const TRENDING_CONTEXT: QueueContext = { kind: 'section', id: 'trending', name: 'Trending' };
 
 /**
  * The ranking.
@@ -18,7 +21,7 @@ interface TrendingListProps {
  * number as a chart position or a proprietary score.
  */
 export function TrendingList({ tracks }: TrendingListProps) {
-  const { toggleTrack, currentTrackId, isPlaying } = useTrackPlayback();
+  const { toggleTrack, currentTrackId, isPlaying } = useTrackPlayback(tracks, TRENDING_CONTEXT);
 
   return (
     /* role="list" is not redundant here: Safari drops list semantics from any

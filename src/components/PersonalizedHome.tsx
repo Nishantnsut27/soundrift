@@ -1,13 +1,25 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { usePlayerStore } from '../store/playerStore';
-import type { Track } from '../types/types';
+import type { QueueContext, Track } from '../types/types';
 import { TrackListModern } from './TrackListModern';
 import { MusicAPI } from '../services/musicApi';
 import { SearchBar } from './SearchBar';
 import { SearchResults } from './SearchResults';
 import { CuratedSections } from './CuratedSections';
 import { formatArtistNames } from '../utils/formatters';
+
+/** Both shelves on this page play through the list they show. */
+const RECENT_CONTEXT: QueueContext = {
+  kind: 'section',
+  id: 'recently-played',
+  name: 'Continue Listening',
+};
+const TRENDING_CONTEXT: QueueContext = {
+  kind: 'section',
+  id: 'home-trending',
+  name: 'Trending & Recommended',
+};
 
 function getPersonalizedGreeting(): string {
   const baseMessages = [
@@ -269,7 +281,13 @@ export function PersonalizedHome() {
           </div>
           <div className="recent-tracks-grid">
             {recentlyPlayed.slice(0, 6).map((track: Track, index) => (
-              <div key={`${track.id}-${index}`} className="recent-track-card" onClick={() => playTrack(track)}>
+              <div
+                key={`${track.id}-${index}`}
+                className="recent-track-card"
+                /* The shelf is a list, so Next carries on down it instead of
+                   stranding the one card that was clicked. */
+                onClick={() => playTrack(track, recentlyPlayed, index, RECENT_CONTEXT)}
+              >
                 <div className="track-cover-wrapper">
                   <img
                     src={track.image || track.album_image || '/Favicon.png'}
@@ -309,7 +327,13 @@ export function PersonalizedHome() {
         {isSearching ? (
           <SearchResults tracks={results} query={query} isLoading={isLoading} error={error} />
         ) : (
-          <TrackListModern tracks={featuredTracks} title="" isLoading={isLoading} error={error} />
+          <TrackListModern
+            tracks={featuredTracks}
+            title=""
+            isLoading={isLoading}
+            error={error}
+            queueContext={TRENDING_CONTEXT}
+          />
         )}
         
         {!isSearching && hasMoreTracks && (

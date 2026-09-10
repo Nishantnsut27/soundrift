@@ -92,7 +92,13 @@ function TrailRow({ title, tracks, onExplore }: TrailRowProps) {
   return (
     <section className="discover-trail-row">
       <h3 className="t-h3 discover-trail-row-title truncate">{title}</h3>
-      <TrackCardGrid tracks={tracks.slice(0, ROW_LENGTH)} onExplore={onExplore} singleRow />
+      <TrackCardGrid
+        tracks={tracks.slice(0, ROW_LENGTH)}
+        queue={tracks}
+        queueContext={{ kind: 'section', id: `trail:${title}`, name: title }}
+        onExplore={onExplore}
+        singleRow
+      />
     </section>
   );
 }

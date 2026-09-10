@@ -132,7 +132,15 @@ export function DiscoverPage() {
               role="region"
               aria-label={openCollection.title}
             >
-              <TrackCardGrid tracks={openCollection.tracks} onExplore={trail.explore} />
+              <TrackCardGrid
+                tracks={openCollection.tracks}
+                queueContext={{
+                  kind: 'section',
+                  id: openCollection.sectionId,
+                  name: openCollection.title,
+                }}
+                onExplore={trail.explore}
+              />
             </div>
           )}
         </ContentSection>

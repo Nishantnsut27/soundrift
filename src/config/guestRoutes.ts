@@ -63,19 +63,8 @@ export const GUEST_ROUTES: Record<GuestRouteView, GuestRouteMeta> = {
 };
 
 /**
- * Routes whose dedicated experience is not built yet. Home, Search, Discover and
- * Trending all have real surfaces; everything else previews from Home's curated
- * data and says so. A route leaves this list the day its own page ships.
+ * Every guest route now has its own surface, so there is no preview fallback
+ * left to declare. If a future route ships before its page does, reintroduce a
+ * narrow preview type here rather than pointing it at another route's data.
  */
-export type GuestPreviewRouteView = Extract<
-  GuestRouteView,
-  'new-releases'
->;
 
-export const GUEST_PREVIEW_ROUTES: readonly GuestPreviewRouteView[] = [
-  'new-releases',
-];
-
-export function isGuestPreviewRoute(view: AppView): view is GuestPreviewRouteView {
-  return (GUEST_PREVIEW_ROUTES as readonly AppView[]).includes(view);
-}

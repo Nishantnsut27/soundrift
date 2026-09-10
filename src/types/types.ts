@@ -24,25 +24,42 @@ export interface Track {
   };
 }
 
-export interface Artist {
+/** A search hit for a catalogue playlist. Songs arrive only when one is opened. */
+export interface PlaylistSummary {
   id: string;
   name: string;
-  website: string;
-  joindate: string;
   image: string;
   songCount?: number;
-  albums?: Album[];
-  topTracks?: Track[];
-  relatedArtists?: Artist[];
+  language?: string;
+  provider?: string;
+}
+
+/** A page of results plus the true size of the collection behind it. */
+export interface PagedResult<T> {
+  total: number;
+  items: T[];
+}
+
+/** A JioSaavn editorial playlist, distinct from a listener's own `Playlist`. */
+export interface CataloguePlaylist {
+  id: string;
+  name: string;
+  tracks: Track[];
+  image?: string;
+  description?: string;
+  provider?: string;
 }
 
 export interface Album {
   id: string;
   name: string;
-  releasedate: string;
+  description?: string;
+  year?: number | string;
+  releasedate?: string;
   artist_id: string;
   artist_name: string;
   image: string;
+  songs?: Track[];
   tracks?: Track[];
   songCount?: number;
   duration?: number;
@@ -109,7 +126,31 @@ export interface PlayerState {
   sessionId: number;
   isShuffling: boolean;
   repeatMode: 'none' | 'one' | 'all';
+  /** Where the current queue came from. See {@link QueueContext}. */
+  queueContext: QueueContext;
 }
+
+/**
+ * What the queue represents, which decides what Next means.
+ *
+ * Three behaviours, not two:
+ *
+ * - `single` is one loose track with no list behind it. The suggestion engine
+ *   tops it up so playback keeps going.
+ * - `album` and `playlist` are finite collections the listener deliberately
+ *   opened. Next walks to the end and stops; no suggestions are appended.
+ * - `section` is a rendered row or list — Trending, a curated section, search
+ *   results. Next walks it in the order shown, and the suggestion engine extends
+ *   it once it runs low, so a six-card row does not dead-end.
+ *
+ * Deliberately transient: it describes the live queue, so it is rebuilt on the
+ * next play rather than persisted.
+ */
+export type QueueContext =
+  | { kind: 'single' }
+  | { kind: 'album'; id: string; name: string }
+  | { kind: 'playlist'; id: string; name: string }
+  | { kind: 'section'; id: string; name: string };
 
 export interface SearchState {
   /**

@@ -13,6 +13,7 @@ export function useRecommendations() {
   const repeatMode = usePlayerStore(s => s.repeatMode);
   const autoplayEnabled = usePlayerStore(s => s.autoplayEnabled);
   const sessionId = usePlayerStore(s => s.sessionId);
+  const queueKind = usePlayerStore(s => s.queueContext.kind);
 
   const storeRef = useRef(usePlayerStore.getState());
   const loadingRef = useRef(false);
@@ -65,10 +66,14 @@ export function useRecommendations() {
   useEffect(() => {
     if (!trackId || !autoplayEnabled || !isPlaying) return;
     if (repeatMode === 'one') return;
+    // An album or a playlist is a finite thing the listener opened. Next walks it
+    // to the end and stops. A loose track and a rendered section both earn a
+    // radio, but the section only once the threshold below says it is running out.
+    if (queueKind === 'album' || queueKind === 'playlist') return;
 
     const remaining = queueLength - currentIndex - 1;
     if (remaining > TOP_UP_THRESHOLD) return;
 
     void topUpRef.current(trackId);
-  }, [trackId, currentIndex, queueLength, isPlaying, autoplayEnabled, repeatMode, sessionId]);
+  }, [trackId, currentIndex, queueLength, isPlaying, autoplayEnabled, repeatMode, sessionId, queueKind]);
 }

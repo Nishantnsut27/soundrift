@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import type { Track } from '../types/types';
+import type { QueueContext, Track } from '../types/types';
 import { usePlayerStore } from '../store/playerStore';
 import { useToastStore } from '../store/toastStore';
 import { ConfirmModal } from './ConfirmModal';
@@ -17,8 +17,16 @@ interface TrackListProps {
   isLoading?: boolean;
   error?: string | null;
   playlistId?: string;
+  /** The order to play through, when it differs from the rows on screen. */
   playQueue?: Track[];
-  startRelatedRadio?: boolean;
+  /**
+   * Marks this list as a collection, which makes Next walk it to the end instead
+   * of handing over to the suggestion radio. Omit it on a list that is a set of
+   * loose results — search, Home, Trending — where each row is its own thing.
+   * Lists rendered for one of the listener's own playlists derive this from
+   * `playlistId` and need not pass it.
+   */
+  queueContext?: QueueContext;
   /**
    * 'auto' keeps the existing split: artwork cards for guests, rows for signed-in
    * users. 'list' forces compact rows for both, which is what search results want
@@ -34,6 +42,8 @@ export function TrackListModern({
   isLoading = false,
   error = null,
   playlistId,
+  playQueue,
+  queueContext,
   variant = 'auto',
 }: TrackListProps) {
   const [showPlaylistMenu, setShowPlaylistMenu] = useState<string | null>(null);
@@ -62,6 +72,16 @@ export function TrackListModern({
     favorites
   } = usePlayerStore();
 
+  /**
+   * What Next means after this list. Passed explicitly by album and catalogue
+   * pages; derived for the listener's own playlists, which already pass
+   * `playlistId` so a row can offer "remove from playlist".
+   */
+  const resolvedContext: QueueContext = queueContext
+    ?? (playlistId
+      ? { kind: 'playlist', id: playlistId, name: playlists.find(p => p.id === playlistId)?.name || 'Playlist' }
+      : { kind: 'single' });
+
   const handlePlayTrack = (track: Track) => {
     if (currentTrack?.id === track.id) {
       if (isPlaying) {
@@ -69,9 +89,18 @@ export function TrackListModern({
       } else {
         setIsPlaying(true);
       }
-    } else {
-      playTrack(track);
+      return;
     }
+
+    /* Only a collection becomes the queue. A row in a set of loose results — a
+       search hit, a card on Home — still plays alone and still gets a radio. */
+    if (resolvedContext.kind === 'single') {
+      playTrack(track);
+      return;
+    }
+
+    const list = playQueue ?? tracks;
+    playTrack(track, list, list.findIndex(t => String(t.id) === String(track.id)), resolvedContext);
   };
 
   useEffect(() => {
