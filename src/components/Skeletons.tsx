@@ -134,18 +134,6 @@ export function SkeletonSearchResults() {
 
       <section className="search-section">
         <Skeleton width="5rem" height="1.1rem" className="skeleton-section-title" />
-        <div className="search-artist-grid">
-          {Array.from({ length: 5 }).map((_, index) => (
-            <div className="search-artist-skeleton" key={index}>
-              <Skeleton width="100%" height="auto" borderRadius="50%" style={{ aspectRatio: '1 / 1' }} />
-              <Skeleton width="70%" height="0.8rem" />
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="search-section">
-        <Skeleton width="5rem" height="1.1rem" className="skeleton-section-title" />
         <div className="search-album-grid">
           {Array.from({ length: 5 }).map((_, index) => (
             <div className="search-album-skeleton" key={index}>

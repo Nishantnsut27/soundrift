@@ -94,6 +94,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       await authApi.logout();
     } catch {
+      /* The server may already have dropped the session; local sign-out still proceeds. */
     } finally {
       removeStoredToken();
       set({
@@ -123,6 +124,7 @@ export const useAuthStore = create<AuthState>((set) => ({
           localStorage.removeItem('playlists');
           localStorage.removeItem('favorites');
         } catch {
+          /* Storage can be blocked; the in-memory store above is already cleared. */
         }
         sessionStorage.removeItem('player-playback');
         window.dispatchEvent(new CustomEvent('reset-search-state'));

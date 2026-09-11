@@ -29,7 +29,12 @@ export function seekAudio(targetTime: number) {
   const max = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : state.duration || state.currentTrack?.duration || 0;
   const time = Math.max(0, max ? Math.min(targetTime, max) : targetTime);
   if (!Number.isFinite(time) || !state.currentTrack) return;
-  try { audio.currentTime = time; state.setCurrentTime(time); } catch { }
+  try {
+    audio.currentTime = time;
+    state.setCurrentTime(time);
+  } catch {
+    /* Not seekable until metadata lands; playback continues from where it is. */
+  }
 }
 
 function persistPlayback() {
@@ -57,7 +62,11 @@ function attachAudioListeners(audio: HTMLAudioElement) {
       lastReportedTime = audio.currentTime;
       store().setCurrentTime(audio.currentTime);
       if ('mediaSession' in navigator && Number.isFinite(audio.duration) && audio.duration > 0) {
-        try { navigator.mediaSession.setPositionState({ duration: audio.duration, position: Math.min(audio.currentTime, audio.duration) }); } catch { }
+        try {
+          navigator.mediaSession.setPositionState({ duration: audio.duration, position: Math.min(audio.currentTime, audio.duration) });
+        } catch {
+          /* Throws on a non-finite position; the lock-screen scrubber is cosmetic. */
+        }
       }
       persistPlayback();
     }
@@ -121,14 +130,16 @@ export function usePlayer() {
 
   useEffect(() => {
     attachAudioListeners(audio);
-  }, []);
+  }, [audio]);
   useEffect(() => {
     if (restored.current || currentTrack || typeof sessionStorage === 'undefined') return;
     restored.current = true;
     try {
       const saved = JSON.parse(sessionStorage.getItem(STORAGE_KEYS.PLAYBACK) || '');
       if (saved?.track?.id) usePlayerStore.setState({ currentTrack: saved.track, currentTime: Number(saved.position) || 0, duration: saved.track.duration || 0, isPlaying: false });
-    } catch { }
+    } catch {
+      /* No resumable session; the player simply starts empty. */
+    }
   }, [currentTrack]);
 
   useEffect(() => {

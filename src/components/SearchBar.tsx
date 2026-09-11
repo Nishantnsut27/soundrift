@@ -34,6 +34,7 @@ const makeSuggestions = (tracks: Track[]): DropdownItem[] => {
 export function SearchBar() {
   const [activeIndex, setActiveIndex] = useState(-1);
   const [isOpen, setIsOpen] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
 
   const searchInput = usePlayerStore((state) => state.searchInput);
   const results = usePlayerStore((state) => state.results);
@@ -66,8 +67,11 @@ export function SearchBar() {
         submitQuery(searchInput);
       }}
     >
-      <div className="search-bar-shell" onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setIsOpen(false);
+      <div className="search-bar-shell" onFocus={() => setIsFocused(true)} onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          setIsOpen(false);
+          setIsFocused(false);
+        }
       }}>
         <div className="search-bar-container">
           <div className="search-bar-icon-badge" aria-hidden="true">
@@ -115,7 +119,7 @@ export function SearchBar() {
             className="search-bar-input"
             aria-label="Search"
             aria-autocomplete="list"
-            aria-expanded={isOpen && dropdownItems.length > 0}
+            aria-expanded={isOpen && isFocused && dropdownItems.length > 0}
             aria-controls="search-suggestions"
             aria-activedescendant={activeIndex >= 0 ? `search-suggestion-${activeIndex}` : undefined}
             autoComplete="off"
@@ -126,7 +130,8 @@ export function SearchBar() {
               type="button"
               onClick={() => {
                 clearResults();
-                setIsOpen(true);
+                setIsOpen(false);
+                setActiveIndex(-1);
               }}
               className="search-bar-clear-btn"
               aria-label="Clear search"
@@ -136,7 +141,7 @@ export function SearchBar() {
           )}
         </div>
 
-        {isOpen && dropdownItems.length > 0 && (
+        {isOpen && isFocused && dropdownItems.length > 0 && (
           <div
             id="search-suggestions"
             className="search-suggestions"
