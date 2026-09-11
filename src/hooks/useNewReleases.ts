@@ -69,7 +69,11 @@ function albumYearValue(album: Album): number | null {
  * the real `year` field, newest first; albums with no year sort last rather
  * than being given an invented one.
  */
-export function useNewReleases(sections: CuratedSection[], freshSongs: Track[]): NewReleasesState {
+export function useNewReleases(
+  sections: CuratedSection[],
+  freshSongs: Track[],
+  isCuratedLoading: boolean,
+): NewReleasesState {
   const [albums, setAlbums] = useState<Album[]>([]);
   const [isLoadingAlbums, setIsLoadingAlbums] = useState(true);
   const [albumsError, setAlbumsError] = useState<string | null>(null);
@@ -81,7 +85,16 @@ export function useNewReleases(sections: CuratedSection[], freshSongs: Track[]):
 
   useEffect(() => {
     if (!artistKey) {
-      /* Curated payload has not arrived yet; stay in the loading state. */
+      /* Still waiting on the curated payload: the skeleton is honest. */
+      if (isCuratedLoading) return;
+
+      /* Curated has settled and carries no featured artist, so there is nothing
+         to request. That is an absence of data, not a failed request, so the
+         page falls through to its own empty state rather than an error. */
+      ++sequenceRef.current;
+      setAlbums([]);
+      setAlbumsError(null);
+      setIsLoadingAlbums(false);
       return;
     }
 
@@ -136,7 +149,7 @@ export function useNewReleases(sections: CuratedSection[], freshSongs: Track[]):
         if (requestId !== sequenceRef.current) return;
         setIsLoadingAlbums(false);
       });
-  }, [artistKey]);
+  }, [artistKey, isCuratedLoading]);
 
   return { albums, songs: freshSongs, isLoadingAlbums, albumsError };
 }

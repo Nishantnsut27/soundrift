@@ -2802,3 +2802,56 @@
     flex-basis: 100%;
   }
 }
+
+/* ------------------------------------------------------------------ *
+ * Touch targets
+ * ------------------------------------------------------------------ */
+/* These controls are sized by their padding, which reads well under a mouse but
+   leaves a target a fingertip cannot reliably hit. Raised to the shared
+   --touch-target-min only where there is no hover, so desktop density is
+   untouched. */
+@media (hover: none) {
+  .mobile-menu-toggle {
+    width: var(--touch-target-min);
+    height: var(--touch-target-min);
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* The name is hidden on touch, leaving the icon plus padding at 34px wide.
+     The pill keeps its shape; it just stops being narrower than a fingertip. */
+  .user-avatar-btn {
+    min-height: var(--touch-target-min);
+    min-width: var(--touch-target-min);
+  }
+
+  /* The dense variant is a deliberate choice where vertical space is scarce, but
+     a primary action still has to be hittable on a phone. */
+  .sr-btn-sm {
+    min-height: var(--touch-target-min);
+  }
+
+  .sidebar-footer-link,
+  .sidebar-guest-footer .pwa-install-btn {
+    min-height: var(--touch-target-min);
+  }
+
+  /* A legal link is text, not a control, so it gets a hit area rather than a
+     box: the row spacing is padding the pointer cannot see. */
+  .sidebar-footer-legal a {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--touch-target-min);
+    padding: 0 0.15rem;
+  }
+}
+
+/* The nav list is the one place with real vertical pressure: twelve rows, and a
+   short landscape viewport already compacts them on purpose. Honouring that —
+   the sidebar scrolls either way, but a phone held sideways should not have to
+   scroll past six screens of navigation. */
+@media (hover: none) and (min-height: 551px) {
+  .sidebar .sidebar-nav .sidebar-nav-item {
+    min-height: var(--touch-target-min);
+  }
+}

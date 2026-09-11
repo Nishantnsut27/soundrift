@@ -148,6 +148,12 @@ interface PlayerStore extends PlayerState {
   shuffleOrder: number[];
   shufflePosition: number;
   volumeBeforeMute: number;
+  /**
+   * Set when the listener empties Up Next, so the suggestion engine does not
+   * immediately refill the queue they just cleared. Reset by the next explicit
+   * play, which is a fresh statement of intent. Session state, never persisted.
+   */
+  autoQueueSuppressed: boolean;
 }
 
 interface SearchStore extends SearchState {
@@ -317,6 +323,7 @@ export const usePlayerStore = create<AppStore>()(
     shufflePosition: 0,
     repeatMode: 'none',
     queueContext: SINGLE_CONTEXT,
+    autoQueueSuppressed: false,
 
     searchInput: '',
     query: '',
@@ -368,6 +375,7 @@ export const usePlayerStore = create<AppStore>()(
         queue: newQueue,
         currentIndex: newIndex,
         queueContext: context,
+        autoQueueSuppressed: false,
         playbackHistory: [],
         sessionId: state.sessionId + 1,
         currentTime: 0,
@@ -573,18 +581,27 @@ export const usePlayerStore = create<AppStore>()(
 
       /* Removing the track that is playing takes it out of the running order but
          leaves it playing: the listener asked to drop it from the queue, not to
-         be cut off mid-song. Next then continues from where it now sits. */
+         be cut off mid-song. The current position then sits just before the
+         entry that took its slot, so Next plays that entry instead of skipping
+         it, and Up Next in the panel starts there too. */
+      const removedCurrent = index === state.currentIndex;
+
       let currentIndex = state.currentIndex;
       if (index < state.currentIndex) currentIndex -= 1;
-      else if (index === state.currentIndex) currentIndex = Math.min(index, newQueue.length - 1);
+      else if (removedCurrent) currentIndex = index - 1;
+
+      let shufflePosition = state.shufflePosition;
+      if (state.isShuffling) {
+        const removedPosition = state.shuffleOrder.indexOf(index);
+        if (removedPosition !== -1 && removedPosition <= state.shufflePosition) shufflePosition -= 1;
+        shufflePosition = Math.max(-1, Math.min(shufflePosition, shuffleOrder.length - 1));
+      }
 
       set({
         queue: newQueue,
         currentIndex: newQueue.length === 0 ? -1 : currentIndex,
         shuffleOrder,
-        shufflePosition: state.isShuffling
-          ? Math.min(state.shufflePosition, Math.max(0, shuffleOrder.length - 1))
-          : state.shufflePosition,
+        shufflePosition,
       });
     },
 
@@ -623,8 +640,9 @@ export const usePlayerStore = create<AppStore>()(
         shufflePosition: 0,
         queueContext: SINGLE_CONTEXT,
         /* Bumped so a suggestion request already in flight cannot land and refill
-           the queue that was just emptied. */
+           the queue that was just emptied. The flag stops a fresh one starting. */
         sessionId: state.sessionId + 1,
+        autoQueueSuppressed: true,
       };
     }),
 
@@ -638,6 +656,7 @@ export const usePlayerStore = create<AppStore>()(
       shuffleOrder: [],
       shufflePosition: 0,
       queueContext: SINGLE_CONTEXT,
+      autoQueueSuppressed: false,
       sessionId: state.sessionId + 1,
     })),
 

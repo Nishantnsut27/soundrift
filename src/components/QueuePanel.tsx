@@ -55,7 +55,7 @@ export function QueuePanel() {
 
   if (!isQueueOpen) return null;
 
-  const nowPlaying = currentIndex >= 0 ? queue[currentIndex] : undefined;
+  const nowPlaying = currentTrack ?? undefined;
   const upNext = currentIndex >= 0 ? queue.slice(currentIndex + 1) : queue;
 
   const move = (entry: QueueEntry, direction: -1 | 1) => {

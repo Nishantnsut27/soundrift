@@ -40,7 +40,8 @@ export function NewReleasesPage() {
   const fresh = findCuratedSection(sections, 'fresh_releases');
   const { albums, songs, isLoadingAlbums, albumsError } = useNewReleases(
     sections,
-    fresh?.tracks ?? []
+    fresh?.tracks ?? [],
+    isLoadingSections
   );
   const openAlbum = usePlayerStore((state) => state.openAlbum);
 

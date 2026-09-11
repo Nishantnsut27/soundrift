@@ -34,24 +34,24 @@ export function PwaProvider() {
       });
     };
 
+    const handleControllerChange = () => {
+      toast('Updated', {
+        description: 'App updated to the latest version.',
+        icon: <RefreshCw size={18} />,
+        duration: 3000,
+      });
+    };
+
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
     window.addEventListener('appinstalled', handleAppInstalled);
-
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.addEventListener('controllerchange', () => {
-        toast('Updated', {
-          description: 'App updated to the latest version.',
-          icon: <RefreshCw size={18} />,
-          duration: 3000,
-        });
-      });
-    }
+    navigator.serviceWorker?.addEventListener('controllerchange', handleControllerChange);
 
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
       window.removeEventListener('appinstalled', handleAppInstalled);
+      navigator.serviceWorker?.removeEventListener('controllerchange', handleControllerChange);
     };
   }, []);
 

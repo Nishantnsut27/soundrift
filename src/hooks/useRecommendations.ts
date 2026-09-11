@@ -14,6 +14,7 @@ export function useRecommendations() {
   const autoplayEnabled = usePlayerStore(s => s.autoplayEnabled);
   const sessionId = usePlayerStore(s => s.sessionId);
   const queueKind = usePlayerStore(s => s.queueContext.kind);
+  const autoQueueSuppressed = usePlayerStore(s => s.autoQueueSuppressed);
 
   const storeRef = useRef(usePlayerStore.getState());
   const loadingRef = useRef(false);
@@ -66,6 +67,9 @@ export function useRecommendations() {
   useEffect(() => {
     if (!trackId || !autoplayEnabled || !isPlaying) return;
     if (repeatMode === 'one') return;
+    // Clearing Up Next is an instruction to stop extending this queue, so the
+    // radio stays off until the listener starts something new.
+    if (autoQueueSuppressed) return;
     // An album or a playlist is a finite thing the listener opened. Next walks it
     // to the end and stops. A loose track and a rendered section both earn a
     // radio, but the section only once the threshold below says it is running out.
@@ -75,5 +79,5 @@ export function useRecommendations() {
     if (remaining > TOP_UP_THRESHOLD) return;
 
     void topUpRef.current(trackId);
-  }, [trackId, currentIndex, queueLength, isPlaying, autoplayEnabled, repeatMode, sessionId, queueKind]);
+  }, [trackId, currentIndex, queueLength, isPlaying, autoplayEnabled, repeatMode, sessionId, queueKind, autoQueueSuppressed]);
 }

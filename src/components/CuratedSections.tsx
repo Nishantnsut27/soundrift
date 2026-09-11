@@ -1,42 +1,14 @@
-import { useEffect, useState } from 'react';
-import { MusicAPI } from '../services/musicApi';
-import type { CuratedSection } from '../types/types';
+import { useCuratedSections } from '../hooks/useCuratedSections';
 import { TrackListModern } from './TrackListModern';
 
-const REFRESH_INTERVAL_MS = 60_000;
-
+/**
+ * Reads the shared curated payload rather than fetching its own. This used to
+ * run a second 60s timer against the same endpoint, so authenticated Home polled
+ * it twice a minute; the hook already holds one refcounted timer and dedupes
+ * concurrent loads for every other surface that shows this material.
+ */
 export function CuratedSections() {
-  const [sections, setSections] = useState<CuratedSection[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    let refreshInFlight = false;
-
-    const loadSections = async (): Promise<void> => {
-      if (refreshInFlight) return;
-      refreshInFlight = true;
-
-      try {
-        const nextSections = await MusicAPI.getCuratedSections();
-        if (!cancelled) setSections(nextSections);
-      } catch (error) {
-        console.warn('[CuratedSections] Failed to load curated sections', error);
-      } finally {
-        refreshInFlight = false;
-        if (!cancelled) setIsLoading(false);
-      }
-    };
-
-    void loadSections();
-    const refreshTimer = window.setInterval(() => void loadSections(), REFRESH_INTERVAL_MS);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(refreshTimer);
-    };
-  }, []);
-
+  const { sections, isLoading } = useCuratedSections();
   if (!isLoading && sections.length === 0) return null;
 
   return (

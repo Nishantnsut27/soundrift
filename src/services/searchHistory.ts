@@ -19,6 +19,7 @@ const HISTORY_LIMIT = 10;
 let items: SearchHistoryItem[] = [];
 let loadedFor: boolean | null = null;
 let inFlight: Promise<void> | null = null;
+let inFlightFor: boolean | null = null;
 const listeners = new Set<() => void>();
 
 const emit = () => listeners.forEach((listener) => listener());
@@ -52,23 +53,40 @@ const setItems = (next: SearchHistoryItem[]) => {
   emit();
 };
 
-/** Fetches once per auth state. Concurrent callers share the same request. */
+/**
+ * Fetches once per auth state. Concurrent callers for the same auth state share
+ * the same request.
+ *
+ * Every request is tagged with the auth state that started it and re-checks it
+ * on arrival. Signing out mid-request must not publish the account's searches to
+ * the guest that replaced it, and must not be handed the account's promise.
+ */
 export function loadSearchHistory(force = false): Promise<void> {
   const isAuthenticated = useAuthStore.getState().isAuthenticated;
-  if (!force && loadedFor === isAuthenticated) return inFlight ?? Promise.resolve();
-  if (inFlight && !force) return inFlight;
+  const matchesInFlight = inFlight !== null && inFlightFor === isAuthenticated;
+  if (!force && loadedFor === isAuthenticated) {
+    return matchesInFlight && inFlight ? inFlight : Promise.resolve();
+  }
+  if (!force && matchesInFlight && inFlight) return inFlight;
 
   loadedFor = isAuthenticated;
-  inFlight = (async () => {
+  inFlightFor = isAuthenticated;
+
+  const request = (async () => {
     const next = isAuthenticated
       ? await userApi.getSearchHistory().catch(() => [])
       : readGuestHistory();
+    if (useAuthStore.getState().isAuthenticated !== isAuthenticated) return;
     setItems(next);
   })().finally(() => {
-    inFlight = null;
+    if (inFlight === request) {
+      inFlight = null;
+      inFlightFor = null;
+    }
   });
 
-  return inFlight;
+  inFlight = request;
+  return request;
 }
 
 export async function saveSearch(value: string): Promise<void> {

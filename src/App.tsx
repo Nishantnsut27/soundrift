@@ -5,22 +5,23 @@ import { QueuePanel } from './components/QueuePanel';
 import { Sidebar } from './components/Sidebar';
 import { ToastContainer } from './components/ToastContainer';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { withChunkReload } from './utils/chunkReload';
 
-const PersonalizedHome = lazy(() => import('./components/PersonalizedHome').then(m => ({ default: m.PersonalizedHome })));
-const GuestExperience = lazy(() => import('./components/GuestExperience').then(m => ({ default: m.GuestExperience })));
-const SearchPage = lazy(() => import('./components/SearchPage').then(m => ({ default: m.SearchPage })));
-const RelatedMusic = lazy(() => import('./components/RelatedMusic').then(m => ({ default: m.RelatedMusic })));
-const DiscoverySection = lazy(() => import('./components/DiscoverySection').then(m => ({ default: m.DiscoverySection })));
-const AlbumPage = lazy(() => import('./components/AlbumPage').then(m => ({ default: m.AlbumPage })));
-const GenresPage = lazy(() => import('./components/GenresPage').then(m => ({ default: m.GenresPage })));
-const GenrePage = lazy(() => import('./components/GenrePage').then(m => ({ default: m.GenrePage })));
-const NewReleasesPage = lazy(() => import('./components/NewReleasesPage').then(m => ({ default: m.NewReleasesPage })));
-const DiscoverPage = lazy(() => import('./components/DiscoverPage').then(m => ({ default: m.DiscoverPage })));
-const TrendingPage = lazy(() => import('./components/TrendingPage').then(m => ({ default: m.TrendingPage })));
-const FavoritesPage = lazy(() => import('./components/library/FavoritesPage').then(m => ({ default: m.FavoritesPage })));
-const PlaylistsPage = lazy(() => import('./components/library/PlaylistsPage').then(m => ({ default: m.PlaylistsPage })));
-const PlaylistPage = lazy(() => import('./components/library/PlaylistPage').then(m => ({ default: m.PlaylistPage })));
-const HistoryPage = lazy(() => import('./components/library/HistoryPage').then(m => ({ default: m.HistoryPage })));
+const PersonalizedHome = lazy(withChunkReload(() => import('./components/PersonalizedHome').then(m => ({ default: m.PersonalizedHome }))));
+const GuestExperience = lazy(withChunkReload(() => import('./components/GuestExperience').then(m => ({ default: m.GuestExperience }))));
+const SearchPage = lazy(withChunkReload(() => import('./components/SearchPage').then(m => ({ default: m.SearchPage }))));
+const RelatedMusic = lazy(withChunkReload(() => import('./components/RelatedMusic').then(m => ({ default: m.RelatedMusic }))));
+const DiscoverySection = lazy(withChunkReload(() => import('./components/DiscoverySection').then(m => ({ default: m.DiscoverySection }))));
+const AlbumPage = lazy(withChunkReload(() => import('./components/AlbumPage').then(m => ({ default: m.AlbumPage }))));
+const GenresPage = lazy(withChunkReload(() => import('./components/GenresPage').then(m => ({ default: m.GenresPage }))));
+const GenrePage = lazy(withChunkReload(() => import('./components/GenrePage').then(m => ({ default: m.GenrePage }))));
+const NewReleasesPage = lazy(withChunkReload(() => import('./components/NewReleasesPage').then(m => ({ default: m.NewReleasesPage }))));
+const DiscoverPage = lazy(withChunkReload(() => import('./components/DiscoverPage').then(m => ({ default: m.DiscoverPage }))));
+const TrendingPage = lazy(withChunkReload(() => import('./components/TrendingPage').then(m => ({ default: m.TrendingPage }))));
+const FavoritesPage = lazy(withChunkReload(() => import('./components/library/FavoritesPage').then(m => ({ default: m.FavoritesPage }))));
+const PlaylistsPage = lazy(withChunkReload(() => import('./components/library/PlaylistsPage').then(m => ({ default: m.PlaylistsPage }))));
+const PlaylistPage = lazy(withChunkReload(() => import('./components/library/PlaylistPage').then(m => ({ default: m.PlaylistPage }))));
+const HistoryPage = lazy(withChunkReload(() => import('./components/library/HistoryPage').then(m => ({ default: m.HistoryPage }))));
 import { usePlayerStore, type AppView } from './store/playerStore';
 import { useToastStore } from './store/toastStore';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
@@ -45,6 +46,19 @@ import './styles/animations.css';
 import './styles/auth.css';
 import './styles/legal.css';
 import { LegalPage } from './pages/LegalPage';
+
+/**
+ * A catalogue id out of the address bar. Percent-encoding that a person typed or
+ * a link mangled is not worth losing the router over, so a segment that will not
+ * decode is used as written and simply fails to match anything.
+ */
+function safeDecode(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
 
 /**
  * Views only a signed-in listener has. Each one is somebody's own data, so a
@@ -163,7 +177,7 @@ function App() {
          catalogue ids are case-sensitive; only the prefix is lower-cased. */
       const entityMatch = rawPath.match(/^\/(album|genre|playlist)\/([^/]+)$/i);
       if (entityMatch) {
-        const id = decodeURIComponent(entityMatch[2]);
+        const id = safeDecode(entityMatch[2]);
         const kind = entityMatch[1].toLowerCase();
         const store = usePlayerStore.getState();
         if (kind === 'playlist' && !isAuth) {
@@ -455,6 +469,8 @@ function App() {
             onClick={toggleSidebar}
             className="btn btn-ghost btn-icon mobile-menu-toggle"
             aria-label="Toggle menu"
+            aria-expanded={isSidebarOpen}
+            aria-controls="app-sidebar"
           >
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="3" y1="6" x2="21" y2="6" />

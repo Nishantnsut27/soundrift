@@ -327,7 +327,7 @@ export function Sidebar() {
     <>
       {isSidebarOpen && <div className="sidebar-overlay" onClick={toggleSidebar} />}
 
-      <aside className={`sidebar ${isSidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`}>
+      <aside id="app-sidebar" className={`sidebar ${isSidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`}>
         {/* Sidebar Header */}
         <div className="sidebar-header">
           <div className="sidebar-logo">
