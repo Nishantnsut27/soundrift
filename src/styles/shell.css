@@ -887,7 +887,7 @@
   }
 }
 
-@media (max-width: 767px) {
+@media (max-width: 768px) {
   .guest-hero {
     margin-bottom: 1.75rem;
   }
@@ -1219,7 +1219,7 @@
  * Discover: responsive
  * ------------------------------------------------------------------ */
 
-@media (max-width: 767px) {
+@media (max-width: 768px) {
   .discover-hero {
     margin-bottom: 1.75rem;
   }
@@ -1484,7 +1484,7 @@
  * Trending: responsive
  * ------------------------------------------------------------------ */
 
-@media (max-width: 767px) {
+@media (max-width: 768px) {
   .trending-header {
     margin-bottom: 1.25rem;
   }
@@ -1736,6 +1736,17 @@
   color: var(--text-2);
 }
 
+/* Phones: two per row, stated rather than inferred. `auto-fill` with a 158px
+   minimum silently collapses to one column once the content box drops below
+   ~336px, which turned an album shelf into a stack of full-bleed covers — one
+   record per screen. Two columns match the card size Home's rails already use. */
+@media (max-width: 599px) {
+  .browse-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem 0.75rem;
+  }
+}
+
 @media (max-width: 768px) {
   .album-header {
     flex-direction: column;
@@ -1848,6 +1859,24 @@
   overflow: hidden;
 }
 
+/* Same correction as the browse grid: the 190px minimum collapsed to a single
+   column below ~396px, so one category filled the whole screen. The padding and
+   title step down with the tile so the text block stays in proportion to it. */
+@media (max-width: 599px) {
+  .genre-tile-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+
+  .genre-tile-body {
+    padding: 0.6rem 0.7rem 0.75rem;
+  }
+
+  .genre-tile-name {
+    font-size: 0.9rem;
+  }
+}
+
 /* The single-category page. Back sits under the title rather than floating
    over the content, so it is in the tab order where it reads. */
 .genre-head-actions {
@@ -1902,24 +1931,23 @@
   transform: none;
 }
 
+/* Fixed, and portalled to <body>, because every ancestor that could hold it
+   clips: .app-content scrolls on both axes, .music-card-grid is a horizontal
+   rail on phones, and a row near the bottom of the scroll box had its menu cut
+   off entirely. Coordinates come from the trigger's rect in TrackContextMenu,
+   which also flips the panel above the trigger when the space below is short. */
 .action-menu {
-  position: absolute;
-  top: calc(100% + 0.4rem);
+  position: fixed;
   z-index: var(--z-popover);
   width: 244px;
+  max-height: min(420px, calc(100dvh - 16px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 0.35rem;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   background: var(--surface-2);
   box-shadow: var(--elev-3);
-}
-
-.action-menu-right {
-  right: 0;
-}
-
-.action-menu-left {
-  left: 0;
 }
 
 .action-menu-body {

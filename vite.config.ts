@@ -50,6 +50,10 @@ export default defineConfig({
             handler: 'NetworkOnly',
           },
           {
+            urlPattern: /\/api\/user\//i,
+            handler: 'NetworkOnly',
+          },
+          {
             urlPattern: /^https?:\/\/.*\/api\/.*/i,
             handler: 'NetworkFirst',
             options: {

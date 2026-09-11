@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Track } from '../types/types';
 import { usePlayerStore } from '../store/playerStore';
@@ -9,6 +9,9 @@ import { requireAuth } from '../utils/requireAuth';
 import { formatArtistNames } from '../utils/formatters';
 
 const MOBILE_BREAKPOINT = 768;
+const MENU_WIDTH = 244;
+const VIEWPORT_MARGIN = 8;
+const TRIGGER_GAP = 6;
 
 interface TrackContextMenuProps {
   track: Track;
@@ -40,6 +43,7 @@ export function TrackContextMenu({
   const [isMobile, setIsMobile] = useState(
     typeof window !== 'undefined' ? window.innerWidth <= MOBILE_BREAKPOINT : false,
   );
+  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
 
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const playlists = usePlayerStore((state) => state.playlists);
@@ -59,6 +63,50 @@ export function TrackContextMenu({
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  const positionMenu = useCallback(() => {
+    const trigger = triggerRef.current;
+    if (!trigger) return;
+
+    const rect = trigger.getBoundingClientRect();
+    const menuHeight = menuRef.current?.offsetHeight ?? 0;
+    const spaceBelow = window.innerHeight - rect.bottom - VIEWPORT_MARGIN;
+    const spaceAbove = rect.top - VIEWPORT_MARGIN;
+
+    const openUpward = menuHeight > 0 && spaceBelow < menuHeight && spaceAbove > spaceBelow;
+    const top = openUpward
+      ? Math.max(VIEWPORT_MARGIN, rect.top - menuHeight - TRIGGER_GAP)
+      : rect.bottom + TRIGGER_GAP;
+
+    const preferredLeft = align === 'right' ? rect.right - MENU_WIDTH : rect.left;
+    const maxLeft = window.innerWidth - MENU_WIDTH - VIEWPORT_MARGIN;
+    const left = Math.max(VIEWPORT_MARGIN, Math.min(preferredLeft, maxLeft));
+
+    setMenuPosition((current) =>
+      current && current.top === top && current.left === left ? current : { top, left },
+    );
+  }, [align]);
+
+  useLayoutEffect(() => {
+    if (!isOpen || isMobile) {
+      setMenuPosition(null);
+      return;
+    }
+    positionMenu();
+  }, [isOpen, isMobile, isPlaylistsOpen, isCreating, playlists.length, positionMenu]);
+
+  useEffect(() => {
+    if (!isOpen || isMobile) return;
+
+    const reposition = () => positionMenu();
+    window.addEventListener('resize', reposition);
+    window.addEventListener('scroll', reposition, true);
+
+    return () => {
+      window.removeEventListener('resize', reposition);
+      window.removeEventListener('scroll', reposition, true);
+    };
+  }, [isOpen, isMobile, positionMenu]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -345,14 +393,20 @@ export function TrackContextMenu({
     >
       {trigger}
 
-      {isOpen && !isMobile && (
+      {isOpen && !isMobile && createPortal(
         <div
           ref={menuRef}
           id={menuId}
-          className={`action-menu action-menu-${align}`}
+          className="action-menu"
+          style={{
+            top: menuPosition?.top ?? 0,
+            left: menuPosition?.left ?? 0,
+            visibility: menuPosition ? 'visible' : 'hidden',
+          }}
         >
           {items}
-        </div>
+        </div>,
+        document.body,
       )}
 
       {isOpen && isMobile && createPortal(
