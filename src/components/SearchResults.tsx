@@ -35,7 +35,6 @@ export function SearchResults({
   if (!tracks.length) return <SearchNoResults query={query} />;
 
   const [topResult, ...otherSongs] = tracks;
-  const artists = unique(tracks, (track) => track.artist_name).slice(0, 6);
   const albums = unique(tracks.filter((track) => track.album_name), (track) => track.album_name).slice(0, 6);
   const matchedPlaylists = playlists
     .filter((playlist) => playlist.name.toLowerCase().includes(query.toLowerCase()))
@@ -106,36 +105,6 @@ export function SearchResults({
             showAddToPlaylist
             queueContext={searchContext}
           />
-        </section>
-      )}
-
-      {artists.length > 0 && (
-        <section className="search-section">
-          <h2 className="search-section-title">Artists</h2>
-          <div className="search-artist-grid">
-            {artists.map((track) => (
-              <button
-                type="button"
-                key={track.artist_id || track.artist_name}
-                className="search-artist"
-                onClick={() => requestSearch(track.artist_name)}
-                aria-label={`Search for ${track.artist_name}`}
-              >
-                <img
-                  className="search-artist-art"
-                  src={track.image || track.album_image || FALLBACK_ART}
-                  alt=""
-                  loading="lazy"
-                  decoding="async"
-                  onError={onArtError}
-                />
-                <span className="search-artist-name truncate" title={track.artist_name}>
-                  {track.artist_name}
-                </span>
-                <span className="search-entity-kind">Artist</span>
-              </button>
-            ))}
-          </div>
         </section>
       )}
 

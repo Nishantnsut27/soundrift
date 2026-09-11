@@ -204,6 +204,7 @@ body {
 
 ::-webkit-scrollbar {
   width: 10px;
+  height: 10px;
 }
 
 ::-webkit-scrollbar-track {
@@ -211,15 +212,32 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.14);
+  background: transparent;
   border-radius: 999px;
   border: 2px solid transparent;
   background-clip: padding-box;
   transition: background 0.2s ease;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.26);
+.app-content:hover::-webkit-scrollbar-thumb,
+.legal-page:hover::-webkit-scrollbar-thumb,
+.auth-modal-backdrop:hover::-webkit-scrollbar-thumb,
+.queue-panel-body:hover::-webkit-scrollbar-thumb,
+.action-menu:hover::-webkit-scrollbar-thumb,
+.action-menu-scroll:hover::-webkit-scrollbar-thumb,
+.action-menu-sheet:hover::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.16);
+  background-clip: padding-box;
+}
+
+.app-content::-webkit-scrollbar-thumb:hover,
+.legal-page::-webkit-scrollbar-thumb:hover,
+.auth-modal-backdrop::-webkit-scrollbar-thumb:hover,
+.queue-panel-body::-webkit-scrollbar-thumb:hover,
+.action-menu::-webkit-scrollbar-thumb:hover,
+.action-menu-scroll::-webkit-scrollbar-thumb:hover,
+.action-menu-sheet::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.28);
   background-clip: padding-box;
 }
 

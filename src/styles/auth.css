@@ -161,6 +161,8 @@
   font-size: var(--font-size-xs);
   color: var(--text-muted);
   margin-top: 0.15rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .user-dropdown-divider {

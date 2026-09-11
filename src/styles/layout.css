@@ -204,7 +204,7 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
-  scrollbar-color: var(--line-strong) transparent;
+  scrollbar-color: transparent transparent;
   transform: translateX(-100%);
   margin: 0;
   padding: 0;
@@ -219,8 +219,16 @@
 }
 
 .sidebar::-webkit-scrollbar-thumb {
-  background: var(--line-strong);
+  background: transparent;
   border-radius: 3px;
+}
+
+.sidebar:hover::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+}
+
+.sidebar:hover {
+  scrollbar-color: var(--line-strong) transparent;
 }
 
 .sidebar-closed {
@@ -343,10 +351,8 @@
 }
 
 .sidebar-section {
-  flex: 1;
+  flex-shrink: 0;
   padding: 0.75rem 1rem;
-  overflow-y: auto;
-  min-height: 0;
 }
 
 .sidebar-section-header {

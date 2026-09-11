@@ -206,6 +206,7 @@ function App() {
         try {
           window.history.replaceState(null, '', '/');
         } catch {
+          /* The address bar keeps the old path; the view is already on home. */
         }
         return;
       }
