@@ -2,7 +2,7 @@
   display: flex;
   height: 100vh;
   overflow: hidden;
-  background: linear-gradient(180deg, #1a1a1a 0%, #000000 100%);
+  background: var(--surface-0);
   margin: 0;
   padding: 0;
   gap: 0;
@@ -31,10 +31,12 @@
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: 1rem;
-  background: linear-gradient(135deg, rgba(26, 26, 26, 0.95) 0%, rgba(0, 0, 0, 0.95) 100%);
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid var(--border);
+  min-height: var(--header-height);
+  padding: 0.625rem 2rem;
+  /* Opaque, not translucent: content scrolls under it and the old blurred panel
+     made the first row of artwork smear. */
+  background: var(--surface-0);
+  border-bottom: 1px solid var(--line-subtle);
   position: sticky;
   top: 0;
   z-index: 10;
@@ -44,10 +46,7 @@
   font-size: var(--font-size-xl);
   font-weight: 700;
   color: var(--text);
-  background: linear-gradient(45deg, var(--primary) 0%, var(--primary-light) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  display: none; /* Hide in header on desktop */
 }
 
 @media (min-width: 769px) {
@@ -104,21 +103,18 @@
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  background: linear-gradient(180deg, 
-    rgba(24, 24, 24, 0.6) 0%, 
-    rgba(18, 18, 18, 0.8) 25%,
-    rgba(0, 0, 0, 0.9) 50%,
-    #000000 100%
-  );
+  background: var(--bg);
   position: relative;
   width: 100%;
   box-sizing: border-box;
 }
 
 .view-container {
-  max-width: 100%;
+  /* Capped and centred so wide monitors get denser rows instead of a runway of
+     empty space on either side of stretched cards. */
+  max-width: var(--content-max);
   width: 100%;
-  margin: 0;
+  margin: 0 auto;
   padding: 1.25rem 1.25rem 2rem 1.25rem;
   position: relative;
   z-index: 2;
@@ -127,23 +123,14 @@
 
 @media (min-width: 769px) {
   .view-container {
-    padding: 2rem 2.5rem 3rem 2.5rem;
+    padding: 1.75rem 2rem 2.5rem 2rem;
   }
 }
 
-.spotify-gradient-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 300px;
-  background: linear-gradient(180deg, 
-    rgba(29, 185, 84, 0.1) 0%,
-    rgba(29, 185, 84, 0.05) 30%,
-    transparent 100%
-  );
-  pointer-events: none;
-  z-index: 1;
+@media (min-width: 1200px) {
+  .view-container {
+    padding: 2rem 2.5rem 3rem 2.5rem;
+  }
 }
 
 .header-actions {
@@ -196,19 +183,44 @@
   position: fixed;
   top: 0;
   left: 0;
-  width: 260px;
+  width: var(--sidebar-width);
+  /* Stops exactly at the top of the player, so the two never overlap. The dvh
+     line is the real value and the vh line above it is the fallback for engines
+     that do not know dvh — mobile browser chrome otherwise crops the footer. */
   height: calc(100vh - var(--player-height));
-  background: linear-gradient(180deg, rgba(18, 18, 18, 0.95) 0%, rgba(0, 0, 0, 0.95) 100%);
-  backdrop-filter: blur(20px);
+  height: calc(100dvh - var(--player-height));
+  background: var(--bg);
   border-right: none;
   display: flex;
   flex-direction: column;
-  transition: all 0.3s var(--smooth);
+  /* Only the drawer slide animates. `all` also tweened height and width, so
+     every zoom step and every --player-height switch re-animated the shell. */
+  transition: transform 0.3s var(--smooth);
   z-index: 95;
-  overflow: hidden;
+  /* The sidebar scrolls itself. With `overflow: hidden` the footer became
+     unreachable whenever the viewport was shorter than the header + nav + CTA +
+     footer stack — which is what 125% zoom and 768px-tall laptops produce. */
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
   transform: translateX(-100%);
   margin: 0;
   padding: 0;
+}
+
+.sidebar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 3px;
 }
 
 .sidebar-closed {
@@ -223,15 +235,12 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid var(--border);
+  padding: 1.5rem 1.5rem 1rem 1.5rem;
   position: sticky;
   top: 0;
-  background: linear-gradient(135deg, #1db954 0%, #1ed760 100%);
+  background: var(--bg);
   z-index: 1;
   color: #ffffff;
-  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
-  margin: 0.5rem 0;
   flex-shrink: 0;
 }
 
@@ -258,10 +267,6 @@
   font-weight: 700;
   color: #ffffff !important;
   line-height: 1.2;
-  background: linear-gradient(45deg, #ffffff 0%, rgba(255, 255, 255, 0.8) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
 }
 
 .sidebar-toggle {
@@ -291,16 +296,16 @@
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 0.85rem;
+  gap: 1rem;
   width: 100%;
-  padding: 0.75rem 1rem;
+  padding: 0.5rem 1rem;
   margin: 0 auto;
   background: none;
   border: none;
-  border-radius: 8px;
-  color: #b3b3b3;
-  font-size: 0.95rem;
-  font-weight: 500;
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  font-weight: 600;
   text-align: left;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -315,10 +320,18 @@
 }
 
 .sidebar-nav-item-active {
-  background: linear-gradient(135deg, #1db954, #1ed760);
-  color: #000000;
-  font-weight: 600;
-  box-shadow: 0 4px 15px rgba(29, 185, 84, 0.3);
+  color: #ffffff;
+}
+
+.sidebar-nav-item-active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 10%;
+  height: 80%;
+  width: 3px;
+  background-color: var(--primary);
+  border-radius: 0 4px 4px 0;
 }
 
 .sidebar-badge {
@@ -640,21 +653,25 @@
   .app-main,
   .app-main-with-sidebar,
   .app-main-full {
-    margin-left: 260px !important;
-    width: calc(100vw - 260px) !important;
+    margin-left: var(--sidebar-width) !important;
+    /* Percentage, not 100vw: 100vw ignores a classic scrollbar's width and
+       rounds differently under zoom, both of which produced horizontal
+       overflow. This resolves against .app, which is already the viewport. */
+    width: calc(100% - var(--sidebar-width)) !important;
   }
-  
+
   .mobile-menu-toggle {
     display: none !important;
   }
-  
+
   .sidebar,
   .sidebar-closed,
   .sidebar-open {
     position: fixed !important;
     transform: translateX(0) !important;
     height: calc(100vh - var(--player-height));
-    width: 260px !important;
+    height: calc(100dvh - var(--player-height));
+    width: var(--sidebar-width) !important;
     left: 0;
     top: 0;
   }
@@ -662,7 +679,7 @@
   .sidebar-overlay {
     display: none !important;
   }
-  
+
   .sidebar-toggle {
     display: none !important;
   }
@@ -941,18 +958,8 @@
 }
 
 @media (max-height: 550px) and (orientation: landscape) {
-  :root {
-    --player-height: 70px;
-  }
-
-  .app-main {
-    padding-bottom: 70px;
-  }
-
-  .sidebar {
-    height: calc(100vh - 70px);
-  }
-
+  /* --player-height for this breakpoint lives in variables.css, which is the one
+     place that defines it. Nothing here may restate the number. */
   .sidebar-header {
     padding: 0.4rem 0.75rem;
     margin: 0.25rem 0;

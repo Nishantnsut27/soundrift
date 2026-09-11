@@ -1,10 +1,31 @@
 import { Request, Response } from 'express';
 import { MusicService } from '../services/musicService.js';
 import { StandardApiResponse } from '../models/music.model.js';
+import type { ArtistSortBy, ArtistSortOrder } from '../providers/musicProvider.interface.js';
 import { logger, serializeError } from '../utils/logger.js';
 import { discoveryRefreshService } from '../services/discoveryRefreshService.js';
 
 const musicService = new MusicService();
+
+/** Clamps a query value to a sane integer, so a hand-edited URL cannot ask for 10,000 rows. */
+function parsePositiveInt(raw: unknown, fallback: number, max: number): number {
+  const parsed = parseInt((raw ?? '').toString(), 10);
+  if (Number.isNaN(parsed) || parsed < 0) return fallback;
+  return Math.min(parsed, max);
+}
+
+/* The upstream API rejects anything outside these sets, so unknown values fall
+   back to the default rather than being forwarded and turned into a 400. */
+function parseArtistSortBy(raw: unknown): ArtistSortBy {
+  const value = (raw ?? '').toString();
+  return value === 'latest' || value === 'alphabetical' || value === 'popularity'
+    ? value
+    : 'popularity';
+}
+
+function parseArtistSortOrder(raw: unknown): ArtistSortOrder {
+  return (raw ?? '').toString() === 'asc' ? 'asc' : 'desc';
+}
 
 export class MusicController {
   static async getDiscovery(_req: Request, res: Response): Promise<void> {
@@ -141,40 +162,44 @@ export class MusicController {
     }
   }
 
-  static async getArtistById(req: Request, res: Response): Promise<void> {
+  static async getArtistAlbums(req: Request, res: Response): Promise<void> {
     try {
       const artistId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
       if (!artistId) {
-        res.status(400).json({
-          success: false,
-          data: null,
-          error: 'Artist ID is required.'
-        });
+        res.status(400).json({ success: false, data: null, error: 'Artist ID is required.' });
         return;
       }
 
-      const artist = await musicService.getArtistById(artistId);
-      if (!artist) {
-        res.status(404).json({
-          success: false,
-          data: null,
-          error: `Artist with ID "${artistId}" was not found.`
-        });
-        return;
-      }
-
-      res.status(200).json({
-        success: true,
-        data: artist,
-        provider: artist.provider
+      const page = await musicService.getArtistAlbums(artistId, {
+        page: parsePositiveInt(req.query.page, 0, 50),
+        sortBy: parseArtistSortBy(req.query.sortBy),
+        sortOrder: parseArtistSortOrder(req.query.sortOrder)
       });
+
+      res.status(200).json({ success: true, data: page });
     } catch (error) {
-      logger.error('MusicController', 'Get artist error', { error: serializeError(error) });
+      logger.error('MusicController', 'Get artist albums error', { error: serializeError(error) });
       res.status(500).json({
         success: false,
         data: null,
-        error: 'Failed to retrieve artist details.'
+        error: 'Failed to retrieve albums for this artist.'
       });
+    }
+  }
+
+  static async searchPlaylists(req: Request, res: Response): Promise<void> {
+    try {
+      const query = (req.query.q || req.query.query || '').toString().trim();
+      if (!query) {
+        res.status(400).json({ success: false, data: [], error: 'Search query parameter "q" is required.' });
+        return;
+      }
+
+      const playlists = await musicService.searchPlaylists(query, parsePositiveInt(req.query.limit, 10, 30));
+      res.status(200).json({ success: true, data: playlists } as StandardApiResponse<typeof playlists>);
+    } catch (error) {
+      logger.error('MusicController', 'Search playlists error', { error: serializeError(error) });
+      res.status(500).json({ success: false, data: [], error: 'Failed to search playlists.' } as StandardApiResponse<[]>);
     }
   }
 
@@ -190,7 +215,10 @@ export class MusicController {
         return;
       }
 
-      const playlist = await musicService.getPlaylistById(playlistId);
+      const playlist = await musicService.getPlaylistById(
+        playlistId,
+        parsePositiveInt(req.query.limit, 50, 100)
+      );
       if (!playlist) {
         res.status(404).json({
           success: false,

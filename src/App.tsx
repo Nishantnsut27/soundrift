@@ -1,24 +1,33 @@
 import { useEffect, useState, lazy, Suspense } from 'react';
 import { SearchBar } from './components/SearchBar';
-import { TrackListModern } from './components/TrackListModern';
 import { PlayerControls } from './components/PlayerControls';
+import { QueuePanel } from './components/QueuePanel';
 import { Sidebar } from './components/Sidebar';
-import { ConfirmModal } from './components/ConfirmModal';
-import { PlaylistMenu } from './components/PlaylistMenu';
 import { ToastContainer } from './components/ToastContainer';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { EmptyFavorites, EmptyPlaylists, EmptyRecentlyPlayed } from './components/EmptyState';
+import { withChunkReload } from './utils/chunkReload';
 
-const PersonalizedHome = lazy(() => import('./components/PersonalizedHome').then(m => ({ default: m.PersonalizedHome })));
-const GuestHome = lazy(() => import('./components/GuestHome').then(m => ({ default: m.GuestHome })));
-const RelatedMusic = lazy(() => import('./components/RelatedMusic').then(m => ({ default: m.RelatedMusic })));
-const DiscoverySection = lazy(() => import('./components/DiscoverySection').then(m => ({ default: m.DiscoverySection })));
-import { usePlayerStore } from './store/playerStore';
+const PersonalizedHome = lazy(withChunkReload(() => import('./components/PersonalizedHome').then(m => ({ default: m.PersonalizedHome }))));
+const GuestExperience = lazy(withChunkReload(() => import('./components/GuestExperience').then(m => ({ default: m.GuestExperience }))));
+const SearchPage = lazy(withChunkReload(() => import('./components/SearchPage').then(m => ({ default: m.SearchPage }))));
+const RelatedMusic = lazy(withChunkReload(() => import('./components/RelatedMusic').then(m => ({ default: m.RelatedMusic }))));
+const DiscoverySection = lazy(withChunkReload(() => import('./components/DiscoverySection').then(m => ({ default: m.DiscoverySection }))));
+const AlbumPage = lazy(withChunkReload(() => import('./components/AlbumPage').then(m => ({ default: m.AlbumPage }))));
+const GenresPage = lazy(withChunkReload(() => import('./components/GenresPage').then(m => ({ default: m.GenresPage }))));
+const GenrePage = lazy(withChunkReload(() => import('./components/GenrePage').then(m => ({ default: m.GenrePage }))));
+const NewReleasesPage = lazy(withChunkReload(() => import('./components/NewReleasesPage').then(m => ({ default: m.NewReleasesPage }))));
+const DiscoverPage = lazy(withChunkReload(() => import('./components/DiscoverPage').then(m => ({ default: m.DiscoverPage }))));
+const TrendingPage = lazy(withChunkReload(() => import('./components/TrendingPage').then(m => ({ default: m.TrendingPage }))));
+const FavoritesPage = lazy(withChunkReload(() => import('./components/library/FavoritesPage').then(m => ({ default: m.FavoritesPage }))));
+const PlaylistsPage = lazy(withChunkReload(() => import('./components/library/PlaylistsPage').then(m => ({ default: m.PlaylistsPage }))));
+const PlaylistPage = lazy(withChunkReload(() => import('./components/library/PlaylistPage').then(m => ({ default: m.PlaylistPage }))));
+const HistoryPage = lazy(withChunkReload(() => import('./components/library/HistoryPage').then(m => ({ default: m.HistoryPage }))));
+import { usePlayerStore, type AppView } from './store/playerStore';
 import { useToastStore } from './store/toastStore';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useRecommendations } from './hooks/useRecommendations';
+import { useSearchEngine } from './hooks/useSearchEngine';
 import { MusicAPI } from './services/musicApi';
-import type { Playlist } from './types/types';
 
 import { UserAvatar } from './components/auth/UserAvatar';
 import { UserDropdown } from './components/auth/UserDropdown';
@@ -28,13 +37,43 @@ import { InstallButton } from './pwa/InstallButton';
 import { OfflinePage } from './pwa/OfflinePage';
 
 import './styles/variables.css';
+import './styles/foundation.css';
 import './styles/layout.css';
 import './styles/components.css';
 import './styles/player.css';
+import './styles/shell.css';
 import './styles/animations.css';
 import './styles/auth.css';
 import './styles/legal.css';
 import { LegalPage } from './pages/LegalPage';
+
+/**
+ * A catalogue id out of the address bar. Percent-encoding that a person typed or
+ * a link mangled is not worth losing the router over, so a segment that will not
+ * decode is used as written and simply fails to match anything.
+ */
+function safeDecode(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
+
+/**
+ * Views only a signed-in listener has. Each one is somebody's own data, so a
+ * guest reaching them is sent home with an explanation rather than shown an
+ * empty page that looks broken.
+ */
+const PROTECTED_VIEWS: AppView[] = ['favorites', 'playlists', 'playlist', 'history'];
+
+/**
+ * The one listen-log page. Recently Played was a second view over the same
+ * plays, so its two old paths now land on History instead of showing a
+ * near-duplicate list. Nothing is deleted: the `recentlyPlayed` slice still
+ * feeds Home's Continue Listening shelf.
+ */
+const HISTORY_ALIASES = ['/recent', '/recently-played'];
 
 function App() {
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
@@ -101,37 +140,29 @@ function App() {
     return () => window.removeEventListener('open-auth-modal', handleOpenAuth);
   }, []);
 
-  const [showPlaylistActions, setShowPlaylistActions] = useState<string | null>(null);
-  const [editingPlaylist, setEditingPlaylist] = useState<string | null>(null);
-  const [editPlaylistName, setEditPlaylistName] = useState('');
-  const [playlistToRename, setPlaylistToRename] = useState<{ id: string; name: string } | null>(null);
-  const [renameInput, setRenameInput] = useState('');
-  const [playlistToDelete, setPlaylistToDelete] = useState<{ id: string; name: string } | null>(null);
-  const [showClearFavoritesModal, setShowClearFavoritesModal] = useState(false);
+  const detailEntity = usePlayerStore((state) => state.detailEntity);
 
   const {
     currentView,
     setCurrentView,
     isSidebarOpen,
     trending,
-    playlists,
-    favorites,
-    recentlyPlayed,
-    clearFavorites,
     setTrending,
     setLoading,
     setError,
     toggleSidebar,
-    deletePlaylist,
-    renamePlaylist,
   } = usePlayerStore();
 
   useKeyboardShortcuts();
   useRecommendations();
+  // Mounted once, at the top: one debounce, one in-flight request, one listener
+  // for the 'music-search' event no matter how many search fields are on screen.
+  useSearchEngine();
 
   useEffect(() => {
     const handleUrlRouting = () => {
-      const path = window.location.pathname.toLowerCase();
+      const rawPath = window.location.pathname;
+      const path = rawPath.toLowerCase();
       const isAuth = useAuthStore.getState().isAuthenticated;
 
       if (path === '/terms' || path === '/privacy') {
@@ -140,13 +171,38 @@ function App() {
       }
       setLegalPage(null);
 
+      /* Entity routes carry an id, so they are matched exactly and before the
+         prefix chain below — `path.includes('/album')` would otherwise swallow
+         the id and open the wrong view. Matched against the raw path because
+         catalogue ids are case-sensitive; only the prefix is lower-cased. */
+      const entityMatch = rawPath.match(/^\/(album|genre|playlist)\/([^/]+)$/i);
+      if (entityMatch) {
+        const id = safeDecode(entityMatch[2]);
+        const kind = entityMatch[1].toLowerCase();
+        const store = usePlayerStore.getState();
+        if (kind === 'playlist' && !isAuth) {
+          store.setCurrentView('home');
+          try {
+            window.history.replaceState(null, '', '/');
+          } catch (e) {
+            void e;
+          }
+          return;
+        }
+        if (kind === 'album') store.openAlbum(id);
+        else if (kind === 'genre') store.openGenre(id);
+        else store.openPlaylist(id);
+        return;
+      }
+
       const isProtectedRoute =
         path.includes('/favorites') ||
         path.includes('/playlists') ||
-        path.includes('/recent');
+        path.includes('/history') ||
+        HISTORY_ALIASES.includes(path);
 
       if (!isAuth && isProtectedRoute) {
-        usePlayerStore.getState().setCurrentView('search');
+        usePlayerStore.getState().setCurrentView('home');
         try {
           window.history.replaceState(null, '', '/');
         } catch {
@@ -158,10 +214,20 @@ function App() {
         usePlayerStore.getState().setCurrentView('favorites');
       } else if (path.includes('/playlists')) {
         usePlayerStore.getState().setCurrentView('playlists');
-      } else if (path.includes('/recent')) {
-        usePlayerStore.getState().setCurrentView('recent');
-      } else if (path === '/' || path.includes('/search')) {
+      } else if (path.includes('/history') || HISTORY_ALIASES.includes(path)) {
+        usePlayerStore.getState().setCurrentView('history');
+      } else if (path === '/') {
+        usePlayerStore.getState().setCurrentView('home');
+      } else if (path.includes('/discover')) {
+        usePlayerStore.getState().setCurrentView('discover');
+      } else if (path.includes('/search')) {
         usePlayerStore.getState().setCurrentView('search');
+      } else if (path.includes('/trending')) {
+        usePlayerStore.getState().setCurrentView('trending');
+      } else if (path.includes('/new-releases')) {
+        usePlayerStore.getState().setCurrentView('new-releases');
+      } else if (path.includes('/genres')) {
+        usePlayerStore.getState().setCurrentView('genres');
       }
     };
 
@@ -171,9 +237,8 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const protectedViews = ['favorites', 'playlists', 'recent'];
-    if (!isAuthenticated && protectedViews.includes(currentView)) {
-      setCurrentView('search');
+    if (!isAuthenticated && PROTECTED_VIEWS.includes(currentView)) {
+      setCurrentView('home');
       addToast({
         type: 'info',
         title: 'Sign In Required',
@@ -188,8 +253,24 @@ function App() {
     const path = window.location.pathname.toLowerCase();
     if (path === '/terms' || path === '/privacy') return;
     if (legalPage) return;
+
+    /* Read the store rather than this render's values. On first mount the URL
+       parser above runs in an earlier effect of the same commit, so the closure
+       here still holds the pre-parse defaults — writing those would push a "/"
+       over a deep link before React re-rendered with the real view. The deps
+       stay on the rendered values, which is what makes this re-run at all. */
+    const { currentView: view, detailEntity: entity } = usePlayerStore.getState();
+
     let targetPath = '/';
-    if (currentView !== 'search') targetPath = `/${currentView}`;
+    // Entity views need their id in the path, so a reload or a shared link lands
+    // back on the same album, genre or playlist rather than on a bare /album.
+    if (entity) {
+      targetPath = `/${entity.kind}/${encodeURIComponent(entity.id)}`;
+    } else if (view === 'recent' || view === 'recently-played') {
+      targetPath = '/history';
+    } else if (view !== 'home') {
+      targetPath = `/${view}`;
+    }
     if (window.location.pathname !== targetPath) {
       try {
         window.history.pushState(null, '', targetPath);
@@ -197,110 +278,7 @@ function App() {
         void e;
       }
     }
-  }, [currentView, legalPage]);
-
-  const handleEditPlaylist = (playlistId: string, currentName: string) => {
-    setPlaylistToRename({ id: playlistId, name: currentName });
-    setRenameInput(currentName);
-    setShowPlaylistActions(null);
-  };
-
-  const confirmRenamePlaylist = () => {
-    if (playlistToRename && renameInput.trim()) {
-      renamePlaylist(playlistToRename.id, renameInput.trim());
-      useToastStore.getState().addToast({
-        type: 'success',
-        title: 'Playlist Renamed',
-        message: `Renamed to "${renameInput.trim()}"`,
-      });
-      setPlaylistToRename(null);
-      setRenameInput('');
-    }
-  };
-
-  const handleSavePlaylistName = () => {
-    if (editingPlaylist && editPlaylistName.trim()) {
-      renamePlaylist(editingPlaylist, editPlaylistName.trim());
-      setEditingPlaylist(null);
-      setEditPlaylistName('');
-    }
-  };
-
-  const handleCancelEdit = () => {
-    setEditingPlaylist(null);
-    setEditPlaylistName('');
-  };
-
-  const handleDeletePlaylist = (playlistId: string, playlistName: string) => {
-    setPlaylistToDelete({ id: playlistId, name: playlistName });
-    setShowPlaylistActions(null);
-  };
-
-  const confirmDeletePlaylist = () => {
-    if (playlistToDelete) {
-      const deletedName = playlistToDelete.name;
-      deletePlaylist(playlistToDelete.id);
-      useToastStore.getState().addToast({
-        type: 'info',
-        title: 'Playlist Deleted',
-        message: `Deleted "${deletedName}"`,
-      });
-      setPlaylistToDelete(null);
-    }
-  };
-
-  const confirmClearFavorites = () => {
-    clearFavorites();
-    useToastStore.getState().addToast({
-      type: 'info',
-      title: 'Favorites Cleared',
-      message: 'Removed all tracks from your favorites.',
-    });
-    setShowClearFavoritesModal(false);
-  };
-
-  const handleExportPlaylist = (playlistId: string) => {
-    const playlist = playlists.find((p) => p.id === playlistId);
-    if (!playlist) return;
-
-    const dataStr = JSON.stringify(playlist, null, 2);
-    const blob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${playlist.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_playlist.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-
-    useToastStore.getState().addToast({
-      type: 'info',
-      title: 'Playlist Exported',
-      message: `Exported "${playlist.name}" JSON file`,
-    });
-
-    setShowPlaylistActions(null);
-  };
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Element;
-      if (
-        showPlaylistActions &&
-        !target.closest('.playlist-card-actions') &&
-        !target.closest('.playlist-mobile-actions-overlay')
-      ) {
-        setShowPlaylistActions(null);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showPlaylistActions]);
+  }, [currentView, detailEntity, legalPage]);
 
   useEffect(() => {
     const loadTrending = async () => {
@@ -330,11 +308,12 @@ function App() {
 
   const theme = usePlayerStore(state => state.theme);
   useEffect(() => {
+    // Soundrift is dark-only. This only mirrors the stored theme onto the root so
+    // the CSS ramp in variables.css stays authoritative; the values below must
+    // match --surface-0 / --text-1 or the shell and the header show a seam.
     document.documentElement.setAttribute('data-theme', theme);
-    document.documentElement.style.setProperty('--bg', theme === 'dark' ? '#000000' : '#ffffff', 'important');
-    document.documentElement.style.setProperty('--text', theme === 'dark' ? '#ffffff' : '#000000', 'important');
-    document.body.style.backgroundColor = theme === 'dark' ? '#000000' : '#ffffff';
-    document.body.style.color = theme === 'dark' ? '#ffffff' : '#000000';
+    document.body.style.backgroundColor = '#08090a';
+    document.body.style.color = '#ffffff';
   }, [theme]);
 
   useEffect(() => {
@@ -345,7 +324,75 @@ function App() {
 
   const renderMainContent = () => {
     switch (currentView) {
+      // Search is one surface for everyone. It is the only view where the
+      // authenticated and guest experiences are identical, because a result list
+      // is a result list — there is no personalisation to add to it.
       case 'search':
+        return (
+          <div className="view-container">
+            <Suspense fallback={null}><SearchPage /></Suspense>
+          </div>
+        );
+
+      // Album and genres are the same surface for everyone: an album page is the
+      // album's track list, and there is no personalisation to layer onto it.
+      // They sit outside the home group so a signed-in listener opening an album
+      // from a track row gets the album, not their own home.
+      case 'album':
+        return (
+          <div className="view-container">
+            {detailEntity?.kind === 'album' ? (
+              <Suspense fallback={null}><AlbumPage albumId={detailEntity.id} /></Suspense>
+            ) : null}
+          </div>
+        );
+
+      case 'genres':
+        return (
+          <div className="view-container">
+            <Suspense fallback={null}><GenresPage /></Suspense>
+          </div>
+        );
+
+      case 'genre':
+        return (
+          <div className="view-container">
+            {detailEntity?.kind === 'genre' ? (
+              <Suspense fallback={null}><GenrePage genreId={detailEntity.id} /></Suspense>
+            ) : null}
+          </div>
+        );
+
+      // New Releases is the catalogue's arrivals feed, not a personalised one, so
+      // it renders the same page for everyone. It used to fall through to the
+      // home group, which meant a signed-in listener clicking it got their own
+      // home instead of the releases.
+      case 'new-releases':
+        return (
+          <div className="view-container">
+            <Suspense fallback={null}><NewReleasesPage /></Suspense>
+          </div>
+        );
+
+      // Discover and Trending answer questions about the catalogue, not about the
+      // listener, so signing in must not swap them for Home. They used to share
+      // the home case, which is why every signed-in click on either landed back
+      // on the personalised page.
+      case 'discover':
+        return (
+          <div className="view-container">
+            <Suspense fallback={null}><DiscoverPage /></Suspense>
+          </div>
+        );
+
+      case 'trending':
+        return (
+          <div className="view-container">
+            <Suspense fallback={null}><TrendingPage /></Suspense>
+          </div>
+        );
+
+      case 'home':
         if (isAuthenticated) {
           return (
             <div className="view-container">
@@ -357,181 +404,39 @@ function App() {
         }
         return (
           <div className="view-container">
-            <Suspense fallback={null}><GuestHome /></Suspense>
+            <Suspense fallback={null}><GuestExperience /></Suspense>
           </div>
         );
 
       case 'favorites':
         return (
           <div className="view-container">
-            <div className="page-header">
-              <div className="page-header-content">
-                <div>
-                  <h1 className="page-title">Your Favorites</h1>
-                  <p className="page-subtitle">
-                    {favorites.length} {favorites.length === 1 ? 'track' : 'tracks'}
-                  </p>
-                </div>
-                {favorites.length > 0 && (
-                  <button
-                    className="clear-favorites-btn"
-                    onClick={() => setShowClearFavoritesModal(true)}
-                    title="Clear all favorites"
-                  >
-                    Clear All
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {favorites.length === 0 ? (
-              <EmptyFavorites
-                onBrowse={() => {
-                  usePlayerStore.getState().setCurrentView('search');
-                }}
-              />
-            ) : (
-              <TrackListModern tracks={favorites} showAddToPlaylist={true} />
-            )}
+            <Suspense fallback={null}><FavoritesPage /></Suspense>
           </div>
         );
 
       case 'playlists':
         return (
           <div className="view-container">
-            <div className="page-header">
-              <h1 className="page-title">Your Playlists</h1>
-              <p className="page-subtitle">
-                {playlists.length} {playlists.length === 1 ? 'playlist' : 'playlists'}
-              </p>
-            </div>
-
-            {playlists.length === 0 ? (
-              <EmptyPlaylists />
-            ) : (
-              <div className="playlists-grid">
-                {playlists.map((playlist) => (
-                  <div
-                    key={playlist.id}
-                    className={`playlist-card ${showPlaylistActions === playlist.id ? 'menu-open' : ''}`}
-                  >
-                    <div className="playlist-card-header">
-                      <div className="playlist-card-info">
-                        {editingPlaylist === playlist.id ? (
-                          <div className="playlist-edit-form">
-                            <input
-                              type="text"
-                              value={editPlaylistName}
-                              onChange={(e) => setEditPlaylistName(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  handleSavePlaylistName();
-                                } else if (e.key === 'Escape') {
-                                  handleCancelEdit();
-                                }
-                              }}
-                              className="playlist-edit-input"
-                              autoFocus
-                            />
-                            <div className="playlist-edit-actions">
-                              <button onClick={handleSavePlaylistName} className="btn btn-primary btn-sm">
-                                Save
-                              </button>
-                              <button onClick={handleCancelEdit} className="btn btn-ghost btn-sm">
-                                Cancel
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <>
-                            <h3 className="playlist-card-title">{playlist.name}</h3>
-                            <p className="playlist-card-subtitle">
-                              {playlist.tracks.length} {playlist.tracks.length === 1 ? 'track' : 'tracks'}
-                            </p>
-                          </>
-                        )}
-                      </div>
-
-                      {editingPlaylist !== playlist.id && (
-                        <div className="playlist-card-actions" style={{ position: 'relative' }}>
-                          <button
-                            onClick={() =>
-                              setShowPlaylistActions(showPlaylistActions === playlist.id ? null : playlist.id)
-                            }
-                            className="btn btn-ghost btn-icon btn-sm"
-                            aria-label="More options"
-                          >
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <circle cx="12" cy="12" r="1" />
-                              <circle cx="12" cy="5" r="1" />
-                              <circle cx="12" cy="19" r="1" />
-                            </svg>
-                          </button>
-
-                          <PlaylistMenu
-                            playlist={playlist}
-                            isOpen={showPlaylistActions === playlist.id}
-                            onClose={() => setShowPlaylistActions(null)}
-                            onRename={(p: Playlist) => handleEditPlaylist(p.id, p.name)}
-                            onExport={(id: string) => handleExportPlaylist(id)}
-                            onDelete={(p: Playlist) => handleDeletePlaylist(p.id, p.name)}
-                          />
-                        </div>
-                      )}
-                    </div>
-
-                    {playlist.tracks.length > 0 && (
-                      <div className="playlist-card-content">
-                        <TrackListModern
-                          tracks={playlist.tracks}
-                          showAddToPlaylist={false}
-                          playlistId={playlist.id}
-                        />
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
+            <Suspense fallback={null}><PlaylistsPage /></Suspense>
           </div>
         );
 
-      case 'recent':
-      case 'recently-played':
+      case 'playlist':
         return (
           <div className="view-container">
-            <div className="page-header">
-              <h1 className="page-title">Recently Played</h1>
-              <p className="page-subtitle">
-                {recentlyPlayed.length} {recentlyPlayed.length === 1 ? 'track' : 'tracks'} played recently
-              </p>
-            </div>
-
-            {recentlyPlayed.length === 0 ? (
-              <EmptyRecentlyPlayed
-                onBrowse={() => {
-                  usePlayerStore.getState().setCurrentView('search');
-                }}
-              />
-            ) : (
-              <TrackListModern tracks={recentlyPlayed} showAddToPlaylist={true} />
-            )}
+            {detailEntity?.kind === 'playlist' ? (
+              <Suspense fallback={null}><PlaylistPage playlistId={detailEntity.id} /></Suspense>
+            ) : null}
           </div>
         );
 
       case 'history':
+      case 'recent':
+      case 'recently-played':
         return (
           <div className="view-container">
-            <div className="page-header">
-              <h1 className="page-title">Listening History</h1>
-              <p className="page-subtitle">
-                {usePlayerStore.getState().listeningHistory.length} tracks in history
-              </p>
-            </div>
-            <TrackListModern
-              tracks={usePlayerStore.getState().listeningHistory}
-              showAddToPlaylist={true}
-            />
+            <Suspense fallback={null}><HistoryPage /></Suspense>
           </div>
         );
 
@@ -539,7 +444,7 @@ function App() {
         return (
           <div className="view-container">
             <Suspense fallback={null}>
-              {isAuthenticated ? <PersonalizedHome /> : <GuestHome />}
+              {isAuthenticated ? <PersonalizedHome /> : <GuestExperience />}
             </Suspense>
           </div>
         );
@@ -564,6 +469,8 @@ function App() {
             onClick={toggleSidebar}
             className="btn btn-ghost btn-icon mobile-menu-toggle"
             aria-label="Toggle menu"
+            aria-expanded={isSidebarOpen}
+            aria-controls="app-sidebar"
           >
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="3" y1="6" x2="21" y2="6" />
@@ -572,9 +479,7 @@ function App() {
             </svg>
           </button>
 
-          <h1 className="app-title" style={{ color: '#ffffff !important' }}>
-            Soundrift
-          </h1>
+          <h1 className="app-title">Soundrift</h1>
 
           <div className="header-search-container">
             <SearchBar />
@@ -582,7 +487,7 @@ function App() {
 
           <div className="header-actions">
             <InstallButton />
-            <div style={{ position: 'relative' }}>
+            <div className="header-avatar-wrap">
               <UserAvatar
                 isOpen={isUserDropdownOpen}
                 onToggle={() => setIsUserDropdownOpen((prev) => !prev)}
@@ -600,58 +505,12 @@ function App() {
         </header>
 
         <div className="app-content">
-          <div className="spotify-gradient-overlay"></div>
           {renderMainContent()}
         </div>
       </main>
 
       <PlayerControls />
-
-      {playlistToRename && (
-        <ConfirmModal
-          isOpen={!!playlistToRename}
-          title="Rename Playlist"
-          message={`Enter a new name for "${playlistToRename.name}":`}
-          confirmText="Save Name"
-          cancelText="Cancel"
-          variant="primary"
-          showInput={true}
-          inputValue={renameInput}
-          inputPlaceholder="Playlist name"
-          onInputChange={setRenameInput}
-          onConfirm={confirmRenamePlaylist}
-          onCancel={() => {
-            setPlaylistToRename(null);
-            setRenameInput('');
-          }}
-        />
-      )}
-
-      {playlistToDelete && (
-        <ConfirmModal
-          isOpen={!!playlistToDelete}
-          title="Delete Playlist"
-          message={`Are you sure you want to delete "${playlistToDelete.name}"? This action cannot be undone.`}
-          confirmText="Delete Playlist"
-          cancelText="Cancel"
-          variant="danger"
-          onConfirm={confirmDeletePlaylist}
-          onCancel={() => setPlaylistToDelete(null)}
-        />
-      )}
-
-      {showClearFavoritesModal && (
-        <ConfirmModal
-          isOpen={showClearFavoritesModal}
-          title="Clear All Favorites"
-          message="Are you sure you want to remove all tracks from your favorites?"
-          confirmText="Clear All"
-          cancelText="Cancel"
-          variant="danger"
-          onConfirm={confirmClearFavorites}
-          onCancel={() => setShowClearFavoritesModal(false)}
-        />
-      )}
+      <QueuePanel />
 
       <AuthModal
         isOpen={isAuthModalOpen}

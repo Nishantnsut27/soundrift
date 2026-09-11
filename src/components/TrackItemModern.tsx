@@ -1,7 +1,8 @@
-import React, { memo } from 'react';
+import { memo } from 'react';
 import type { Track } from '../types/types';
-import { formatDuration, getArtistUrl, formatArtistNames } from '../utils/formatters';
+import { formatDuration, formatArtistNames } from '../utils/formatters';
 import { AudioVisualizer } from './AudioVisualizer';
+import { TrackContextMenu } from './TrackContextMenu';
 import { useAuthStore } from '../store/authStore';
 
 function getTrackArtwork(track: Track): string {
@@ -19,22 +20,27 @@ interface TrackItemModernProps {
   isRemoving: boolean;
   showAddToPlaylist: boolean;
   playlistId?: string;
-  showPlaylistMenu: boolean;
-  playlists: Array<{ id: string; name: string }>;
-  addingToPlaylist: string | null;
-  newPlaylistName: string;
-  showCreatePlaylist: boolean;
-  menuRef: React.RefObject<HTMLDivElement | null>;
+  reorder?: RowReorder;
   onPlay: (track: Track, index: number) => void;
   onToggleFavorite: (track: Track) => void;
   onRemoveFromPlaylist: (track: Track) => void;
   onMouseEnter: (id: string) => void;
-  onToggleMenu: (id: string) => void;
-  onAddToPlaylist: (playlistId: string, track: Track) => void;
-  onCreatePlaylist: (track?: Track) => void;
-  onShowCreatePlaylist: (show: boolean) => void;
-  onNewPlaylistNameChange: (name: string) => void;
-  isTrackInPlaylist: (track: Track, playlistId: string) => boolean;
+}
+
+/**
+ * Everything a row needs to be moved within its list, bundled so enabling
+ * reordering costs one prop rather than seven. Absent on lists whose order is
+ * not the listener's to change.
+ */
+export interface RowReorder {
+  total: number;
+  isDragging: boolean;
+  isDropTarget: boolean;
+  onMove: (fromIndex: number, toIndex: number) => void;
+  onDragStart: (index: number) => void;
+  onDragEnd: () => void;
+  onDragOver: (index: number) => void;
+  onDrop: (index: number) => void;
 }
 
 export const TrackItemModern = memo(function TrackItemModern({
@@ -47,27 +53,16 @@ export const TrackItemModern = memo(function TrackItemModern({
   isRemoving,
   showAddToPlaylist,
   playlistId,
-  showPlaylistMenu,
-  playlists,
-  addingToPlaylist,
-  newPlaylistName,
-  showCreatePlaylist,
-  menuRef,
+  reorder,
   onPlay,
   onToggleFavorite,
   onRemoveFromPlaylist,
   onMouseEnter,
-  onToggleMenu,
-  onAddToPlaylist,
-  onCreatePlaylist,
-  onShowCreatePlaylist,
-  onNewPlaylistNameChange,
-  isTrackInPlaylist,
 }: TrackItemModernProps) {
   const { isAuthenticated } = useAuthStore();
   return (
     <div
-      className={`track-item-modern ${isCurrent ? 'active' : ''} ${blurLevel > 0 ? 'blurred' : ''} ${isRemoving ? 'removing' : ''} ${showPlaylistMenu ? 'menu-open' : ''}`}
+      className={`track-item-modern ${isCurrent ? 'active' : ''} ${blurLevel > 0 ? 'blurred' : ''} ${isRemoving ? 'removing' : ''} ${reorder?.isDragging ? 'is-dragging' : ''} ${reorder?.isDropTarget ? 'is-drop-target' : ''}`}
       onClick={() => onPlay(track, index)}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -79,6 +74,8 @@ export const TrackItemModern = memo(function TrackItemModern({
       tabIndex={0}
       aria-label={`Play ${track.name} by ${track.artist_name}`}
       onMouseEnter={() => onMouseEnter(track.id)}
+      onDragOver={reorder ? (e) => { e.preventDefault(); reorder.onDragOver(index); } : undefined}
+      onDrop={reorder ? (e) => { e.preventDefault(); reorder.onDrop(index); } : undefined}
       data-blur-level={blurLevel}
       style={{
         opacity: isRemoving ? 0.5 : blurLevel === 1 ? 0.9 : blurLevel === 2 ? 0.75 : blurLevel >= 3 ? 0.55 : 1,
@@ -88,6 +85,37 @@ export const TrackItemModern = memo(function TrackItemModern({
         pointerEvents: isRemoving ? 'none' : 'auto',
       }}
     >
+      {reorder && (
+        <button
+          type="button"
+          className="track-reorder-handle"
+          draggable
+          onClick={(e) => e.stopPropagation()}
+          onDragStart={() => reorder.onDragStart(index)}
+          onDragEnd={reorder.onDragEnd}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === 'ArrowUp') {
+              e.preventDefault();
+              reorder.onMove(index, index - 1);
+            } else if (e.key === 'ArrowDown') {
+              e.preventDefault();
+              reorder.onMove(index, index + 1);
+            }
+          }}
+          aria-label={`Reorder ${track.name}, position ${index + 1} of ${reorder.total}. Use arrow up and arrow down to move it.`}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <circle cx="9" cy="6" r="1.6" />
+            <circle cx="15" cy="6" r="1.6" />
+            <circle cx="9" cy="12" r="1.6" />
+            <circle cx="15" cy="12" r="1.6" />
+            <circle cx="9" cy="18" r="1.6" />
+            <circle cx="15" cy="18" r="1.6" />
+          </svg>
+        </button>
+      )}
+
       <div className="track-artwork-modern">
         <img
           src={getTrackArtwork(track)}
@@ -108,17 +136,8 @@ export const TrackItemModern = memo(function TrackItemModern({
 
       <div className="track-info-modern">
         <h4 className="track-title-modern">{track.name}</h4>
-        <p className="track-artist-modern">
-          <a
-            href={getArtistUrl(track.artist_id)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="artist-link-modern"
-            title={track.artist_name}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {formatArtistNames(track.artist_name)}
-          </a>
+        <p className="track-artist-modern" title={track.artist_name}>
+          {formatArtistNames(track.artist_name)}
         </p>
         {track.album_name && <p className="track-album-modern">{track.album_name}</p>}
         <div className="track-metadata-modern">
@@ -168,133 +187,13 @@ export const TrackItemModern = memo(function TrackItemModern({
           </button>
         )}
 
-        {showAddToPlaylist && isAuthenticated && (
-          <div className="playlist-menu-container-modern">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleMenu(track.id);
-              }}
-              className={`icon-button playlist-add-trigger ${showPlaylistMenu ? 'active' : ''}`}
-              aria-label="Add to playlist"
-              title="Add to playlist"
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <line x1="12" y1="5" x2="12" y2="19" />
-                <line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
-            </button>
-
-            {showPlaylistMenu && (
-              <div
-                ref={menuRef}
-                className="playlist-dropdown-modern"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="playlist-dropdown-header-modern">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <line x1="8" y1="6" x2="21" y2="6" />
-                    <line x1="8" y1="12" x2="21" y2="12" />
-                    <line x1="8" y1="18" x2="21" y2="18" />
-                    <line x1="3" y1="6" x2="3.01" y2="6" />
-                    <line x1="3" y1="12" x2="3.01" y2="12" />
-                    <line x1="3" y1="18" x2="3.01" y2="18" />
-                  </svg>
-                  <span>Add to Playlist</span>
-                </div>
-
-                <div className="playlist-dropdown-list-modern">
-                  {playlists.length === 0 ? (
-                    <div className="playlist-dropdown-empty-modern">
-                      No playlists created yet
-                    </div>
-                  ) : (
-                    playlists.map((playlist) => {
-                      const inPlaylist = isTrackInPlaylist(track, playlist.id);
-                      const isAdding = addingToPlaylist === playlist.id;
-
-                      return (
-                        <button
-                          key={playlist.id}
-                          onClick={() => onAddToPlaylist(playlist.id, track)}
-                          className={`playlist-dropdown-item-modern ${inPlaylist ? 'added' : ''}`}
-                          disabled={inPlaylist || isAdding}
-                        >
-                          <div className="playlist-item-left">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <path d="M9 18V5l12-2v13" />
-                              <circle cx="6" cy="18" r="3" />
-                              <circle cx="18" cy="16" r="3" />
-                            </svg>
-                            <span className="playlist-name-text">{playlist.name}</span>
-                          </div>
-                          {inPlaylist ? (
-                            <span className="added-badge-modern">
-                              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                                <polyline points="20 6 9 17 4 12" />
-                              </svg>
-                              Added
-                            </span>
-                          ) : (
-                            <span className="add-plus-badge">+</span>
-                          )}
-                        </button>
-                      );
-                    })
-                  )}
-                </div>
-
-                <div className="playlist-dropdown-footer-modern">
-                  {!showCreatePlaylist ? (
-                    <button
-                      onClick={() => onShowCreatePlaylist(true)}
-                      className="create-playlist-btn-modern"
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                        <line x1="12" y1="5" x2="12" y2="19" />
-                        <line x1="5" y1="12" x2="19" y2="12" />
-                      </svg>
-                      Create Playlist
-                    </button>
-                  ) : (
-                    <form 
-                      className="create-playlist-form-modern" 
-                      onSubmit={(e) => { 
-                        e.preventDefault(); 
-                        onCreatePlaylist(track); 
-                      }}
-                    >
-                      <input
-                        type="text"
-                        value={newPlaylistName}
-                        onChange={(e) => onNewPlaylistNameChange(e.target.value)}
-                        placeholder="Playlist name..."
-                        className="create-playlist-input-modern"
-                        autoFocus
-                      />
-                      <div className="create-playlist-actions-modern">
-                        <button 
-                          type="submit" 
-                          className="btn-save-modern" 
-                          disabled={!newPlaylistName.trim()}
-                        >
-                          Save
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => onShowCreatePlaylist(false)}
-                          className="btn-cancel-modern"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </form>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+        <TrackContextMenu
+          track={track}
+          onPlay={() => onPlay(track, index)}
+          showAddToPlaylist={showAddToPlaylist}
+          playlistId={playlistId}
+          onRemoveFromPlaylist={playlistId ? onRemoveFromPlaylist : undefined}
+        />
       </div>
     </div>
   );

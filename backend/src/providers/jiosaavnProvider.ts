@@ -1,6 +1,12 @@
 import axios, { AxiosInstance } from 'axios';
-import { IMusicProvider } from './musicProvider.interface.js';
-import { Song, Album, Artist, Playlist } from '../models/music.model.js';
+import { IMusicProvider, ArtistCatalogueOptions } from './musicProvider.interface.js';
+import {
+  Song,
+  Album,
+  Playlist,
+  PlaylistSummary,
+  PagedResult
+} from '../models/music.model.js';
 import { MusicNormalizer } from '../normalizers/musicNormalizer.js';
 import { config } from '../config/config.js';
 import { requestWithRetry } from '../utils/requestHelpers.js';
@@ -61,28 +67,55 @@ export class JioSaavnProvider implements IMusicProvider {
     }, { id });
   }
 
-  async getArtistById(id: string): Promise<Artist | null> {
-    return requestWithRetry('JioSaavnProvider', 'fetch artist details', async () => {
-      const response = await this.client.get(`/api/artists/${id}`);
+  async getArtistAlbums(id: string, options: ArtistCatalogueOptions = {}): Promise<PagedResult<Album>> {
+    const { page = 0, sortBy = 'popularity', sortOrder = 'desc' } = options;
+
+    const result = await requestWithRetry('JioSaavnProvider', 'fetch artist albums', async () => {
+      const response = await this.client.get(`/api/artists/${id}/albums`, {
+        params: { page, sortBy, sortOrder }
+      });
       const data = response.data?.data;
-      if (data && typeof data === 'object' && (data.name || (Array.isArray(data.topSongs) && data.topSongs.length > 0))) {
-        return MusicNormalizer.normalizeJioSaavnArtist(data);
-      }
-      return null;
-    }, { id });
+      const albums = Array.isArray(data?.albums) ? data.albums : [];
+      return {
+        total: typeof data?.total === 'number' ? data.total : albums.length,
+        items: albums
+          .filter((raw: unknown) => !!raw && typeof raw === 'object')
+          .map((raw: unknown) => MusicNormalizer.normalizeJioSaavnAlbum(raw))
+      };
+    }, { id, page, sortBy, sortOrder });
+
+    return result ?? { total: 0, items: [] };
   }
 
-  async getPlaylistById(id: string): Promise<Playlist | null> {
+  /** JioSaavn's own editorial playlists. Their curation, credited as theirs. */
+  async searchPlaylists(query: string, limit = 10): Promise<PlaylistSummary[]> {
+    const result = await requestWithRetry('JioSaavnProvider', 'search playlists', async () => {
+      const response = await this.client.get('/api/search/playlists', {
+        params: { query, limit, page: 0 }
+      });
+      const results = response.data?.data?.results;
+      if (!Array.isArray(results)) return [];
+
+      return results
+        .filter((raw: unknown) => !!raw && typeof raw === 'object')
+        .map((raw: unknown) => MusicNormalizer.normalizeJioSaavnPlaylistSummary(raw))
+        .filter((playlist: PlaylistSummary) => playlist.id && playlist.name);
+    }, { query, limit });
+
+    return result ?? [];
+  }
+
+  async getPlaylistById(id: string, limit = 50): Promise<Playlist | null> {
     return requestWithRetry('JioSaavnProvider', 'fetch playlist details', async () => {
       const response = await this.client.get('/api/playlists', {
-        params: { id }
+        params: { id, limit, page: 0 }
       });
       const data = response.data?.data;
       if (data && typeof data === 'object') {
         return MusicNormalizer.normalizeJioSaavnPlaylist(data);
       }
       return null;
-    }, { id });
+    }, { id, limit });
   }
 
   async getSuggestions(id: string, limit = 10): Promise<Song[]> {

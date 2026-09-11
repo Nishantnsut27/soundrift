@@ -1,6 +1,6 @@
 import axios, { AxiosInstance } from 'axios';
 import { IMusicProvider } from './musicProvider.interface.js';
-import { Song, Album, Artist, Playlist } from '../models/music.model.js';
+import { Song, Album, Playlist } from '../models/music.model.js';
 import { MusicNormalizer } from '../normalizers/musicNormalizer.js';
 import { config } from '../config/config.js';
 
@@ -117,34 +117,6 @@ export class JamendoProvider implements IMusicProvider {
           image: first.album_image || first.image || '/placeholder-album.svg',
           songs,
           songCount: songs.length,
-          provider: 'jamendo'
-        };
-      }
-      return null;
-    } catch {
-      return null;
-    }
-  }
-
-  async getArtistById(id: string): Promise<Artist | null> {
-    try {
-      const response = await this.client.get('/tracks/', {
-        params: this.getDefaultParams({
-          artist_id: id,
-          limit: 20,
-          include: 'musicinfo',
-          audioformat: 'mp31'
-        })
-      });
-      const results = response.data?.results;
-      if (Array.isArray(results) && results.length > 0) {
-        const topSongs = results.map((raw: unknown) => MusicNormalizer.normalizeJamendoSong(raw));
-        const first = results[0];
-        return {
-          id: first.artist_id || id,
-          name: first.artist_name || 'Unknown Artist',
-          image: first.image || '/placeholder-artist.svg',
-          topSongs,
           provider: 'jamendo'
         };
       }

@@ -34,7 +34,16 @@ export function DiscoverySection() {
           <div className="section-header-row">
             <h2 className="section-title">Because You Listened To {lastPlayedArtist}...</h2>
           </div>
-          <TrackListModern tracks={recommendedArtists} isLoading={isLoadingArtists} showAddToPlaylist />
+          <TrackListModern
+            tracks={recommendedArtists}
+            isLoading={isLoadingArtists}
+            showAddToPlaylist
+            queueContext={{
+              kind: 'section',
+              id: `because-you-listened:${lastPlayedArtist}`,
+              name: `Because you listened to ${lastPlayedArtist}`,
+            }}
+          />
         </section>
       )}
 
@@ -62,5 +71,12 @@ function GenreExplorer({ genre }: { genre: string }) {
       .finally(() => setIsLoading(false));
   }, [genre]);
 
-  return <TrackListModern tracks={tracks} isLoading={isLoading} showAddToPlaylist />;
+  return (
+    <TrackListModern
+      tracks={tracks}
+      isLoading={isLoading}
+      showAddToPlaylist
+      queueContext={{ kind: 'section', id: `genre:${genre}`, name: `Explore ${genre}` }}
+    />
+  );
 }

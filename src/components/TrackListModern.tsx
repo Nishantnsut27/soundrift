@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import type { Track } from '../types/types';
+import { useState, useEffect } from 'react';
+import type { QueueContext, Track } from '../types/types';
 import { usePlayerStore } from '../store/playerStore';
 import { useToastStore } from '../store/toastStore';
 import { ConfirmModal } from './ConfirmModal';
@@ -8,7 +8,8 @@ import { EmptySearchResults, EmptyState } from './EmptyState';
 import { ErrorDisplay } from './ErrorDisplay';
 import { useAuthStore } from '../store/authStore';
 import { TrackItemModern } from './TrackItemModern';
-import { formatArtistNames } from '../utils/formatters';
+import { TrackContextMenu } from './TrackContextMenu';
+import { MusicCard } from './MusicCard';
 
 interface TrackListProps {
   tracks: Track[];
@@ -17,43 +18,73 @@ interface TrackListProps {
   isLoading?: boolean;
   error?: string | null;
   playlistId?: string;
+  /** The order to play through, when it differs from the rows on screen. */
   playQueue?: Track[];
-  startRelatedRadio?: boolean;
+  /**
+   * Marks this list as a collection, which makes Next walk it to the end instead
+   * of handing over to the suggestion radio. Omit it on a list that is a set of
+   * loose results — search, Home, Trending — where each row is its own thing.
+   * Lists rendered for one of the listener's own playlists derive this from
+   * `playlistId` and need not pass it.
+   */
+  queueContext?: QueueContext;
+  /**
+   * 'auto' keeps the existing split: artwork cards for guests, rows for signed-in
+   * users. 'list' forces compact rows for both, which is what search results want
+   * — a result list needs density and a stable row height, not a wall of cards.
+   */
+  variant?: 'auto' | 'list';
+  /**
+   * Makes the rows movable. Only lists whose order belongs to the listener — a
+   * playlist — pass this; everywhere else the order is the catalogue's and a
+   * handle would promise something the surface cannot keep.
+   */
+  onReorder?: (fromIndex: number, toIndex: number) => void;
 }
 
-export function TrackListModern({ 
-  tracks, 
-  title, 
-  showAddToPlaylist = true, 
-  isLoading = false, 
+export function TrackListModern({
+  tracks,
+  title,
+  showAddToPlaylist = true,
+  isLoading = false,
   error = null,
   playlistId,
+  playQueue,
+  queueContext,
+  variant = 'auto',
+  onReorder,
 }: TrackListProps) {
-  const [showPlaylistMenu, setShowPlaylistMenu] = useState<string | null>(null);
   const [hoveredTrack, setHoveredTrack] = useState<string | null>(null);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-  const [showCreatePlaylist, setShowCreatePlaylist] = useState(false);
-  const [newPlaylistName, setNewPlaylistName] = useState('');
-  const [addingToPlaylist, setAddingToPlaylist] = useState<string | null>(null);
   const [removingFromPlaylist, setRemovingFromPlaylist] = useState<string | null>(null);
   const [trackToRemove, setTrackToRemove] = useState<Track | null>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
+  const [dropIndex, setDropIndex] = useState<number | null>(null);
+  const [reorderAnnouncement, setReorderAnnouncement] = useState('');
   const addToast = useToastStore((state) => state.addToast);
   const { isAuthenticated } = useAuthStore();
-  const { 
-    playTrack, 
+  const {
+    playTrack,
     pauseTrack,
     setIsPlaying,
-    currentTrack, 
+    currentTrack,
     isPlaying,
     playlists,
-    addTrackToPlaylist,
     removeTrackFromPlaylist,
-    createPlaylist,
     addToFavorites,
     removeFromFavorites,
     favorites
   } = usePlayerStore();
+
+  /**
+   * What Next means after this list. Passed explicitly by album and catalogue
+   * pages; derived for the listener's own playlists, which already pass
+   * `playlistId` so a row can offer "remove from playlist".
+   */
+  const resolvedContext: QueueContext = queueContext
+    ?? (playlistId
+      ? { kind: 'playlist', id: playlistId, name: playlists.find(p => p.id === playlistId)?.name || 'Playlist' }
+      : { kind: 'single' });
 
   const handlePlayTrack = (track: Track) => {
     if (currentTrack?.id === track.id) {
@@ -62,37 +93,19 @@ export function TrackListModern({
       } else {
         setIsPlaying(true);
       }
-    } else {
+      return;
+    }
+
+    /* Only a collection becomes the queue. A row in a set of loose results — a
+       search hit, a card on Home — still plays alone and still gets a radio. */
+    if (resolvedContext.kind === 'single') {
       playTrack(track);
+      return;
     }
+
+    const list = playQueue ?? tracks;
+    playTrack(track, list, list.findIndex(t => String(t.id) === String(track.id)), resolvedContext);
   };
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setShowPlaylistMenu(null);
-        setShowCreatePlaylist(false);
-        setNewPlaylistName('');
-      }
-    };
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setShowPlaylistMenu(null);
-        setShowCreatePlaylist(false);
-        setNewPlaylistName('');
-      }
-    };
-
-    if (showPlaylistMenu) {
-      document.addEventListener('mousedown', handleClickOutside);
-      window.addEventListener('keydown', handleKeyDown);
-      return () => {
-        document.removeEventListener('mousedown', handleClickOutside);
-        window.removeEventListener('keydown', handleKeyDown);
-      };
-    }
-  }, [showPlaylistMenu]);
 
   useEffect(() => {
     const handleOutsideTap = (e: MouseEvent | TouchEvent) => {
@@ -110,46 +123,6 @@ export function TrackListModern({
       document.removeEventListener('touchstart', handleOutsideTap);
     };
   }, []);
-
-  const handleAddToPlaylist = async (pId: string, track: Track) => {
-    setAddingToPlaylist(pId);
-    addTrackToPlaylist(pId, track);
-    const targetPlaylist = playlists.find(p => p.id === pId);
-
-    addToast({
-      type: 'success',
-      title: 'Added to Playlist',
-      message: `"${track.name}" added to ${targetPlaylist?.name || 'playlist'}`,
-    });
-    
-    setTimeout(() => {
-      setAddingToPlaylist(null);
-      setShowPlaylistMenu(null);
-    }, 500);
-  };
-
-  const handleCreatePlaylist = (track?: Track) => {
-    if (newPlaylistName.trim()) {
-      const created = createPlaylist(newPlaylistName.trim());
-      if (track && created) {
-        addTrackToPlaylist(created.id, track);
-        addToast({
-          type: 'success',
-          title: 'Playlist Created & Song Added',
-          message: `Created "${created.name}" and added "${track.name}"`,
-        });
-      } else {
-        addToast({
-          type: 'success',
-          title: 'Playlist Created',
-          message: `Created "${newPlaylistName.trim()}"`,
-        });
-      }
-      setNewPlaylistName('');
-      setShowCreatePlaylist(false);
-      setShowPlaylistMenu(null);
-    }
-  };
 
   const handleRemoveFromPlaylist = (track: Track) => {
     if (playlistId) {
@@ -175,11 +148,6 @@ export function TrackListModern({
     }
   };
 
-  const isTrackInPlaylist = (track: Track, pId: string) => {
-    const playlist = playlists.find(p => p.id === pId);
-    return playlist?.tracks.some(t => t.id === track.id) || false;
-  };
-
   const handleToggleFavorite = (track: Track) => {
     const isFav = favorites.some(f => f.id === track.id);
     if (isFav) {
@@ -201,15 +169,23 @@ export function TrackListModern({
 
   const isCurrentTrack = (track: Track) => currentTrack?.id === track.id;
   const isFavorite = (track: Track) => favorites.some(f => f.id === track.id);
+  const asRows = variant === 'list' || isAuthenticated;
+
+  const moveTrack = (fromIndex: number, toIndex: number) => {
+    if (!onReorder) return;
+    if (toIndex < 0 || toIndex >= tracks.length || fromIndex === toIndex) return;
+    onReorder(fromIndex, toIndex);
+    setReorderAnnouncement(`${tracks[fromIndex].name} moved to position ${toIndex + 1} of ${tracks.length}`);
+  };
 
   if (isLoading) {
     return (
       <div className="modern-track-list">
         {title && <h2 className="track-list-title-modern">{title}</h2>}
-        {!isAuthenticated ? (
-          <SkeletonGuestCardsGrid count={8} />
-        ) : (
+        {asRows ? (
           <SkeletonTrackList count={8} />
+        ) : (
+          <SkeletonGuestCardsGrid count={8} />
         )}
       </div>
     );
@@ -263,52 +239,29 @@ export function TrackListModern({
     <div className="modern-track-list">
       {title && <h2 className="track-list-title-modern">{title}</h2>}
       
-      {!isAuthenticated ? (
-        <div className="guest-cards-grid">
-          {tracks.map((track, index) => {
-            const isCurrent = isCurrentTrack(track);
-            return (
-              <div
-                key={`${track.id}-${index}`}
-                className={`guest-music-card ${isCurrent ? 'active' : ''}`}
-                onClick={() => handlePlayTrack(track)}
-              >
-                <div className="guest-card-cover-wrapper">
-                  <img
-                    src={track.image || track.album_image || '/Favicon.png'}
-                    alt={track.name}
-                    className="guest-card-cover-img"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = '/Favicon.png';
-                    }}
-                  />
-                  <div className="guest-card-play-overlay">
-                    <button className="guest-card-play-btn" title="Play">
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                        {isCurrent && isPlaying ? (
-                          <>
-                            <rect x="6" y="4" width="4" height="16" />
-                            <rect x="14" y="4" width="4" height="16" />
-                          </>
-                        ) : (
-                          <polygon points="5 3 19 12 5 21 5 3" />
-                        )}
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-                <div className="guest-card-info">
-                  <h4 className="guest-card-title truncate">{track.name}</h4>
-                  <p className="guest-card-artist" title={track.artist_name}>
-                    {formatArtistNames(track.artist_name)}
-                  </p>
-                </div>
-              </div>
-            );
-          })}
+      {!asRows ? (
+        <div className="music-card-grid">
+          {tracks.map((track, index) => (
+            <MusicCard
+              key={`${track.id}-${index}`}
+              track={track}
+              onPlay={handlePlayTrack}
+              isCurrent={isCurrentTrack(track)}
+              isPlaying={isPlaying}
+              menu={
+                <TrackContextMenu
+                  track={track}
+                  onPlay={handlePlayTrack}
+                  showAddToPlaylist={showAddToPlaylist}
+                  playlistId={playlistId}
+                  onRemoveFromPlaylist={playlistId ? handleRemoveFromPlaylist : undefined}
+                />
+              }
+            />
+          ))}
         </div>
       ) : (
-        <div 
+        <div
           className={`track-list-container-modern ${hoveredTrack ? 'has-hovered-track' : ''}`}
           onMouseLeave={() => { setHoveredTrack(null); setHoveredIndex(null); }}
         >
@@ -321,29 +274,47 @@ export function TrackListModern({
               isPlaying={isPlaying}
               isFavorite={isFavorite(track)}
               isHovered={hoveredTrack === track.id}
-              blurLevel={hoveredIndex !== null && hoveredIndex !== index ? Math.abs(hoveredIndex - index) : 0}
+              blurLevel={
+                // A result list is for scanning, so the neighbour-blur focus effect
+                // used on library pages is switched off here.
+                variant === 'list'
+                  ? 0
+                  : hoveredIndex !== null && hoveredIndex !== index
+                    ? Math.abs(hoveredIndex - index)
+                    : 0
+              }
               isRemoving={removingFromPlaylist === track.id}
               showAddToPlaylist={showAddToPlaylist}
               playlistId={playlistId}
-              showPlaylistMenu={showPlaylistMenu === track.id}
-              playlists={playlists}
-              addingToPlaylist={addingToPlaylist}
-              newPlaylistName={newPlaylistName}
-              showCreatePlaylist={showCreatePlaylist}
-              menuRef={menuRef}
+              reorder={
+                onReorder
+                  ? {
+                    total: tracks.length,
+                    isDragging: draggingIndex === index,
+                    isDropTarget: dropIndex === index && draggingIndex !== index,
+                    onMove: moveTrack,
+                    onDragStart: setDraggingIndex,
+                    onDragEnd: () => { setDraggingIndex(null); setDropIndex(null); },
+                    onDragOver: setDropIndex,
+                    onDrop: (targetIndex: number) => {
+                      if (draggingIndex !== null) moveTrack(draggingIndex, targetIndex);
+                      setDraggingIndex(null);
+                      setDropIndex(null);
+                    },
+                  }
+                  : undefined
+              }
               onPlay={handlePlayTrack}
               onToggleFavorite={handleToggleFavorite}
               onRemoveFromPlaylist={handleRemoveFromPlaylist}
               onMouseEnter={(id: string) => { setHoveredTrack(id); setHoveredIndex(index); }}
-              onToggleMenu={(id) => setShowPlaylistMenu(showPlaylistMenu === id ? null : id)}
-              onAddToPlaylist={handleAddToPlaylist}
-              onCreatePlaylist={handleCreatePlaylist}
-              onShowCreatePlaylist={setShowCreatePlaylist}
-              onNewPlaylistNameChange={setNewPlaylistName}
-              isTrackInPlaylist={isTrackInPlaylist}
             />
           ))}
         </div>
+      )}
+
+      {onReorder && (
+        <p className="visually-hidden" role="status" aria-live="polite">{reorderAnnouncement}</p>
       )}
 
       {trackToRemove && (

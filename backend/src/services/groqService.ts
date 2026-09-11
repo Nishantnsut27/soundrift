@@ -5,7 +5,7 @@ import { logger } from '../utils/logger.js';
 
 const SCOPE = 'GroqService';
 
-type GroqFailureKind = 'rate_limit' | 'auth' | 'server' | 'timeout' | 'network' | 'invalid_request' | 'unknown';
+type GroqFailureKind = 'rate_limit' | 'auth' | 'server' | 'timeout' | 'network' | 'invalid_request' | 'invalid_response' | 'unknown';
 
 interface GroqAttemptFailure {
   kind: GroqFailureKind;
@@ -13,6 +13,32 @@ interface GroqAttemptFailure {
   rotate: boolean;
   cooldownMs: number;
   message: string;
+  /** Groq's own explanation, when it sent one. Logged so a 4xx is diagnosable. */
+  detail?: string;
+}
+
+/**
+ * Pulls the reason out of a Groq error response.
+ *
+ * Groq answers a rejected request with `{ error: { message, type, code } }`. Without
+ * this the log says only "rejected the request payload", which is not enough to tell a
+ * malformed schema from a content refusal from a bad model id. Truncated because the
+ * body is attacker-influenced only in the sense that it echoes our own prompt back.
+ */
+function extractGroqDetail(error: unknown): string | undefined {
+  if (!axios.isAxiosError(error)) return undefined;
+  const data: unknown = error.response?.data;
+  if (typeof data === 'string') {
+    return data.trim().length > 0 ? data.slice(0, 300) : undefined;
+  }
+  if (data && typeof data === 'object' && 'error' in data) {
+    const inner = (data as { error?: unknown }).error;
+    if (inner && typeof inner === 'object' && 'message' in inner) {
+      const message = (inner as { message?: unknown }).message;
+      if (typeof message === 'string' && message.trim().length > 0) return message.slice(0, 300);
+    }
+  }
+  return undefined;
 }
 
 export interface GroqCompletionResult {
@@ -41,6 +67,20 @@ export class GroqRequestError extends Error {
     this.lastFailureKind = lastFailureKind;
     this.lastStatus = lastStatus;
   }
+}
+
+/** Groq's machine-readable reason code, when it sent one. */
+function extractGroqCode(error: unknown): string | undefined {
+  if (!axios.isAxiosError(error)) return undefined;
+  const data: unknown = error.response?.data;
+  if (data && typeof data === 'object' && 'error' in data) {
+    const inner = (data as { error?: unknown }).error;
+    if (inner && typeof inner === 'object' && 'code' in inner) {
+      const code = (inner as { code?: unknown }).code;
+      if (typeof code === 'string') return code;
+    }
+  }
+  return undefined;
 }
 
 function classifyFailure(error: unknown): GroqAttemptFailure {
@@ -72,7 +112,33 @@ function classifyFailure(error: unknown): GroqAttemptFailure {
     }
 
     if (status !== undefined && status >= 400) {
-      return { kind: 'invalid_request', status, rotate: false, cooldownMs: 0, message: 'Groq rejected the request payload' };
+      /*
+       * `json_validate_failed` is the model failing to emit usable JSON, not us
+       * sending a bad payload — the reasoning model can spend its whole output
+       * budget thinking and return an empty generation. Measured intermittently
+       * on an unchanged prompt, so it is transient: retry rather than lose the
+       * section for the rest of the cycle. Every other 4xx really is our fault
+       * and would fail identically on another key, so those still stop here.
+       */
+      if (extractGroqCode(error) === 'json_validate_failed') {
+        return {
+          kind: 'invalid_response',
+          status,
+          rotate: true,
+          cooldownMs: 0,
+          message: 'Groq returned an unusable completion',
+          detail: extractGroqDetail(error)
+        };
+      }
+
+      return {
+        kind: 'invalid_request',
+        status,
+        rotate: false,
+        cooldownMs: 0,
+        message: 'Groq rejected the request payload',
+        detail: extractGroqDetail(error)
+      };
     }
 
     if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
@@ -253,7 +319,8 @@ export async function createJsonCompletion(options: {
         keyIndex: safeKeyIndex,
         attempt,
         errorType: failure.kind,
-        ...(failure.status !== undefined ? { status: failure.status } : {})
+        ...(failure.status !== undefined ? { status: failure.status } : {}),
+        ...(failure.detail !== undefined ? { detail: failure.detail } : {})
       };
 
       if (failure.kind === 'rate_limit') {

@@ -4,6 +4,8 @@ import type { Track, Playlist } from '../types/types';
 
 export interface SearchHistoryItem { query: string; searchedAt: string; }
 
+export type RawHistoryEntry = Track & { playedAt: string | number };
+
 const USER_BASE_URL = `${API_BASE_URL}/api/user`;
 const AUTH_BASE_URL = `${API_BASE_URL}/api/auth`;
 
@@ -112,6 +114,11 @@ export const userApi = {
       method: 'POST',
       body: JSON.stringify({ trackData: track, playDurationSeconds, completed }),
     }).catch(() => {});
+  },
+
+  async getHistory(): Promise<RawHistoryEntry[]> {
+    const res = await fetchJson<{ success: boolean; data: RawHistoryEntry[] }>(`${USER_BASE_URL}/history`);
+    return res.data || [];
   },
 
   async getSearchHistory(): Promise<SearchHistoryItem[]> {

@@ -6,10 +6,21 @@ export const API_ENDPOINTS = {
   TRENDING: `${API_BASE_URL}/trending`,
   CURATED: `${API_BASE_URL}/curated`,
   SONG: (id: string) => `${API_BASE_URL}/song/${encodeURIComponent(id)}`,
-  ARTIST: (id: string) => `${API_BASE_URL}/artist/${encodeURIComponent(id)}`,
+  /* Kept without the rest of the artist endpoints: New Releases builds its
+     arrivals feed from the featured artists' latest albums. */
+  ARTIST_ALBUMS: (id: string) => `${API_BASE_URL}/artist/${encodeURIComponent(id)}/albums`,
   ALBUM: (id: string) => `${API_BASE_URL}/album/${encodeURIComponent(id)}`,
+  PLAYLIST: (id: string) => `${API_BASE_URL}/playlist/${encodeURIComponent(id)}`,
+  PLAYLIST_SEARCH: `${API_BASE_URL}/playlists/search`,
   SUGGESTIONS: (id: string) => `${API_BASE_URL}/suggestions/${encodeURIComponent(id)}`,
 } as const;
+
+/**
+ * The real support inbox. Lived only inside LegalPage before; it is shared now so
+ * "Help & Feedback" affordances point somewhere that actually reaches us instead
+ * of at a placeholder link.
+ */
+export const SUPPORT_EMAIL = 'contactsoundrift@gmail.com';
 
 export const STORAGE_KEYS = {
   VOLUME: 'player-volume',

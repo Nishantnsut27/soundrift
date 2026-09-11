@@ -1,0 +1,2857 @@
+/* Soundrift application shell.
+   The reusable guest surface: MusicCard, ContentSection, the guest sidebar and
+   its conversion panel, plus the header. Loaded last so it wins over the older
+   sheets for the classes it owns — it does not restyle authenticated markup. */
+
+/* ================================================================== *
+ * MusicCard
+ * ================================================================== *
+ * Every track grid in the app renders these. Card height is fixed by
+ * construction (1:1 artwork + two single-line rows), so a long title can never
+ * make one card taller than its neighbours. */
+
+.music-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--card-min), 1fr));
+  gap: var(--card-gap);
+  align-items: start;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.music-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  min-width: 0;
+  position: relative;
+}
+
+.music-card-art {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  padding: 0;
+  border: none;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--surface-2);
+  box-shadow: var(--elev-1);
+  cursor: pointer;
+  isolation: isolate;
+  transition: box-shadow 0.22s var(--smooth), transform 0.22s var(--smooth);
+}
+
+.music-card-art-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.4s var(--smooth), filter 0.22s var(--smooth);
+}
+
+/* Full-artwork scrim. The play button sits dead centre, so the contrast it needs
+   is in the middle of the image, not along the bottom edge. Kept low-alpha: this
+   is a hover affordance, not a filter over the artwork. */
+.music-card-art::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(6, 7, 8, 0.44);
+  opacity: 0;
+  transition: opacity 0.22s var(--smooth);
+  pointer-events: none;
+}
+
+.music-card-art:hover,
+.music-card-art:focus-visible {
+  box-shadow: var(--elev-2);
+}
+
+.music-card-art:hover .music-card-art-img {
+  transform: scale(1.045);
+}
+
+.music-card-art:hover::after,
+.music-card-art:focus-visible::after,
+.music-card.is-current .music-card-art::after {
+  opacity: 1;
+}
+
+/* Primary play affordance: centred on the artwork. This is the one control the
+   whole card exists to offer, so it takes the optical centre — not a corner.
+   Every rule that touches `transform` must re-state the centring translate. */
+.music-card-play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #08090a;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.42);
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.86);
+  transition: opacity 0.2s var(--smooth), transform 0.2s var(--smooth),
+    background-color 0.2s var(--smooth);
+}
+
+.music-card-art:hover .music-card-play,
+.music-card-art:focus-visible .music-card-play,
+.music-card.is-current .music-card-play {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.music-card-art:hover .music-card-play {
+  background: var(--primary-light);
+}
+
+/* Editorial rank, used by ordered surfaces such as Trending. Top-left, clear of
+   the centred play button. */
+.music-card-rank {
+  position: absolute;
+  left: 0.6rem;
+  top: 0.45rem;
+  font-size: 1.5rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: rgba(255, 255, 255, 0.92);
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.75);
+  pointer-events: none;
+}
+
+.music-card-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  padding: 0 0.125rem;
+}
+
+.music-card-title {
+  font-size: var(--type-meta);
+  font-weight: 650;
+  line-height: 1.35;
+  color: var(--text-1);
+  margin: 0;
+}
+
+.music-card-artist {
+  font-size: var(--type-micro);
+  line-height: 1.35;
+  color: var(--text-2);
+  margin: 0;
+}
+
+.music-card.is-current .music-card-title {
+  color: var(--primary-light);
+}
+
+.music-card-menu {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  opacity: 0;
+  transition: opacity 0.2s var(--smooth);
+}
+
+.music-card:hover .music-card-menu,
+.music-card:focus-within .music-card-menu {
+  opacity: 1;
+}
+
+/* The menu slot must stay clickable while its own dropdown is open, even after
+   the pointer has left the card — otherwise moving down the list closes it. */
+.music-card-menu:has(.action-menu-trigger.is-open) {
+  opacity: 1;
+  z-index: 2;
+}
+
+/* Touch: there is no hover, so the play affordance is permanently visible. The
+   centring translate must be restated here — a bare `transform: none` would
+   knock the button back to the top-left corner of the artwork. */
+@media (hover: none) {
+  .music-card-play {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+
+  .music-card-menu {
+    opacity: 1;
+  }
+
+  /* Lighter than the hover scrim: it is always on, so it must not read as a
+     filter dulling every cover in the grid. */
+  .music-card-art::after {
+    opacity: 0.55;
+  }
+
+  .music-card-art:hover .music-card-art-img {
+    transform: none;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Card grid density
+ * ------------------------------------------------------------------ *
+ * Explicit column counts rather than auto-fill: a discovery row should hold a
+ * predictable number of cards at each size, and auto-fill silently drifts to
+ * 7–8 cramped columns on wide monitors. */
+
+@media (min-width: 600px) {
+  .music-card-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 900px) {
+  .music-card-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1200px) {
+  .music-card-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1600px) {
+  .music-card-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+/* Phones: a swipeable rail beats a two-column grid of tiny squares. The scroll
+   is owned by the rail itself, so the page never gains horizontal overflow. */
+@media (max-width: 599px) {
+  .music-card-grid {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: 42%;
+    gap: 0.9rem;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 0.25rem;
+  }
+
+  .music-card-grid::-webkit-scrollbar {
+    display: none;
+  }
+
+  .music-card {
+    scroll-snap-align: start;
+  }
+
+  .music-card-play {
+    width: 42px;
+    height: 42px;
+  }
+}
+
+@media (max-width: 380px) {
+  .music-card-grid {
+    grid-auto-columns: 52%;
+  }
+}
+
+/* ================================================================== *
+ * ContentSection
+ * ================================================================== */
+
+.content-section {
+  margin: 0 0 var(--section-gap) 0;
+}
+
+.content-section:last-child {
+  margin-bottom: 0;
+}
+
+/* Heading sits close to the content it labels — 14px. The larger air belongs
+   between sections (--section-gap), not inside one. */
+.content-section-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.875rem;
+}
+
+.content-section-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.content-section-title {
+  min-width: 0;
+}
+
+.content-section-subtitle {
+  max-width: 62ch;
+  color: var(--text-3);
+}
+
+.content-section-body {
+  min-width: 0;
+}
+
+/* ================================================================== *
+ * Header
+ * ================================================================== */
+
+.app-header .header-actions {
+  gap: 0.6rem;
+}
+
+.header-avatar-wrap {
+  position: relative;
+}
+
+/* The old circular glass chip; flattened to a plain quiet icon button. */
+.app-header .github-link {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: transparent;
+  border: 1px solid var(--line-subtle);
+  color: var(--text-2);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  transition: background-color 0.18s var(--smooth), color 0.18s var(--smooth),
+    border-color 0.18s var(--smooth);
+}
+
+.app-header .github-link:hover {
+  background: var(--surface-hover);
+  border-color: var(--line);
+  color: var(--text-1);
+  transform: none;
+  box-shadow: none;
+}
+
+@media (max-width: 768px) {
+  .app-header {
+    background: var(--surface-0) !important;
+    padding: 0.5rem 1rem;
+  }
+
+  .app-header .github-link {
+    width: 34px;
+    height: 34px;
+  }
+}
+
+/* ================================================================== *
+ * Sidebar
+ * ================================================================== */
+
+.sidebar {
+  background: var(--surface-1);
+  border-right: 1px solid var(--line-subtle);
+}
+
+.sidebar-header {
+  background: var(--surface-1);
+  padding: 1.125rem 1.25rem 0.875rem 1.25rem;
+}
+
+.sidebar-logo {
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.sidebar-logo-icon {
+  border-radius: 7px;
+  filter: none;
+}
+
+.sidebar-logo-icon:hover {
+  transform: none;
+}
+
+/* Wordmark, not a heading shout: small, tracked-in, all caps. */
+.sidebar-title {
+  font-size: 0.9375rem;
+  font-weight: 750;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-1);
+  line-height: 1;
+  margin: 0;
+}
+
+.sidebar-nav {
+  padding: 0.25rem 0.625rem 0.5rem 0.625rem;
+  align-items: stretch;
+}
+
+/* Group label above each nav list. Quiet by design — it orients, it is not a
+   destination, so it must never read louder than the items beneath it. */
+.sidebar-nav-heading {
+  margin: 0.875rem 0 0.375rem 0.75rem;
+  font-size: var(--type-micro);
+  font-weight: 700;
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.sidebar-nav-heading:first-child {
+  margin-top: 0.25rem;
+}
+
+.sidebar-nav-list {
+  gap: 0.125rem;
+}
+
+.sidebar .sidebar-nav .sidebar-nav-item {
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  color: var(--text-2);
+  font-size: 0.875rem;
+  font-weight: 550;
+  overflow: visible;
+}
+
+.sidebar .sidebar-nav .sidebar-nav-item:hover {
+  background: var(--surface-hover);
+  color: var(--text-1);
+}
+
+.sidebar .sidebar-nav .sidebar-nav-item-active {
+  background: var(--surface-active);
+  color: var(--text-1);
+  font-weight: 650;
+}
+
+/* Replaces the old 3px left rail: the active row is a filled pill instead. */
+.sidebar .sidebar-nav .sidebar-nav-item-active::before {
+  display: none;
+}
+
+.sidebar-nav-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: currentColor;
+}
+
+.sidebar .sidebar-nav .sidebar-nav-item-active .sidebar-nav-icon {
+  color: var(--primary-light);
+}
+
+/* ------------------------------------------------------------------ *
+ * Guest conversion panel
+ * ------------------------------------------------------------------ */
+
+.guest-cta {
+  /* Sits in the space the authenticated library occupies, so the sidebar has no
+     hole in it — but it stays a card, not a billboard. The footer's own
+     margin-top:auto pushes itself to the bottom, so nothing is needed here. */
+  margin: 0.5rem 0.875rem 0 0.875rem;
+  padding: 1rem;
+  background: var(--surface-2);
+  border: 1px solid var(--line-subtle);
+  border-radius: var(--radius-lg);
+  text-align: left;
+  flex-shrink: 0;
+}
+
+.guest-cta-eyebrow {
+  color: var(--text-2);
+  margin-bottom: 0.6rem;
+}
+
+.guest-cta-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.9rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: var(--type-meta);
+  line-height: 1.45;
+  color: var(--text-2);
+}
+
+/* ------------------------------------------------------------------ *
+ * Sidebar footer
+ * ------------------------------------------------------------------ */
+
+.sidebar-footer {
+  padding: 0.75rem 0.875rem;
+  border-top: 1px solid var(--line-subtle);
+  background: transparent;
+}
+
+.sidebar-guest-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+
+.sidebar-footer-link,
+.sidebar-guest-footer .pwa-install-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  margin: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-3);
+  font-family: inherit;
+  font-size: var(--type-meta);
+  font-weight: 500;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 0.18s var(--smooth), color 0.18s var(--smooth);
+}
+
+.sidebar-footer-link:hover,
+.sidebar-guest-footer .pwa-install-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text-1);
+  text-decoration: none;
+  transform: none;
+  box-shadow: none;
+}
+
+.sidebar-guest-footer .pwa-install-btn svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+/* The global .pwa-install-btn rule hides its label under 768px to fit the
+   header. In the sidebar there is room, and an unlabelled icon reads as broken. */
+.sidebar-guest-footer .pwa-install-btn span {
+  display: inline;
+}
+
+.sidebar-footer-legal {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.15rem 0.5rem 0 0.5rem;
+  font-size: var(--type-micro);
+  color: var(--text-3);
+}
+
+.sidebar-footer-legal a {
+  color: var(--text-3);
+  text-decoration: none;
+}
+
+.sidebar-footer-legal a:hover {
+  color: var(--text-2);
+  text-decoration: underline;
+}
+
+@media (max-width: 768px) {
+  .sidebar {
+    background: var(--surface-1) !important;
+  }
+}
+
+/* ================================================================== *
+ * Guest Home
+ * ================================================================== *
+ * Vertical rhythm is fixed and shared, not chosen per section:
+ *   hero -> 36px -> section heading -> 14px -> cards -> 44px -> next section
+ * The 14px lives on .content-section-head and the 44px is --section-gap, so a
+ * section added later inherits the rhythm instead of inventing a margin. */
+
+.guest-home {
+  display: block;
+  min-width: 0;
+}
+
+/* ------------------------------------------------------------------ *
+ * Hero
+ * ------------------------------------------------------------------ */
+
+.guest-hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--line-subtle);
+  background: var(--surface-1);
+  margin-bottom: 2.25rem;
+  isolation: isolate;
+}
+
+/* The featured artwork, blown up and blurred behind the copy. This is where the
+   hero colour comes from — there is no green glow layer, and no gradient
+   invented independently of the cover. */
+.guest-hero-wash {
+  position: absolute;
+  inset: -12%;
+  z-index: -2;
+  background-position: center;
+  background-size: cover;
+  filter: blur(56px) saturate(1.25);
+  opacity: 0.5;
+  transform: scale(1.1);
+  pointer-events: none;
+}
+
+/* Keeps text contrast honest over any cover, light or dark. */
+.guest-hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(
+    100deg,
+    rgba(8, 9, 10, 0.94) 0%,
+    rgba(8, 9, 10, 0.82) 46%,
+    rgba(8, 9, 10, 0.58) 100%
+  );
+  pointer-events: none;
+}
+
+.guest-hero-inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 2rem;
+  padding: 2.25rem;
+}
+
+.guest-hero-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.guest-hero-eyebrow {
+  color: var(--primary-light);
+  margin-bottom: 0.75rem;
+}
+
+.guest-hero-title {
+  margin: 0;
+  /* Two lines maximum: a long track name must not push the CTAs out of the
+     first viewport. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+.guest-hero-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0.6rem 0 0 0;
+  color: var(--text-2);
+}
+
+.guest-hero-artist {
+  font-weight: 650;
+  color: var(--text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.guest-hero-dot {
+  color: var(--text-3);
+}
+
+.guest-hero-blurb {
+  margin: 0.85rem 0 0 0;
+  color: var(--text-3);
+  max-width: 46ch;
+}
+
+.guest-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: 1.5rem;
+}
+
+.guest-hero-play {
+  gap: 0.5rem;
+}
+
+.guest-hero-art {
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--elev-3);
+  line-height: 0;
+  flex-shrink: 0;
+  transition: transform 0.24s var(--smooth);
+}
+
+.guest-hero-art img {
+  display: block;
+  width: 232px;
+  height: 232px;
+  object-fit: cover;
+}
+
+.guest-hero-art:hover {
+  transform: scale(1.02);
+}
+
+/* Reserves the hero footprint while the first payload is in flight, so the page
+   does not jump when it lands. */
+.guest-hero-loading {
+  min-height: 296px;
+  background: var(--surface-1);
+}
+
+/* ------------------------------------------------------------------ *
+ * One clean row per section
+ * ------------------------------------------------------------------ *
+ * Sections render six cards and reveal only as many as the current breakpoint
+ * has columns, so a row never ends in a single orphan on a second line. The
+ * phone rail below overrides this and scrolls through all six.
+ *
+ * Each breakpoint owns one mutually exclusive range. Open-ended min-width rules
+ * would not work here: they hide a different child than the previous rule, so an
+ * unbounded `n + 4` would keep card 4 hidden at every width above it. */
+
+@media (min-width: 600px) and (max-width: 899px) {
+  .music-card-grid-row > :nth-child(n + 4) {
+    display: none;
+  }
+}
+
+@media (min-width: 900px) and (max-width: 1199px) {
+  .music-card-grid-row > :nth-child(n + 5) {
+    display: none;
+  }
+}
+
+@media (min-width: 1200px) and (max-width: 1599px) {
+  .music-card-grid-row > :nth-child(n + 6) {
+    display: none;
+  }
+}
+
+@media (min-width: 1600px) {
+  .music-card-grid-row > :nth-child(n + 7) {
+    display: none;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Conversion panel at the foot of Home
+ * ------------------------------------------------------------------ */
+
+.guest-invite {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  padding: 1.5rem 1.75rem;
+  margin-top: 0.5rem;
+  border: 1px solid var(--line-subtle);
+  border-radius: var(--radius-xl);
+  background: var(--surface-1);
+}
+
+.guest-invite-copy {
+  min-width: 0;
+}
+
+.guest-invite-lines {
+  margin: 0.35rem 0 0 0;
+  color: var(--text-2);
+}
+
+/* ------------------------------------------------------------------ *
+ * Compact notices
+ * ------------------------------------------------------------------ */
+
+.guest-notice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 1.25rem 1.5rem;
+  border: 1px solid var(--line-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+  color: var(--text-2);
+}
+
+.guest-notice-inline {
+  margin-bottom: var(--section-gap);
+  padding: 0.875rem 1.125rem;
+}
+
+/* ------------------------------------------------------------------ *
+ * Browse header (New Releases, Genres, a single genre)
+ * ------------------------------------------------------------------ *
+ * Deliberately compact — no hero. These are catalogue surfaces, so the first
+ * row of real content should be visible without scrolling at 1366x768. Home
+ * is the only guest surface that gets a hero, which is what keeps them from
+ * reading as the same page with a different heading. */
+
+.browse-head {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 0.5rem 0 0 0;
+  margin-bottom: 0.25rem;
+  max-width: 62ch;
+}
+
+.browse-head .t-eyebrow {
+  color: var(--primary-light);
+  margin-bottom: 0.6rem;
+}
+
+.browse-head .t-h1 {
+  margin: 0;
+}
+
+.browse-head-promise {
+  margin: 0.7rem 0 0 0;
+  color: var(--text-2);
+}
+
+/* ------------------------------------------------------------------ *
+ * Browse filters
+ * ------------------------------------------------------------------ *
+ * Only ever rendered for controls that really change the data. The active
+ * one is marked by weight and a filled surface rather than colour alone, so
+ * it survives a greyscale or high-contrast rendering. */
+
+.browse-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1.125rem;
+}
+
+.browse-filter.is-active {
+  background: var(--surface-2);
+  border-color: var(--line-strong);
+  color: var(--text-1);
+  font-weight: 650;
+}
+
+/* ------------------------------------------------------------------ *
+ * Guest surfaces: responsive
+ * ------------------------------------------------------------------ */
+
+@media (max-width: 1024px) {
+  .guest-hero-inner {
+    padding: 1.875rem;
+    gap: 1.5rem;
+  }
+
+  .guest-hero-art img {
+    width: 180px;
+    height: 180px;
+  }
+}
+
+@media (max-width: 768px) {
+  .guest-hero {
+    margin-bottom: 1.75rem;
+  }
+
+  /* Artwork first, then the copy: on a phone the cover is the hook. */
+  .guest-hero-inner {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: start;
+    padding: 1.25rem;
+    gap: 1.125rem;
+  }
+
+  .guest-hero-art {
+    order: -1;
+  }
+
+  .guest-hero-art img {
+    width: 148px;
+    height: 148px;
+  }
+
+  .guest-hero-actions {
+    margin-top: 1.125rem;
+    width: 100%;
+  }
+
+  .guest-hero-loading {
+    min-height: 320px;
+  }
+
+  .guest-invite {
+    padding: 1.25rem;
+  }
+
+  .guest-invite .sr-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .browse-head {
+    margin-bottom: 0;
+  }
+}
+
+/* ================================================================== *
+ * Discover
+ * ================================================================== *
+ * Shares Home's vertical rhythm (--section-gap, .content-section-head) so the
+ * two routes feel like one product, and differs where it should: no featured
+ * artwork at the top, and a grid of collections to choose between instead of a
+ * stack of rows to scroll past.
+ *
+ * Colour comes from the covers. The only green on this page is the eyebrow, the
+ * open-collection edge and the shared focus ring — no glow, no gradients, no
+ * green outlines around cards. */
+
+.discover-page {
+  display: block;
+  min-width: 0;
+}
+
+/* ------------------------------------------------------------------ *
+ * Hero
+ * ------------------------------------------------------------------ *
+ * Roughly a third the height of the Home hero: it is a heading with an
+ * instruction under it, not a stage for a record. Deliberately unboxed — no
+ * surface, no border — so the collections below are the first object on the
+ * page that looks clickable. */
+
+.discover-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  max-width: 58ch;
+  padding: 0.5rem 0 0 0;
+  margin-bottom: 2.25rem;
+}
+
+.discover-hero-eyebrow {
+  color: var(--primary-light);
+  margin-bottom: 0.6rem;
+}
+
+.discover-hero-title {
+  margin: 0;
+}
+
+.discover-hero-lede {
+  margin: 0.7rem 0 0 0;
+  color: var(--text-2);
+}
+
+.discover-hero-action {
+  margin-top: 1.25rem;
+  gap: 0.5rem;
+}
+
+/* Reserves the hero's height while the catalogue loads, so the sections below
+   do not jump once it arrives. */
+.discover-hero-loading {
+  min-height: 152px;
+  margin-bottom: 2.25rem;
+}
+
+/* ------------------------------------------------------------------ *
+ * Artist chips
+ * ------------------------------------------------------------------ *
+ * A wrapping list, not a rail: with a dozen names the whole set should be
+ * visible at once, and wrapping cannot introduce horizontal overflow. */
+
+.discover-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.discover-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  max-width: 100%;
+  padding: 0.45rem 0.75rem 0.45rem 0.85rem;
+  border: 1px solid var(--line-subtle);
+  border-radius: var(--radius-full);
+  background: var(--surface-1);
+  color: var(--text-2);
+  font-size: var(--type-meta);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.18s var(--smooth), color 0.18s var(--smooth),
+    border-color 0.18s var(--smooth);
+}
+
+.discover-chip svg {
+  flex-shrink: 0;
+  color: var(--text-3);
+  transition: transform 0.18s var(--smooth), color 0.18s var(--smooth);
+}
+
+.discover-chip:hover {
+  background: var(--surface-hover);
+  border-color: var(--line);
+  color: var(--text-1);
+}
+
+.discover-chip:hover svg {
+  color: var(--text-2);
+  transform: translateX(2px);
+}
+
+/* ------------------------------------------------------------------ *
+ * Collections
+ * ------------------------------------------------------------------ *
+ * The one structural difference from Home. Home gives each collection a section
+ * and shows its songs; here the collections sit side by side as objects, and
+ * opening one is the interaction. */
+
+.discover-collection-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 0.75rem;
+}
+
+.discover-collection {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  min-width: 0;
+  padding: 0.7rem;
+  border: 1px solid var(--line-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.18s var(--smooth), border-color 0.18s var(--smooth);
+}
+
+.discover-collection:hover {
+  background: var(--surface-hover);
+  border-color: var(--line);
+}
+
+/* The open collection is marked by a single accent edge — enough to answer
+   "which one am I looking at", short of outlining the card in green. */
+.discover-collection.is-open {
+  background: var(--surface-2);
+  border-color: var(--accent-line);
+}
+
+.discover-collection-art {
+  flex-shrink: 0;
+  display: block;
+  width: 68px;
+  height: 68px;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: var(--surface-3);
+}
+
+.discover-collection-art img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Four covers, so the tile reads as "a set of songs" rather than "one song". */
+.discover-collection-art.is-mosaic {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 1px;
+}
+
+.discover-collection-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.discover-collection-title {
+  font-size: var(--type-body);
+  font-weight: 650;
+  color: var(--text-1);
+  line-height: 1.3;
+}
+
+.discover-collection-facts {
+  font-size: var(--type-micro);
+  color: var(--text-3);
+  line-height: 1.35;
+}
+
+.discover-dot {
+  margin: 0 0.35rem;
+  color: var(--text-3);
+}
+
+/* The disclosed collection. A rule rather than a box: the tracks belong to the
+   grid above them, so a second bordered container would read as a new section. */
+.discover-collection-panel {
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--line-subtle);
+  min-width: 0;
+}
+
+/* ------------------------------------------------------------------ *
+ * Trail
+ * ------------------------------------------------------------------ */
+
+/* Wrapper exists purely as the scroll target for Surprise me. Layout-neutral:
+   `.discover-page` is a block container, so this adds a box and nothing else.
+   The margin keeps the heading off the very top edge once we land on it. */
+.discover-trail-anchor {
+  scroll-margin-top: 1rem;
+}
+
+.discover-trail {
+  min-width: 0;
+}
+
+.discover-trail-hint {
+  margin: 0;
+  padding: 1rem 1.125rem;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-lg);
+  color: var(--text-3);
+}
+
+.discover-trail-hint strong {
+  color: var(--text-2);
+  font-weight: 650;
+}
+
+.discover-trail-seed {
+  margin: 0 0 1.25rem 0;
+  color: var(--text-3);
+}
+
+.discover-trail-seed-name {
+  color: var(--text-1);
+  font-weight: 650;
+}
+
+.discover-trail-row {
+  margin-bottom: 1.75rem;
+}
+
+.discover-trail-row:last-child {
+  margin-bottom: 0;
+}
+
+.discover-trail-row-title {
+  margin: 0 0 0.75rem 0;
+  color: var(--text-2);
+}
+
+/* ------------------------------------------------------------------ *
+ * Explore action on a card
+ * ------------------------------------------------------------------ *
+ * Sits in MusicCard's existing overflow slot, which already handles its
+ * reveal on hover, focus-within and touch. Discover is the only surface that
+ * passes it — elsewhere the slot stays empty. */
+
+.music-card-explore {
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-full);
+  background: rgba(8, 9, 10, 0.78);
+  backdrop-filter: blur(6px);
+  color: var(--text-1);
+  font-size: var(--type-micro);
+  font-weight: 650;
+  cursor: pointer;
+  transition: background-color 0.18s var(--smooth), border-color 0.18s var(--smooth);
+}
+
+.music-card-explore:hover {
+  background: var(--surface-3);
+  border-color: var(--line-strong);
+}
+
+/* ------------------------------------------------------------------ *
+ * Discover: responsive
+ * ------------------------------------------------------------------ */
+
+@media (max-width: 768px) {
+  .discover-hero {
+    margin-bottom: 1.75rem;
+  }
+
+  .discover-hero-loading {
+    min-height: 132px;
+    margin-bottom: 1.75rem;
+  }
+
+  .discover-hero-action {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* One per line rather than a rail: the collections are the choice this page
+     asks you to make, and a rail hides half of them off-screen. */
+  .discover-collection-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .discover-collection-art {
+    width: 56px;
+    height: 56px;
+  }
+
+  .discover-collection-panel {
+    margin-top: 1rem;
+    padding-top: 1rem;
+  }
+
+  .discover-trail-row {
+    margin-bottom: 1.5rem;
+  }
+}
+
+/* ================================================================== *
+ * Trending
+ * ================================================================== *
+ * The one page in the product that is a list rather than a grid. Home and
+ * Discover are for looking at artwork; Trending is for scanning an order, so
+ * the layout is a ranked column with the position as its loudest element.
+ *
+ * Hierarchy comes from the ranking itself — the top three are bigger, and #1
+ * carries the only accent on the page. No glow, no row-level gradients, and no
+ * statistics chrome: the data has no numbers beyond position. */
+
+.trending-page {
+  display: block;
+  min-width: 0;
+}
+
+/* ------------------------------------------------------------------ *
+ * Header
+ * ------------------------------------------------------------------ *
+ * Short on purpose: the first ranked row should be visible without scrolling
+ * at 1366x768. */
+
+.trending-header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  max-width: 54ch;
+  padding: 0.5rem 0 0 0;
+  margin-bottom: 1.75rem;
+}
+
+.trending-header-eyebrow {
+  color: var(--primary-light);
+  margin-bottom: 0.6rem;
+}
+
+.trending-header-title {
+  margin: 0;
+}
+
+.trending-header-lede {
+  margin: 0.7rem 0 0 0;
+  color: var(--text-2);
+}
+
+/* The only metadata on the page, and it is a real curation timestamp. */
+.trending-header-stamp {
+  margin: 0.5rem 0 0 0;
+  color: var(--text-3);
+}
+
+/* ------------------------------------------------------------------ *
+ * The ranking
+ * ------------------------------------------------------------------ *
+ * Capped width: a 1920px-wide row puts the duration half a metre from the
+ * title and makes the list unscannable. */
+
+.trending-list,
+.trending-list-shell {
+  max-width: 940px;
+  min-width: 0;
+}
+
+.trending-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.trending-row {
+  display: grid;
+  grid-template-columns: 2.75rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--line-subtle);
+}
+
+.trending-row:last-child {
+  border-bottom: none;
+}
+
+/* The number. Tabular figures so 01 and 11 line up down the column. */
+.trending-rank {
+  justify-self: end;
+  padding-right: 0.35rem;
+  font-size: var(--type-meta);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  color: var(--text-3);
+  transition: color 0.18s var(--smooth);
+}
+
+.trending-row.is-top .trending-rank {
+  font-size: 1.375rem;
+  font-weight: 800;
+  color: var(--text-1);
+}
+
+/* The single accent on the page, and it means something: this is the top of
+   the list the backend returned. */
+.trending-row.is-top:first-child .trending-rank {
+  color: var(--primary-light);
+}
+
+/* The whole row is the play toggle — one action, one target, nothing hidden
+   behind a hover-only control. */
+.trending-row-main {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  border: none;
+  border-radius: var(--radius);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.16s var(--smooth);
+}
+
+.trending-row-main:hover {
+  background: var(--surface-hover);
+}
+
+.trending-row-art {
+  position: relative;
+  flex-shrink: 0;
+  display: block;
+  width: 44px;
+  height: 44px;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+}
+
+.trending-row.is-top .trending-row-art {
+  width: 60px;
+  height: 60px;
+  border-radius: var(--radius);
+}
+
+.trending-row-art img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Compact affordance sized to the row, centred on the thumbnail — the same
+   centred-play language as the cards, at row scale. */
+.trending-row-play {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background: rgba(8, 9, 10, 0.62);
+  opacity: 0;
+  transition: opacity 0.16s var(--smooth);
+}
+
+.trending-row-main:hover .trending-row-play,
+.trending-row-main:focus-visible .trending-row-play,
+.trending-row.is-current .trending-row-play {
+  opacity: 1;
+}
+
+.trending-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.trending-row-title {
+  font-size: var(--type-body);
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text-1);
+}
+
+.trending-row.is-top .trending-row-title {
+  font-weight: 650;
+}
+
+.trending-row.is-current .trending-row-title {
+  color: var(--primary-light);
+}
+
+.trending-row-artist {
+  font-size: var(--type-meta);
+  line-height: 1.35;
+  color: var(--text-2);
+}
+
+.trending-row-duration {
+  padding-left: 0.5rem;
+  font-size: var(--type-meta);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+}
+
+/* The unranked pull. Full content width, unlike the ranking above it — the
+   change of layout is the signal that these are not numbered. */
+.trending-more {
+  margin-top: var(--section-gap);
+  padding-top: var(--section-gap);
+  border-top: 1px solid var(--line-subtle);
+}
+
+/* Touch: no hover, so the play overlay would never appear. Keep the thumbnail
+   readable instead of permanently scrimmed — the whole row is the target. */
+@media (hover: none) {
+  .trending-row-play {
+    opacity: 0;
+  }
+
+  .trending-row.is-current .trending-row-play {
+    opacity: 1;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Trending: responsive
+ * ------------------------------------------------------------------ */
+
+@media (max-width: 768px) {
+  .trending-header {
+    margin-bottom: 1.25rem;
+  }
+
+  .trending-row {
+    grid-template-columns: 1.75rem minmax(0, 1fr) auto;
+    gap: 0.35rem;
+  }
+
+  .trending-row-main {
+    gap: 0.65rem;
+    padding: 0.45rem 0.35rem;
+  }
+
+  /* Rows stay compact so more than three results fit on a phone screen. */
+  .trending-row-art {
+    width: 40px;
+    height: 40px;
+  }
+
+  .trending-row.is-top .trending-row-art {
+    width: 48px;
+    height: 48px;
+  }
+
+  .trending-row.is-top .trending-rank {
+    font-size: 1.125rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .trending-row-duration {
+    display: none;
+  }
+}
+
+/* ================================================================== *
+ * Album pages
+ * ================================================================== *
+ * An album opens from a track row, a search result or a card, so it has one
+ * header shape wherever it is reached: artwork on the left, identity on the
+ * right, tracks below. Every line in the header is provider data — there are no
+ * invented listener counts, ranks or placeholder text, because the upstream API
+ * returns none of those. */
+
+.album-page,
+.genres-page,
+.genre-page,
+.new-releases-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--section-gap);
+  width: 100%;
+  max-width: var(--content-max);
+  margin: 0 auto;
+}
+
+.album-header {
+  display: flex;
+  align-items: flex-end;
+  gap: 1.75rem;
+  min-width: 0;
+}
+
+.album-header-art {
+  flex: 0 0 auto;
+  width: 200px;
+  height: 200px;
+  overflow: hidden;
+  background: var(--surface-2);
+  box-shadow: var(--elev-2);
+  border-radius: var(--radius-lg);
+}
+
+.album-header-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.album-header-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+  padding-bottom: 0.25rem;
+}
+
+.album-header-name {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.album-header-meta {
+  margin: 0;
+  color: var(--text-2);
+}
+
+.album-header-artist {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--text-1);
+  font-weight: 600;
+}
+
+/* ================================================================== *
+ * Browse cards (albums and catalogue playlists)
+ * ================================================================== *
+ * The cover and the caption both open the collection; a small button in the
+ * cover's corner plays it. Play is deliberately not the cover's own action —
+ * tapping a cover to look inside an album should not start track 1 first.
+ *
+ * One class, not `.album-card` plus `.playlist-card`: the authenticated
+ * Playlists view in layout.css already owns `.playlist-card`, and because
+ * shell.css cascades last a second definition here silently stripped that
+ * view's background, border and padding. */
+
+.browse-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--card-min), 1fr));
+  gap: var(--card-gap);
+  align-items: start;
+}
+
+.browse-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  min-width: 0;
+  color: inherit;
+}
+
+.browse-card-art {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--surface-2);
+  box-shadow: var(--elev-1);
+  transition: box-shadow 0.22s var(--smooth), transform 0.22s var(--smooth);
+}
+
+.browse-card:hover .browse-card-art,
+.browse-card:focus-within .browse-card-art {
+  transform: translateY(-2px);
+  box-shadow: var(--elev-2);
+}
+
+.browse-card-open {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+.browse-card-open img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Corner rather than centre: the centre of the cover is the open target, and a
+   disc sitting on it would be read as the cover's own action. */
+.browse-card-play {
+  position: absolute;
+  right: 0.5rem;
+  bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #08090a;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.48);
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.2s var(--smooth), transform 0.2s var(--smooth),
+    background-color 0.2s var(--smooth);
+}
+
+.browse-card:hover .browse-card-play,
+.browse-card:focus-within .browse-card-play,
+.browse-card.is-current .browse-card-play,
+.browse-card-play.is-pending {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.browse-card-play:hover {
+  background: var(--primary-light);
+  transform: translateY(0) scale(1.06);
+}
+
+/* A touch screen never hovers, so the button has to be there at rest. */
+@media (hover: none) {
+  .browse-card-play {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.browse-card-spinner {
+  animation: spin 0.8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .browse-card-spinner {
+    animation-duration: 2.4s;
+  }
+}
+
+.browse-card-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+}
+
+.browse-card-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-1);
+  line-height: 1.3;
+}
+
+.browse-card-label:hover .browse-card-name,
+.browse-card-label:focus-visible .browse-card-name {
+  text-decoration: underline;
+}
+
+.browse-card-meta {
+  color: var(--text-2);
+}
+
+/* Phones: two per row, stated rather than inferred. `auto-fill` with a 158px
+   minimum silently collapses to one column once the content box drops below
+   ~336px, which turned an album shelf into a stack of full-bleed covers — one
+   record per screen. Two columns match the card size Home's rails already use. */
+@media (max-width: 599px) {
+  .browse-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem 0.75rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .album-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1.25rem;
+  }
+
+  .album-header-art {
+    width: 148px;
+    height: 148px;
+  }
+}
+
+/* ================================================================== *
+ * Genres
+ * ================================================================== *
+ * Artwork-led tiles: a cover with its name beneath, the same shape as every
+ * other browsable card in the app. The earlier layout — a 76px thumbnail beside
+ * two lines of text in a 260px-wide box — read as neither a list row nor a card
+ * and left most of each tile empty.
+ *
+ * The artwork is real album art pulled from inside the category. When a category
+ * has none the art band is dropped rather than filled with a grey square or an
+ * invented cover, so the tile becomes an honest text tile; grid row stretch keeps
+ * its height matched to its neighbours. No per-genre colour: the catalogue has no
+ * genre taxonomy to colour-code, and a rainbow of made-up hues would imply one. */
+
+.genre-tile-grid {
+  display: grid;
+  /* min() so a narrow phone collapses to one column instead of overflowing. */
+  grid-template-columns: repeat(auto-fill, minmax(min(190px, 100%), 1fr));
+  gap: 1rem;
+}
+
+.genre-tile {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+  transition:
+    background-color 0.18s var(--smooth),
+    border-color 0.18s var(--smooth),
+    transform 0.18s var(--smooth),
+    box-shadow 0.18s var(--smooth);
+}
+
+.genre-tile:hover,
+.genre-tile:focus-visible {
+  background: var(--surface-2);
+  border-color: var(--line-strong);
+  transform: translateY(-2px);
+  box-shadow: var(--elev-2);
+}
+
+/* Square, because the source is square. Album art arrives 500x500 and the
+   covers carry their own titles, so a 16:10 band cropped the artist's name off
+   the top and bottom of every tile. A 1:1 box shows the cover whole. */
+.genre-tile-art {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+
+.genre-tile-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.28s var(--smooth);
+}
+
+.genre-tile:hover .genre-tile-art img {
+  transform: scale(1.04);
+}
+
+/* No real artwork for this category: drop the band, don't fill it. */
+.genre-tile-art:empty {
+  display: none;
+}
+
+.genre-tile-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+  padding: 0.75rem 0.85rem 0.85rem;
+}
+
+.genre-tile-name {
+  font-size: 1rem;
+  color: var(--text-1);
+  overflow-wrap: anywhere;
+}
+
+.genre-tile-blurb {
+  color: var(--text-3);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Same correction as the browse grid: the 190px minimum collapsed to a single
+   column below ~396px, so one category filled the whole screen. The padding and
+   title step down with the tile so the text block stays in proportion to it. */
+@media (max-width: 599px) {
+  .genre-tile-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+
+  .genre-tile-body {
+    padding: 0.6rem 0.7rem 0.75rem;
+  }
+
+  .genre-tile-name {
+    font-size: 0.9rem;
+  }
+}
+
+/* The single-category page. Back sits under the title rather than floating
+   over the content, so it is in the tab order where it reads. */
+.genre-head-actions {
+  margin-top: 1.125rem;
+}
+
+/* ================================================================== *
+ * Track overflow menu
+ * ================================================================== *
+ * One menu, two presentations: a dropdown on pointer devices and a bottom
+ * sheet below 768px, matching the pattern PlaylistMenu already established.
+ * The trigger is a real 32px button on cards and a 40px one in rows, so it
+ * clears the touch target minimum wherever it lands. */
+
+.action-menu-root {
+  position: relative;
+  display: inline-flex;
+}
+
+.action-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-full);
+  background: rgba(0, 0, 0, 0.62);
+  color: var(--text-1);
+  cursor: pointer;
+  transition: background 0.16s var(--smooth), transform 0.16s var(--smooth);
+}
+
+.action-menu-trigger:hover,
+.action-menu-trigger.is-open {
+  background: rgba(0, 0, 0, 0.85);
+  transform: scale(1.06);
+}
+
+.track-actions-modern .action-menu-trigger {
+  width: 40px;
+  height: 40px;
+  background: transparent;
+  color: var(--text-2);
+}
+
+.track-actions-modern .action-menu-trigger:hover,
+.track-actions-modern .action-menu-trigger.is-open {
+  background: var(--surface-hover);
+  color: var(--text-1);
+  transform: none;
+}
+
+/* Fixed, and portalled to <body>, because every ancestor that could hold it
+   clips: .app-content scrolls on both axes, .music-card-grid is a horizontal
+   rail on phones, and a row near the bottom of the scroll box had its menu cut
+   off entirely. Coordinates come from the trigger's rect in TrackContextMenu,
+   which also flips the panel above the trigger when the space below is short. */
+.action-menu {
+  position: fixed;
+  z-index: var(--z-popover);
+  width: 244px;
+  max-height: min(420px, calc(100dvh - 16px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.35rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  box-shadow: var(--elev-3);
+}
+
+.action-menu-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.action-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  width: 100%;
+  padding: 0.6rem 0.7rem;
+  border: none;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-1);
+  font-family: inherit;
+  font-size: var(--type-meta);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.14s var(--smooth);
+}
+
+.action-menu-item:hover:not(:disabled),
+.action-menu-item:focus-visible {
+  background: var(--surface-hover);
+}
+
+.action-menu-item:disabled {
+  color: var(--text-3);
+  cursor: default;
+}
+
+.action-menu-item svg {
+  flex-shrink: 0;
+  color: var(--text-2);
+}
+
+.action-menu-item-danger {
+  color: var(--error);
+}
+
+.action-menu-item-danger svg {
+  color: var(--error);
+}
+
+.action-menu-item-submenu .action-menu-chevron {
+  margin-left: auto;
+}
+
+.action-menu-back {
+  font-weight: 650;
+}
+
+.action-menu-divider {
+  height: 1px;
+  margin: 0.3rem 0.2rem;
+  background: var(--line-subtle);
+}
+
+.action-menu-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  max-height: 210px;
+  overflow-y: auto;
+}
+
+.action-menu-empty {
+  padding: 0.7rem;
+  color: var(--text-3);
+  font-size: var(--type-meta);
+  margin: 0;
+}
+
+.action-menu-tag {
+  margin-left: auto;
+  color: var(--primary-light);
+  font-size: var(--type-micro);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-eyebrow);
+}
+
+.action-menu-form {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.35rem 0.2rem 0.2rem;
+}
+
+.action-menu-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-1);
+  color: var(--text-1);
+  font-family: inherit;
+  font-size: var(--type-meta);
+}
+
+.action-menu-input::placeholder {
+  color: var(--text-3);
+}
+
+.action-menu-sheet-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: flex-end;
+  background: rgba(0, 0, 0, 0.62);
+  backdrop-filter: blur(2px);
+  animation: action-menu-fade 0.16s var(--smooth);
+}
+
+.action-menu-sheet {
+  width: 100%;
+  max-height: 82vh;
+  overflow-y: auto;
+  padding: 0.5rem 0.9rem calc(1rem + env(safe-area-inset-bottom));
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  border-top: 1px solid var(--line);
+  background: var(--surface-2);
+  box-shadow: var(--elev-3);
+  animation: action-menu-rise 0.2s var(--smooth);
+}
+
+.action-menu-sheet-handle {
+  width: 38px;
+  height: 4px;
+  margin: 0.3rem auto 0.75rem;
+  border-radius: var(--radius-full);
+  background: var(--line-strong);
+}
+
+.action-menu-sheet-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid var(--line-subtle);
+  margin-bottom: 0.35rem;
+}
+
+.action-menu-sheet-art {
+  width: 46px;
+  height: 46px;
+  flex-shrink: 0;
+  border-radius: var(--radius);
+  object-fit: cover;
+}
+
+.action-menu-sheet-text {
+  min-width: 0;
+}
+
+.action-menu-sheet-title {
+  margin: 0;
+  font-size: var(--type-body);
+  font-weight: 650;
+  color: var(--text-1);
+}
+
+.action-menu-sheet-artist {
+  margin: 0;
+  font-size: var(--type-meta);
+  color: var(--text-2);
+}
+
+.action-menu-sheet .action-menu-item {
+  min-height: var(--touch-target-min);
+  padding: 0.75rem 0.5rem;
+  font-size: var(--type-body);
+}
+
+.action-menu-sheet .action-menu-scroll {
+  max-height: 42vh;
+}
+
+@keyframes action-menu-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes action-menu-rise {
+  from { transform: translateY(14px); }
+  to { transform: translateY(0); }
+}
+
+/* ==========================================================================
+   Queue panel
+   Desktop: a right-side drawer that stops at the player bar, so transport
+   controls stay reachable while the queue is open. Below 768px the same
+   markup becomes a bottom sheet. The scrim deliberately stops short of the
+   player for the same reason — dimming the page must not disable playback.
+   ========================================================================== */
+
+.queue-scrim {
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
+  bottom: var(--player-height);
+  background: rgba(0, 0, 0, 0.42);
+  z-index: var(--z-modal-backdrop);
+  animation: queue-fade 0.18s var(--smooth);
+}
+
+.queue-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: var(--player-height);
+  width: 368px;
+  max-width: 100vw;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-1);
+  border-left: 1px solid var(--line);
+  box-shadow: var(--elev-3);
+  z-index: var(--z-modal);
+  animation: queue-slide-in 0.22s var(--smooth);
+}
+
+.queue-panel:focus {
+  outline: none;
+}
+
+.queue-panel-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1rem 1rem 0.85rem;
+  border-bottom: 1px solid var(--line-subtle);
+}
+
+.queue-panel-titles {
+  flex: 1;
+  min-width: 0;
+}
+
+.queue-panel-title {
+  margin: 0;
+  font-size: var(--type-h3);
+  font-weight: 700;
+  letter-spacing: var(--tracking-heading);
+  color: var(--text-1);
+}
+
+.queue-panel-context {
+  margin: 0.15rem 0 0;
+  font-size: var(--type-meta);
+  color: var(--text-3);
+}
+
+.queue-panel-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.queue-panel-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background 0.15s var(--smooth), color 0.15s var(--smooth);
+}
+
+.queue-panel-close:hover {
+  background: var(--surface-hover);
+  color: var(--text-1);
+}
+
+.queue-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.5rem 0.5rem 1rem;
+}
+
+.queue-panel-empty {
+  margin: 0;
+  padding: 0.85rem 0.5rem;
+  font-size: var(--type-meta);
+  line-height: var(--leading-body);
+  color: var(--text-3);
+}
+
+.queue-group + .queue-group {
+  margin-top: 0.85rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--line-subtle);
+}
+
+.queue-group-title {
+  margin: 0 0 0.35rem;
+  padding: 0 0.5rem;
+  font-size: var(--type-micro);
+  font-weight: 700;
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.queue-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.queue-row {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto 28px;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.5rem;
+  border-radius: var(--radius);
+  transition: background 0.15s var(--smooth);
+}
+
+.queue-row:hover {
+  background: var(--surface-hover);
+}
+
+.queue-row.is-current {
+  background: var(--accent-soft);
+  grid-template-columns: 22px 40px minmax(0, 1fr) auto;
+  padding: 0.4rem 0.5rem;
+}
+
+.queue-row.is-dragging {
+  opacity: 0.45;
+}
+
+.queue-row.is-drop-target {
+  box-shadow: inset 0 2px 0 0 var(--accent);
+}
+
+.queue-row-handle-slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+}
+
+.queue-row-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 13px;
+}
+
+.queue-row-bars i {
+  width: 2px;
+  height: 4px;
+  border-radius: 1px;
+  background: var(--accent);
+}
+
+.queue-row-bars.is-playing i {
+  animation: queue-bar 0.9s ease-in-out infinite;
+}
+
+.queue-row-bars.is-playing i:nth-child(2) {
+  animation-delay: 0.18s;
+}
+
+.queue-row-bars.is-playing i:nth-child(3) {
+  animation-delay: 0.36s;
+}
+
+.queue-row-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 30px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-3);
+  cursor: grab;
+}
+
+.queue-row-handle:hover {
+  color: var(--text-1);
+}
+
+.queue-row-handle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  color: var(--text-1);
+}
+
+.queue-row-handle:active {
+  cursor: grabbing;
+}
+
+.queue-row-play {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+  padding: 0.2rem;
+  border: none;
+  border-radius: var(--radius);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.queue-row-play:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.queue-row-art {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  background: var(--surface-2);
+}
+
+.queue-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.queue-row-title {
+  font-size: var(--type-meta);
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.queue-row.is-current .queue-row-title {
+  color: var(--accent);
+}
+
+.queue-row-artist {
+  font-size: var(--type-micro);
+  color: var(--text-3);
+}
+
+.queue-row-duration {
+  flex-shrink: 0;
+  font-size: var(--type-micro);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+}
+
+.queue-row-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  transition: background 0.15s var(--smooth), color 0.15s var(--smooth);
+}
+
+.queue-row-remove:hover {
+  background: var(--surface-active);
+  color: var(--text-1);
+}
+
+.queue-row-remove:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+@keyframes queue-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes queue-slide-in {
+  from { transform: translateX(24px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes queue-slide-up {
+  from { transform: translateY(28px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes queue-bar {
+  0%, 100% { height: 4px; }
+  50% { height: 13px; }
+}
+
+/* Touch and narrow screens: a bottom sheet, sized so the list is the thing you
+   see and the reorder / remove controls clear the 44px touch target. */
+@media (max-width: 768px) {
+  .queue-panel {
+    top: auto;
+    left: 0;
+    right: 0;
+    width: auto;
+    max-height: min(72vh, calc(100vh - var(--player-height) - 1rem));
+    border-left: none;
+    border-top: 1px solid var(--line);
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    animation: queue-slide-up 0.22s var(--smooth);
+  }
+
+  .queue-panel-head {
+    padding: 0.85rem 0.9rem 0.75rem;
+  }
+
+  .queue-row {
+    grid-template-columns: var(--touch-target-min) minmax(0, 1fr) auto var(--touch-target-min);
+    gap: 0.25rem;
+    padding: 0.25rem 0.35rem;
+  }
+
+  .queue-row.is-current {
+    grid-template-columns: var(--touch-target-min) 44px minmax(0, 1fr) auto;
+  }
+
+  .queue-row-handle-slot,
+  .queue-row-handle {
+    width: var(--touch-target-min);
+    height: var(--touch-target-min);
+  }
+
+  .queue-row-remove {
+    width: var(--touch-target-min);
+    height: var(--touch-target-min);
+  }
+
+  .queue-row-art {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .queue-scrim,
+  .queue-panel {
+    animation: none;
+  }
+
+  .queue-row-bars.is-playing i {
+    animation: none;
+    height: 9px;
+  }
+}
+
+/* ==========================================================================
+   Personal library
+   Favorites, Playlists, History and a single playlist all share one page
+   frame, so moving between them feels like moving inside one library rather
+   than between four separately-built screens.
+   ========================================================================== */
+
+.library-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* Actions belong to the collection, not to a row, so they sit with the
+   heading. Wrapping is the point: at 320px they stack instead of scrolling. */
+.library-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1.125rem;
+}
+
+.library-create-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.library-create-form .input {
+  min-width: 0;
+  flex: 1 1 180px;
+}
+
+/* The card's name and its ⋮ share a row, so the menu never covers the label
+   and the label keeps the whole width it can. */
+.library-card-foot {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.library-card-foot .browse-card-label {
+  flex: 1 1 auto;
+}
+
+.library-card-menu {
+  position: relative;
+  flex-shrink: 0;
+}
+
+/* ------------------------------------------------------------------ *
+ * Playlist detail
+ * ------------------------------------------------------------------ *
+ * Artwork beside the title on desktop, artwork above it on phones. The art
+ * is borrowed from the first track that has any, so an empty playlist shows
+ * the app mark rather than a broken image. */
+
+.playlist-detail-head {
+  display: flex;
+  align-items: flex-end;
+  gap: 1.5rem;
+  padding-top: 0.5rem;
+}
+
+.playlist-detail-art {
+  width: 184px;
+  height: 184px;
+  flex-shrink: 0;
+  border-radius: var(--radius-lg);
+  object-fit: cover;
+  background: var(--surface-2);
+  box-shadow: var(--elev-2);
+}
+
+.playlist-detail-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.playlist-detail-meta .t-eyebrow {
+  color: var(--primary-light);
+  margin-bottom: 0.6rem;
+}
+
+.playlist-detail-meta .t-h1 {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.playlist-detail-stats {
+  margin: 0.65rem 0 0 0;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 768px) {
+  .playlist-detail-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1.125rem;
+  }
+
+  .playlist-detail-art {
+    width: 148px;
+    height: 148px;
+  }
+
+  .library-head-actions .sr-btn {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 380px) {
+  .playlist-detail-art {
+    width: 120px;
+    height: 120px;
+  }
+
+  .library-head-actions .sr-btn {
+    flex-basis: 100%;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Row reordering
+ * ------------------------------------------------------------------ *
+ * Only playlists get a handle, because only a playlist's order belongs to
+ * the listener. The handle is a real button so it is reachable by Tab and
+ * movable with the arrow keys — dragging is the shortcut, never the only
+ * way in. */
+
+.track-reorder-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 32px;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-3);
+  cursor: grab;
+  transition: color 0.15s var(--smooth), background 0.15s var(--smooth);
+}
+
+.track-reorder-handle:hover {
+  color: var(--text-1);
+  background: var(--surface-hover);
+}
+
+.track-reorder-handle:active {
+  cursor: grabbing;
+}
+
+.track-reorder-handle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  color: var(--text-1);
+}
+
+.track-item-modern.is-dragging {
+  opacity: 0.45;
+}
+
+.track-item-modern.is-drop-target {
+  box-shadow: inset 0 2px 0 0 var(--accent);
+}
+
+@media (max-width: 768px) {
+  .track-reorder-handle {
+    width: var(--touch-target-min);
+    height: var(--touch-target-min);
+  }
+}
+
+/* ==========================================================================
+   Authenticated Home
+   The greeting and the three doors into the listener's own music. Deliberately
+   short: the first shelf of real songs should be reachable without scrolling
+   at 1366x768, so this is a heading with links, not a banner.
+   ========================================================================== */
+
+.home-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 0.5rem 0 0 0;
+  margin-bottom: 0.5rem;
+}
+
+.home-hero .t-eyebrow {
+  color: var(--primary-light);
+  margin-bottom: 0.6rem;
+}
+
+.home-hero-greeting {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.home-hero-name {
+  color: var(--primary-light);
+}
+
+/* Wraps rather than scrolls: three links should never push the page sideways
+   at 320px, and a hidden third door is not a door. */
+.home-quick-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.625rem;
+  margin-top: 1.25rem;
+  width: 100%;
+}
+
+.home-quick-link {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1 1 190px;
+  min-width: 0;
+  padding: 0.7rem 0.95rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+  color: var(--text-1);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.18s var(--smooth), border-color 0.18s var(--smooth);
+}
+
+.home-quick-link:hover,
+.home-quick-link:focus-visible {
+  background: var(--surface-hover);
+  border-color: var(--line-strong);
+}
+
+.home-quick-link-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 9px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  color: var(--primary-light);
+}
+
+.home-quick-link-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.home-quick-link-label {
+  font-size: var(--type-meta);
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.home-quick-link-hint {
+  color: var(--text-2);
+  line-height: 1.3;
+}
+
+.home-load-more {
+  display: flex;
+  justify-content: center;
+  margin-top: 1.25rem;
+}
+
+@media (max-width: 599px) {
+  .home-quick-link {
+    flex-basis: 100%;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Touch targets
+ * ------------------------------------------------------------------ */
+/* These controls are sized by their padding, which reads well under a mouse but
+   leaves a target a fingertip cannot reliably hit. Raised to the shared
+   --touch-target-min only where there is no hover, so desktop density is
+   untouched. */
+@media (hover: none) {
+  .mobile-menu-toggle {
+    width: var(--touch-target-min);
+    height: var(--touch-target-min);
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* The name is hidden on touch, leaving the icon plus padding at 34px wide.
+     The pill keeps its shape; it just stops being narrower than a fingertip. */
+  .user-avatar-btn {
+    min-height: var(--touch-target-min);
+    min-width: var(--touch-target-min);
+  }
+
+  /* The dense variant is a deliberate choice where vertical space is scarce, but
+     a primary action still has to be hittable on a phone. */
+  .sr-btn-sm {
+    min-height: var(--touch-target-min);
+  }
+
+  .sidebar-footer-link,
+  .sidebar-guest-footer .pwa-install-btn {
+    min-height: var(--touch-target-min);
+  }
+
+  /* A legal link is text, not a control, so it gets a hit area rather than a
+     box: the row spacing is padding the pointer cannot see. */
+  .sidebar-footer-legal a {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--touch-target-min);
+    padding: 0 0.15rem;
+  }
+}
+
+/* The nav list is the one place with real vertical pressure: twelve rows, and a
+   short landscape viewport already compacts them on purpose. Honouring that —
+   the sidebar scrolls either way, but a phone held sideways should not have to
+   scroll past six screens of navigation. */
+@media (hover: none) and (min-height: 551px) {
+  .sidebar .sidebar-nav .sidebar-nav-item {
+    min-height: var(--touch-target-min);
+  }
+}

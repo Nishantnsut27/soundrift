@@ -1,1 +1,1 @@
-export { MusicAPI as JamendoAPI, formatDuration, getJamendoTrackUrl, getJamendoArtistUrl } from './musicApi';
+export { MusicAPI as JamendoAPI, formatDuration } from './musicApi';

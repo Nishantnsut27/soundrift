@@ -1,7 +1,15 @@
-import type { Track, Artist, Album, CuratedSection, RelatedMusic } from '../types/types';
+import type {
+  Track,
+  Album,
+  CuratedSection,
+  RelatedMusic,
+  PlaylistSummary,
+  PagedResult,
+  CataloguePlaylist,
+} from '../types/types';
 import { API_ENDPOINTS, PLAYER_DEFAULTS } from '../config/constants';
 import { fetchJson, type ApiResponse } from './apiClient';
-import { formatDuration, getTrackUrl, getArtistUrl } from '../utils/formatters';
+import { formatDuration } from '../utils/formatters';
 
 const searchCache = new Map<string, { timestamp: number; tracks: Track[] }>();
 const CACHE_TTL_MS = 300000;
@@ -74,13 +82,43 @@ export class MusicAPI {
     }
   }
 
-  static async getArtistById(id: string): Promise<Artist | null> {
+  /**
+   * An artist's albums, latest-first when asked for.
+   *
+   * There is no artist page any more; this survives because New Releases builds
+   * its arrivals feed from the featured artists' newest albums, and the
+   * catalogue offers no global new-releases endpoint to replace it.
+   */
+  static async getArtistAlbums(id: string, page = 0, sortBy = 'popularity'): Promise<PagedResult<Album>> {
     try {
-      const url = API_ENDPOINTS.ARTIST(id);
-      const body = await fetchJson<ApiResponse<Artist>>(url);
+      const url = `${API_ENDPOINTS.ARTIST_ALBUMS(id)}?page=${page}&sortBy=${encodeURIComponent(sortBy)}`;
+      const body = await fetchJson<ApiResponse<PagedResult<Album>>>(url);
+      return body.success && body.data ? body.data : { total: 0, items: [] };
+    } catch (error) {
+      console.error('[MusicAPI] Get artist albums error:', error);
+      return { total: 0, items: [] };
+    }
+  }
+
+  static async searchPlaylists(query: string, limit = 10): Promise<PlaylistSummary[]> {
+    if (!query || !query.trim()) return [];
+    try {
+      const url = `${API_ENDPOINTS.PLAYLIST_SEARCH}?q=${encodeURIComponent(query.trim())}&limit=${limit}`;
+      const body = await fetchJson<ApiResponse<PlaylistSummary[]>>(url);
+      return body.success && Array.isArray(body.data) ? body.data : [];
+    } catch (error) {
+      console.error('[MusicAPI] Search playlists error:', error);
+      return [];
+    }
+  }
+
+  static async getPlaylistById(id: string, limit = 50): Promise<CataloguePlaylist | null> {
+    try {
+      const url = `${API_ENDPOINTS.PLAYLIST(id)}?limit=${limit}`;
+      const body = await fetchJson<ApiResponse<CataloguePlaylist>>(url);
       return body.success ? body.data : null;
     } catch (error) {
-      console.error('[MusicAPI] Get artist by ID error:', error);
+      console.error('[MusicAPI] Get playlist error:', error);
       return null;
     }
   }
@@ -119,7 +157,11 @@ export class MusicAPI {
       return cached.tracks;
     }
     const tracks = await this.searchTracks(artistName, limit);
-    const filtered = tracks.filter(t => (t.artist_name || '').toLowerCase() === artistName.toLowerCase());
+    const filtered = tracks.filter(t => {
+      const songArtists = (t.artist_name || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+      const targetArtists = artistName.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+      return targetArtists.some(a => songArtists.includes(a));
+    });
     searchCache.set(cacheKey, { timestamp: Date.now(), tracks: filtered });
     if (searchCache.size > CACHE_MAX_ENTRIES) {
       const oldestKey = searchCache.keys().next().value;
@@ -137,7 +179,7 @@ export class MusicAPI {
     }
     const query = artistName ? `${albumName} ${artistName}` : albumName;
     const tracks = await this.searchTracks(query, limit);
-    const filtered = tracks.filter(t => (t.album_name || '').toLowerCase() === albumName.toLowerCase());
+    const filtered = tracks.filter(t => (t.album_name || '').toLowerCase().includes(albumName.toLowerCase()) || albumName.toLowerCase().includes((t.album_name || '').toLowerCase()));
     searchCache.set(cacheKey, { timestamp: Date.now(), tracks: filtered });
     return filtered;
   }
@@ -199,6 +241,4 @@ export class MusicAPI {
 }
 
 export const JamendoAPI = MusicAPI;
-export { formatDuration, getTrackUrl, getArtistUrl };
-export const getJamendoTrackUrl = getTrackUrl;
-export const getJamendoArtistUrl = getArtistUrl;
+export { formatDuration };

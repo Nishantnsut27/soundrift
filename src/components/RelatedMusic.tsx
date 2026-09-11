@@ -53,7 +53,15 @@ export function RelatedMusic() {
       {relatedMusic?.moreFromArtist && relatedMusic.moreFromArtist.length > 0 && (
         <section>
           <h2 className="section-title">More from {currentTrack.artist_name}</h2>
-          <TrackListModern tracks={relatedMusic.moreFromArtist} showAddToPlaylist />
+          <TrackListModern
+            tracks={relatedMusic.moreFromArtist}
+            showAddToPlaylist
+            queueContext={{
+              kind: 'section',
+              id: `related-artist:${currentTrack.artist_name}`,
+              name: `More from ${currentTrack.artist_name}`,
+            }}
+          />
         </section>
       )}
 
@@ -62,14 +70,26 @@ export function RelatedMusic() {
           <div className="section-header-row">
             <h2 className="section-title">More from {currentTrack.album_name}</h2>
           </div>
-          <TrackListModern tracks={relatedMusic.moreFromAlbum} showAddToPlaylist />
+          <TrackListModern
+            tracks={relatedMusic.moreFromAlbum}
+            showAddToPlaylist
+            queueContext={{
+              kind: 'section',
+              id: `related-album:${currentTrack.album_name}`,
+              name: `More from ${currentTrack.album_name}`,
+            }}
+          />
         </section>
       )}
 
       {relatedMusic?.similarSongs && relatedMusic.similarSongs.length > 0 && (
         <section>
           <h2 className="section-title">Similar Songs</h2>
-          <TrackListModern tracks={relatedMusic.similarSongs} showAddToPlaylist />
+          <TrackListModern
+            tracks={relatedMusic.similarSongs}
+            showAddToPlaylist
+            queueContext={{ kind: 'section', id: 'related-similar', name: 'Similar Songs' }}
+          />
         </section>
       )}
     </div>

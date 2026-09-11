@@ -22,3 +22,5 @@ yarn-error.log*
 Thumbs.db
 *.tmp
 report.md
+interview.md
+.claude/

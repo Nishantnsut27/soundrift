@@ -1,8 +1,10 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { usePlayer } from '../hooks/usePlayer';
 import { usePlayerStore } from '../store/playerStore';
+import { useAuthStore } from '../store/authStore';
 import { useToastStore } from '../store/toastStore';
 import { formatDuration, formatArtistNames } from '../utils/formatters';
+import { requireAuth } from '../utils/requireAuth';
 import { AudioVisualizer } from './AudioVisualizer';
 
 export function PlayerControls() {
@@ -54,6 +56,8 @@ export function PlayerControls() {
     isMuted,
     isBuffering,
     playbackError,
+    isShuffling,
+    repeatMode,
     togglePlayPause,
     nextTrack,
     previousTrack,
@@ -69,7 +73,13 @@ export function PlayerControls() {
     addToFavorites,
     removeFromFavorites,
     favorites,
+    toggleShuffle,
+    setRepeatMode,
+    isQueueOpen,
+    toggleQueue,
   } = usePlayerStore();
+
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
 
   const isDraggingProgress = useRef(false);
   const isDraggingVolume = useRef(false);
@@ -196,7 +206,11 @@ export function PlayerControls() {
 
   const handleToggleFavorite = () => {
     if (!currentTrack) return;
-    
+
+    // Guests get the auth flow, never a local write. A favourite that silently
+    // lives in one browser and vanishes on the next device is a broken promise.
+    if (!requireAuth('login')) return;
+
     if (isFavorite) {
       removeFromFavorites(currentTrack.id);
       addToast({
@@ -214,6 +228,14 @@ export function PlayerControls() {
     }
   };
 
+  /** Same cycle as the R keyboard shortcut, so the two never disagree. */
+  const handleCycleRepeat = () => {
+    setRepeatMode(repeatMode === 'none' ? 'all' : repeatMode === 'all' ? 'one' : 'none');
+  };
+
+  const repeatLabel =
+    repeatMode === 'one' ? 'Repeat one' : repeatMode === 'all' ? 'Repeat all' : 'Repeat off';
+
   const handleVolumeClick = () => {
     if (isMobile) {
       setShowVolume((prev) => !prev);
@@ -225,7 +247,7 @@ export function PlayerControls() {
   const handleClosePlayer = () => {
     const store = usePlayerStore.getState();
     store.pauseTrack();
-    store.clearQueue();
+    store.stopPlayback();
   };
 
   const getVolumeIcon = () => {
@@ -259,7 +281,7 @@ export function PlayerControls() {
       <div className="spotify-player-card">
         <div className="player-empty">
           <div className="pfp">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M9 18V5l12-2v13" />
               <circle cx="6" cy="18" r="3" />
               <circle cx="18" cy="16" r="3" />
@@ -274,6 +296,34 @@ export function PlayerControls() {
     );
   }
 
+  const seekBar = (
+    <div
+      className="progress-bar-container"
+      ref={progressRef}
+      onPointerDown={handleProgressPointerDown}
+      onPointerMove={handleProgressPointerMove}
+      onPointerUp={handleProgressPointerUp}
+      role="slider"
+      aria-label="Seek track"
+      aria-valuenow={Math.round(progress)}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (!currentTrack || effectiveDuration === 0) return;
+        if (e.key === 'ArrowRight') {
+          seek(Math.min(effectiveDuration, currentTime + 5));
+        } else if (e.key === 'ArrowLeft') {
+          seek(Math.max(0, currentTime - 5));
+        }
+      }}
+    >
+      <div className="progress-bar-hover" style={{ width: `${hoverProgress}%` }} />
+      <div className="progress-bar-fill" style={{ width: `${progress}%` }} />
+      <div className="progress-bar-thumb" style={{ left: `${progress}%` }} />
+    </div>
+  );
+
   return (
     <div className="spotify-player-card">
       {playbackError && (
@@ -282,47 +332,14 @@ export function PlayerControls() {
           <button type="button" onClick={retry}>Retry</button>
         </div>
       )}
-      <div 
-        className="progress-bar-container"
-        ref={progressRef}
-        onPointerDown={handleProgressPointerDown}
-        onPointerMove={handleProgressPointerMove}
-        onPointerUp={handleProgressPointerUp}
-        role="slider"
-        aria-label="Seek track"
-        aria-valuenow={Math.round(progress)}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        tabIndex={0}
-        onKeyDown={(e) => {
-          if (!currentTrack || effectiveDuration === 0) return;
-          if (e.key === 'ArrowRight') {
-            seek(Math.min(effectiveDuration, currentTime + 5));
-          } else if (e.key === 'ArrowLeft') {
-            seek(Math.max(0, currentTime - 5));
-          }
-        }}
-      >
-        <div 
-          className="progress-bar-hover" 
-          style={{ width: `${hoverProgress}%` }}
-        />
-        <div 
-          className="progress-bar-fill" 
-          style={{ width: `${progress}%` }}
-        />
-        <div 
-          className="progress-bar-thumb"
-          style={{ left: `${progress}%` }}
-        />
-      </div>
 
+      {/* Region 1 — now playing */}
       <div className="top">
         <div className="pfp">
           {currentTrack.image ? (
-            <img src={currentTrack.image} alt={currentTrack.name} />
+            <img src={currentTrack.image} alt="" />
           ) : (
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M9 18V5l12-2v13" />
               <circle cx="6" cy="18" r="3" />
               <circle cx="18" cy="16" r="3" />
@@ -331,79 +348,187 @@ export function PlayerControls() {
         </div>
 
         <div className="track-info">
-          <div className="title-1">{currentTrack.name}</div>
-          <div className="title-2" title={currentTrack.artist_name}>{formatArtistNames(currentTrack.artist_name)}</div>
+          <div className="title-1 truncate" title={currentTrack.name}>{currentTrack.name}</div>
+          <div className="title-2 truncate" title={currentTrack.artist_name}>{formatArtistNames(currentTrack.artist_name)}</div>
         </div>
 
         {(isPlaying || isBuffering) && (
-          <AudioVisualizer isPlaying={isPlaying} size="medium" />
+          <AudioVisualizer isPlaying={isPlaying} size="small" />
         )}
       </div>
 
-      <div className="controls">
+      {/* Region 2 — transport + seek. Shuffle and repeat are real buttons here so
+          touch users, who never receive the S/R keyboard shortcuts, can reach them. */}
+      <div className="player-center">
+        <div className="controls">
+          <button
+            className={`control-btn shuffle-btn ${isShuffling ? 'is-on' : ''}`}
+            onClick={toggleShuffle}
+            title={isShuffling ? 'Shuffle on' : 'Shuffle off'}
+            aria-label={isShuffling ? 'Turn shuffle off' : 'Turn shuffle on'}
+            aria-pressed={isShuffling}
+          >
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="16 3 21 3 21 8" />
+              <line x1="4" y1="20" x2="21" y2="3" />
+              <polyline points="21 16 21 21 16 21" />
+              <line x1="15" y1="15" x2="21" y2="21" />
+              <line x1="4" y1="4" x2="9" y2="9" />
+            </svg>
+          </button>
+
+          <button className="control-btn" onClick={previousTrack} title="Previous track" aria-label="Previous track">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor">
+              <polygon points="19,20 9,12 19,4" />
+              <rect x="4" y="4.5" width="2.2" height="15" rx="1" />
+            </svg>
+          </button>
+
+          <button
+            className="control-btn play-btn"
+            onClick={togglePlayPause}
+            title={isBuffering ? 'Pause while buffering' : (isPlaying ? 'Pause' : 'Play')}
+            aria-label={isBuffering ? 'Pause while buffering' : (isPlaying ? 'Pause' : 'Play')}
+          >
+            {isBuffering ? (
+              <span className="player-buffering-spinner" aria-hidden="true" />
+            ) : isPlaying ? (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="6" y="4" width="4" height="16" />
+                <rect x="14" y="4" width="4" height="16" />
+              </svg>
+            ) : (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                <polygon points="6,3 20,12 6,21" />
+              </svg>
+            )}
+          </button>
+
+          <button className="control-btn" onClick={nextTrack} title="Next track" aria-label="Next track">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor">
+              <polygon points="5,4 15,12 5,20" />
+              <rect x="17.8" y="4.5" width="2.2" height="15" rx="1" />
+            </svg>
+          </button>
+
+          <button
+            className={`control-btn repeat-btn ${repeatMode !== 'none' ? 'is-on' : ''}`}
+            onClick={handleCycleRepeat}
+            title={repeatLabel}
+            aria-label={`${repeatLabel}. Activate to change.`}
+          >
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="17 1 21 5 17 9" />
+              <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+              <polyline points="7 23 3 19 7 15" />
+              <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+            </svg>
+            {repeatMode === 'one' && <span className="repeat-one-badge" aria-hidden="true">1</span>}
+          </button>
+        </div>
+
+        <div className="player-seek">
+          <span className="timetext time_now">{formatDuration(currentTime)}</span>
+          {seekBar}
+          <span className="timetext time_full">{formatDuration(effectiveDuration)}</span>
+        </div>
+      </div>
+
+      {/* Region 3 — track and session actions */}
+      <div className="player-actions">
+        <button
+          className={`control-btn queue-btn ${isQueueOpen ? 'is-on' : ''}`}
+          onClick={toggleQueue}
+          title="Queue"
+          aria-label="Queue"
+          aria-expanded={isQueueOpen}
+          aria-controls="queue-panel"
+        >
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <line x1="3" y1="6" x2="15" y2="6" />
+            <line x1="3" y1="12" x2="15" y2="12" />
+            <line x1="3" y1="18" x2="11" y2="18" />
+            <polygon points="18,7 18,17 23,12" fill="currentColor" stroke="none" />
+          </svg>
+        </button>
+
         <button
           className={`control-btn favorite-btn ${isFavorite ? 'is-favorite' : ''}`}
           onClick={handleToggleFavorite}
-          title={isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}
-          aria-label={isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}
+          title={
+            !isAuthenticated
+              ? 'Sign in to save favorites'
+              : isFavorite ? 'Remove from Favorites' : 'Add to Favorites'
+          }
+          aria-label={
+            !isAuthenticated
+              ? 'Sign in to save favorites'
+              : isFavorite ? 'Remove from Favorites' : 'Add to Favorites'
+          }
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill={isFavorite ? '#1db954' : 'none'} stroke={isFavorite ? '#1db954' : 'currentColor'} strokeWidth="2">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill={isFavorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
           </svg>
         </button>
 
-        <button
-          className="control-btn"
-          onClick={previousTrack}
-          title="Previous track"
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <polygon points="19,20 9,12 19,4"/>
-            <line x1="5" y1="5" x2="5" y2="19"/>
-          </svg>
-        </button>
+        <div className="volume-control">
+          <button
+            className="control-btn volume_button"
+            onClick={handleVolumeClick}
+            onMouseEnter={handleVolumeMouseEnter}
+            onMouseLeave={handleVolumeMouseLeave}
+            title={isMobile ? 'Adjust volume' : (isMuted ? 'Unmute' : 'Mute')}
+            aria-label={isMobile ? 'Adjust volume' : (isMuted ? 'Unmute audio' : 'Mute audio')}
+          >
+            {getVolumeIcon()}
+          </button>
 
-        <button
-          className="control-btn play-btn"
-          onClick={togglePlayPause}
-          title={isBuffering ? 'Pause while buffering' : (isPlaying ? 'Pause' : 'Play')}
-          aria-label={isBuffering ? 'Pause while buffering' : (isPlaying ? 'Pause' : 'Play')}
-        >
-          {isBuffering ? (
-            <span className="player-buffering-spinner" aria-hidden="true" />
-          ) : isPlaying ? (
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-              <rect x="6" y="4" width="4" height="16"/>
-              <rect x="14" y="4" width="4" height="16"/>
-            </svg>
-          ) : (
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-              <polygon points="5,3 19,12 5,21"/>
-            </svg>
-          )}
-        </button>
-
-        <button
-          className="control-btn"
-          onClick={nextTrack}
-          title="Next track"
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <polygon points="5,4 15,12 5,20"/>
-            <line x1="19" y1="5" x2="19" y2="19"/>
-          </svg>
-        </button>
-
-        <button
-          className="control-btn volume_button"
-          onClick={handleVolumeClick}
-          onMouseEnter={handleVolumeMouseEnter}
-          onMouseLeave={handleVolumeMouseLeave}
-          title={isMobile ? 'Adjust volume' : (isMuted ? 'Unmute' : 'Mute')}
-          aria-label={isMobile ? 'Adjust volume' : (isMuted ? 'Unmute audio' : 'Mute audio')}
-        >
-          {getVolumeIcon()}
-        </button>
+          <div
+            className={`volume ${showVolume ? 'show' : ''} ${volumeChangeIndicator ? 'volume-changing' : ''}`}
+            onMouseEnter={handleVolumeMouseEnter}
+            onMouseLeave={handleVolumeMouseLeave}
+          >
+            <div className="volume-header">
+              <span className="volume-label">Volume</span>
+              <span className="volume-text">{Math.round(volumePercent)}%</span>
+            </div>
+            <div
+              className="slider volume-slider"
+              ref={volumeRef}
+              onPointerDown={handleVolumePointerDown}
+              onPointerMove={handleVolumePointerMove}
+              onPointerUp={handleVolumePointerUp}
+              role="slider"
+              aria-label="Volume slider"
+              aria-valuenow={Math.round(volumePercent)}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              tabIndex={0}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+                  changeVolume(Math.min(100, volume + 5));
+                } else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+                  changeVolume(Math.max(0, volume - 5));
+                }
+              }}
+            >
+              <div className="volume-track">
+                {!isMobile && (
+                  <div className="volume-hover" style={{ width: `${hoverVolume}%` }} />
+                )}
+                <div
+                  className="green volume-fill"
+                  style={isMobile ? { height: `${volumePercent}%`, bottom: 0, top: 'auto', width: '100%' } : { width: `${volumePercent}%` }}
+                />
+                <div
+                  className="circle volume-thumb"
+                  style={isMobile ? { bottom: `${volumePercent}%`, left: '50%', top: 'auto' } : { left: `${volumePercent}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
 
         <button
           className="control-btn close-btn"
@@ -412,63 +537,11 @@ export function PlayerControls() {
           aria-label="Close music player"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18"/>
-            <line x1="6" y1="6" x2="18" y2="18"/>
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
           </svg>
         </button>
-
-        <div 
-          className={`volume ${showVolume ? 'show' : ''} ${volumeChangeIndicator ? 'volume-changing' : ''}`}
-          onMouseEnter={handleVolumeMouseEnter}
-          onMouseLeave={handleVolumeMouseLeave}
-        >
-          <div className="volume-header">
-            <span className="volume-label">Volume</span>
-            <span className="volume-text">{Math.round(volumePercent)}%</span>
-          </div>
-          <div 
-            className="slider volume-slider"
-            ref={volumeRef}
-            onPointerDown={handleVolumePointerDown}
-            onPointerMove={handleVolumePointerMove}
-            onPointerUp={handleVolumePointerUp}
-            role="slider"
-            aria-label="Volume slider"
-            aria-valuenow={Math.round(volumePercent)}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            tabIndex={0}
-            onKeyDown={(e) => {
-              e.stopPropagation();
-              if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
-                changeVolume(Math.min(100, volume + 5));
-              } else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
-                changeVolume(Math.max(0, volume - 5));
-              }
-            }}
-          >
-            <div className="volume-track">
-              {!isMobile && (
-                <div 
-                  className="volume-hover"
-                  style={{ width: `${hoverVolume}%` }}
-                />
-              )}
-              <div 
-                className="green volume-fill" 
-                style={isMobile ? { height: `${volumePercent}%`, bottom: 0, top: 'auto', width: '100%' } : { width: `${volumePercent}%` }}
-              />
-              <div 
-                className="circle volume-thumb"
-                style={isMobile ? { bottom: `${volumePercent}%`, left: '50%', top: 'auto' } : { left: `${volumePercent}%` }}
-              />
-            </div>
-          </div>
-        </div>
       </div>
-
-      <div className="timetext time_now">{formatDuration(currentTime)}</div>
-      <div className="timetext time_full">{formatDuration(effectiveDuration)}</div>
     </div>
   );
 }

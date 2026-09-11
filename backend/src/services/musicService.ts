@@ -1,7 +1,13 @@
-import { IMusicProvider } from '../providers/musicProvider.interface.js';
+import { IMusicProvider, ArtistCatalogueOptions } from '../providers/musicProvider.interface.js';
 import { JioSaavnProvider } from '../providers/jiosaavnProvider.js';
 import { JamendoProvider } from '../providers/jamendoProvider.js';
-import { Song, Album, Artist, Playlist } from '../models/music.model.js';
+import {
+  Song,
+  Album,
+  Playlist,
+  PlaylistSummary,
+  PagedResult
+} from '../models/music.model.js';
 import { deduplicateSongs, rankSongs } from '../utils/deduplication.js';
 import { scoreCandidate, ScoredCandidate } from '../utils/recommendationScore.js';
 import { globalCacheService } from './cacheService.js';
@@ -10,7 +16,13 @@ import { isSearchNoise, normalizeStringForSearch } from '../utils/musicSearch.js
 import { logger, serializeError } from '../utils/logger.js';
 
 export class MusicService {
-  private jiosaavnProvider: IMusicProvider;
+  /**
+   * Typed as the concrete provider, not the interface: the artist catalogue,
+   * artist search and playlist search endpoints exist only on JioSaavn, and
+   * pretending otherwise would mean guarding every call for a branch that can
+   * never be taken here.
+   */
+  private jiosaavnProvider: JioSaavnProvider;
   private jamendoProvider: IMusicProvider;
 
   constructor() {
@@ -76,26 +88,39 @@ export class MusicService {
     }, MUSIC_ENGINE_CONFIG.metadataCacheTtlMs);
   }
 
-  async getArtistById(id: string): Promise<Artist | null> {
-    if (!id) return null;
-    const cacheKey = `artist:${id}`;
+  async getArtistAlbums(id: string, options: ArtistCatalogueOptions = {}): Promise<PagedResult<Album>> {
+    if (!id) return { total: 0, items: [] };
+    const { page = 0, sortBy = 'popularity', sortOrder = 'desc' } = options;
+    const cacheKey = `artist-albums:${id}:${page}:${sortBy}:${sortOrder}`;
 
-    return globalCacheService.getOrFetch(cacheKey, async () => {
-      const artist = await this.jiosaavnProvider.getArtistById(id);
-      if (artist) {
-        return artist;
-      }
+    const result = await globalCacheService.getOrFetch(
+      cacheKey,
+      () => this.jiosaavnProvider.getArtistAlbums(id, { page, sortBy, sortOrder }),
+      MUSIC_ENGINE_CONFIG.metadataCacheTtlMs
+    );
 
-      return this.jamendoProvider.getArtistById(id);
-    }, MUSIC_ENGINE_CONFIG.metadataCacheTtlMs);
+    return result ?? { total: 0, items: [] };
   }
 
-  async getPlaylistById(id: string): Promise<Playlist | null> {
+  async searchPlaylists(query: string, limit = 10): Promise<PlaylistSummary[]> {
+    if (!query || !query.trim()) return [];
+    const cacheKey = `playlist-search:${normalizeStringForSearch(query)}:${limit}`;
+
+    const result = await globalCacheService.getOrFetch(
+      cacheKey,
+      () => this.jiosaavnProvider.searchPlaylists(query.trim(), limit),
+      MUSIC_ENGINE_CONFIG.metadataCacheTtlMs
+    );
+
+    return result ?? [];
+  }
+
+  async getPlaylistById(id: string, limit = 50): Promise<Playlist | null> {
     if (!id) return null;
-    const cacheKey = `playlist:${id}`;
+    const cacheKey = `playlist:${id}:${limit}`;
 
     return globalCacheService.getOrFetch(cacheKey, async () => {
-      const playlist = await this.jiosaavnProvider.getPlaylistById(id);
+      const playlist = await this.jiosaavnProvider.getPlaylistById(id, limit);
       if (playlist) {
         return playlist;
       }

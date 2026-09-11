@@ -85,20 +85,77 @@ export function SkeletonPlaylistsGrid({ count = 4 }: { count?: number }) {
 }
 export function SkeletonGuestCard() {
   return (
-    <div className="guest-music-card" style={{ cursor: 'default' }}>
-      <Skeleton width="100%" height="auto" style={{ aspectRatio: '1 / 1', marginBottom: '0.75rem' }} borderRadius="8px" />
-      <Skeleton width="80%" height="1rem" style={{ marginBottom: '0.4rem' }} />
-      <Skeleton width="60%" height="0.85rem" />
+    <div className="music-card" style={{ cursor: 'default' }}>
+      <Skeleton width="100%" height="auto" style={{ aspectRatio: '1 / 1', borderRadius: '10px' }} />
+      <Skeleton width="80%" height="0.9rem" style={{ marginTop: '0.4rem' }} />
+      <Skeleton width="55%" height="0.7rem" style={{ marginTop: '0.3rem' }} />
     </div>
   );
 }
 
 export function SkeletonGuestCardsGrid({ count = 8 }: { count?: number }) {
   return (
-    <div className="guest-cards-grid">
+    <div className="music-card-grid">
       {Array.from({ length: count }).map((_, index) => (
         <SkeletonGuestCard key={index} />
       ))}
+    </div>
+  );
+}
+
+/**
+ * Loading state for the search page.
+ *
+ * Deliberately shaped like the result page it precedes — one top result, a run of
+ * compact song rows, then the two secondary rows — so that when the real results
+ * arrive nothing jumps. The section headings are drawn too, because a heading
+ * appearing after the rows is the largest shift of all.
+ */
+export function SkeletonSearchResults() {
+  return (
+    <div className="search-results" aria-busy="true" aria-live="polite">
+      <span className="visually-hidden">Searching…</span>
+
+      <section className="search-section">
+        <Skeleton width="7rem" height="1.1rem" className="skeleton-section-title" />
+        <div className="search-top-result">
+          <Skeleton width="72px" height="72px" borderRadius="10px" />
+          <div className="search-top-result-text">
+            <Skeleton width="45%" height="1.15rem" />
+            <Skeleton width="30%" height="0.8rem" />
+          </div>
+        </div>
+      </section>
+
+      <section className="search-section">
+        <Skeleton width="4.5rem" height="1.1rem" className="skeleton-section-title" />
+        <SkeletonTrackList count={6} />
+      </section>
+
+      <section className="search-section">
+        <Skeleton width="5rem" height="1.1rem" className="skeleton-section-title" />
+        <div className="search-artist-grid">
+          {Array.from({ length: 5 }).map((_, index) => (
+            <div className="search-artist-skeleton" key={index}>
+              <Skeleton width="100%" height="auto" borderRadius="50%" style={{ aspectRatio: '1 / 1' }} />
+              <Skeleton width="70%" height="0.8rem" />
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="search-section">
+        <Skeleton width="5rem" height="1.1rem" className="skeleton-section-title" />
+        <div className="search-album-grid">
+          {Array.from({ length: 5 }).map((_, index) => (
+            <div className="search-album-skeleton" key={index}>
+              <Skeleton width="100%" height="auto" borderRadius="8px" style={{ aspectRatio: '1 / 1' }} />
+              <Skeleton width="80%" height="0.8rem" />
+              <Skeleton width="55%" height="0.7rem" />
+            </div>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }

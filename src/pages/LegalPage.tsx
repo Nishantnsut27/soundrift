@@ -1,10 +1,11 @@
 import { useEffect } from 'react';
+import { SUPPORT_EMAIL } from '../config/constants';
 import './../styles/legal.css';
 
 export type LegalPageType = 'terms' | 'privacy';
 
 const EFFECTIVE_DATE = 'August 28, 2026';
-const CONTACT_EMAIL = 'contactsoundrift@gmail.com';
+const CONTACT_EMAIL = SUPPORT_EMAIL;
 const APP_NAME = 'Soundrift';
 
 interface LegalPageProps {

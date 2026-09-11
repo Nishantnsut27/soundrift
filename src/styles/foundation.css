@@ -1,0 +1,205 @@
+/* Soundrift foundation layer.
+   Text utilities, the editorial type scale and the button system.
+   Loaded after variables.css so it can read the tokens, and before the
+   component sheets so components can still override it. */
+
+/* ------------------------------------------------------------------ *
+ * Text utilities
+ * ------------------------------------------------------------------ */
+
+/* The markup has referenced .truncate for a long time without it ever being
+   defined outside two sidebar media queries, which is why long titles pushed
+   cards to different heights. min-width:0 is required for it to work inside
+   flex and grid children. */
+.truncate {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.clamp-2 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+/* ------------------------------------------------------------------ *
+ * Type scale
+ * ------------------------------------------------------------------ */
+
+.t-display {
+  font-size: var(--type-display);
+  line-height: var(--leading-display);
+  letter-spacing: var(--tracking-display);
+  font-weight: 800;
+  color: var(--text-1);
+  margin: 0;
+}
+
+.t-h1 {
+  font-size: var(--type-h1);
+  line-height: var(--leading-heading);
+  letter-spacing: var(--tracking-heading);
+  font-weight: 750;
+  color: var(--text-1);
+  margin: 0;
+}
+
+.t-h2 {
+  font-size: var(--type-h2);
+  line-height: var(--leading-heading);
+  letter-spacing: var(--tracking-heading);
+  font-weight: 700;
+  color: var(--text-1);
+  margin: 0;
+}
+
+.t-h3 {
+  font-size: var(--type-h3);
+  line-height: var(--leading-heading);
+  font-weight: 650;
+  color: var(--text-1);
+  margin: 0;
+}
+
+.t-body {
+  font-size: var(--type-body);
+  line-height: var(--leading-body);
+  color: var(--text-2);
+  margin: 0;
+}
+
+.t-meta {
+  font-size: var(--type-meta);
+  line-height: var(--leading-body);
+  color: var(--text-2);
+  margin: 0;
+}
+
+.t-micro {
+  font-size: var(--type-micro);
+  line-height: 1.4;
+  color: var(--text-3);
+  margin: 0;
+}
+
+/* Small uppercase label that sits above a heading. */
+.t-eyebrow {
+  font-size: var(--type-micro);
+  line-height: 1.4;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-eyebrow);
+  color: var(--text-3);
+  margin: 0;
+}
+
+/* ------------------------------------------------------------------ *
+ * Buttons
+ * ------------------------------------------------------------------ *
+ * sr- prefixed so the legacy .btn family keeps working untouched on the
+ * authenticated pages. Green is reserved for the single primary action. */
+
+.sr-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 38px;
+  padding: 0 1.125rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--text-1);
+  font-family: inherit;
+  font-size: var(--type-meta);
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.18s var(--smooth), border-color 0.18s var(--smooth),
+    color 0.18s var(--smooth), transform 0.18s var(--smooth);
+}
+
+.sr-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.sr-btn:not(:disabled):active {
+  transform: scale(0.98);
+}
+
+/* Solid accent. One per view at most. */
+.sr-btn-primary {
+  background: var(--primary);
+  color: #08090a;
+}
+
+.sr-btn-primary:hover:not(:disabled) {
+  background: var(--primary-light);
+}
+
+/* Neutral filled — the default for anything that is not the hero action. */
+.sr-btn-secondary {
+  background: var(--surface-3);
+  color: var(--text-1);
+  border-color: var(--line);
+}
+
+.sr-btn-secondary:hover:not(:disabled) {
+  background: var(--surface-active);
+  border-color: var(--line-strong);
+}
+
+/* Outline, for secondary conversion surfaces such as the guest CTA. */
+.sr-btn-outline {
+  border-color: var(--line);
+  color: var(--text-1);
+}
+
+.sr-btn-outline:hover:not(:disabled) {
+  background: var(--surface-hover);
+  border-color: var(--line-strong);
+}
+
+/* Text-only affordance: "See all", inline navigation. */
+.sr-btn-quiet {
+  min-height: 30px;
+  padding: 0 0.5rem;
+  color: var(--text-2);
+  font-size: var(--type-meta);
+}
+
+.sr-btn-quiet:hover:not(:disabled) {
+  color: var(--text-1);
+  background: var(--surface-hover);
+}
+
+.sr-btn-sm {
+  min-height: 32px;
+  padding: 0 0.85rem;
+  font-size: var(--type-micro);
+}
+
+.sr-btn-block {
+  width: 100%;
+}
+
+/* Square icon-only button. */
+.sr-btn-icon {
+  min-height: 36px;
+  width: 36px;
+  padding: 0;
+  border-radius: 50%;
+  color: var(--text-2);
+}
+
+.sr-btn-icon:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text-1);
+}

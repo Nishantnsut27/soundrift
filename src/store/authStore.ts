@@ -106,7 +106,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       import('./playerStore').then(({ usePlayerStore }) => {
         const store = usePlayerStore.getState();
         store.clearResults();
-        store.clearQueue();
+        store.stopPlayback();
         store.clearRecommendations();
         usePlayerStore.setState({
           query: '',
