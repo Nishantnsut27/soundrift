@@ -40,3 +40,14 @@ export function extractBestAudioUrl(downloadUrlSource: string | QualityUrl[] | u
   }
   return fallback;
 }
+
+export function extractFallbackAudioUrl(downloadUrlSource: string | QualityUrl[] | undefined | null, primary: string): string {
+  if (!Array.isArray(downloadUrlSource) || downloadUrlSource.length === 0) return primary;
+  const ordered = ['160kbps', '96kbps', '48kbps', '12kbps'];
+  for (const quality of ordered) {
+    const match = downloadUrlSource.find(audio => audio.quality === quality);
+    if (match?.url && match.url !== primary) return match.url;
+  }
+  const distinct = downloadUrlSource.find(audio => audio.url && audio.url !== primary);
+  return distinct?.url || primary;
+}
