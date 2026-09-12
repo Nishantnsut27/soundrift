@@ -7,7 +7,7 @@ import {
   ArtistCredit,
   PlaylistSummary
 } from '../models/music.model.js';
-import { extractBestImage, extractBestAudioUrl } from '../utils/mediaHelper.js';
+import { extractBestImage, extractBestAudioUrl, extractFallbackAudioUrl } from '../utils/mediaHelper.js';
 
 function cleanText(str: string | undefined | null): string {
   if (!str) return '';
@@ -101,7 +101,9 @@ export class MusicNormalizer {
       || (typeof raw?.artistId === 'string' ? raw.artistId : '');
 
     const bestImage = extractBestImage(raw?.image || raw?.album?.image || raw?.images || raw?.thumbnail);
-    const audioUrl = extractBestAudioUrl(raw?.downloadUrl || raw?.audio);
+    const downloadUrls = raw?.downloadUrl || raw?.audio;
+    const audioUrl = extractBestAudioUrl(downloadUrls);
+    const fallbackAudioUrl = extractFallbackAudioUrl(downloadUrls, audioUrl);
 
     const rawGenres = Array.isArray(raw?.musicinfo?.tags?.genres)
       ? raw.musicinfo.tags.genres.filter((g: unknown): g is string => typeof g === 'string' && g.trim().length > 0)
@@ -119,7 +121,7 @@ export class MusicNormalizer {
       album_image: bestImage,
       image: bestImage,
       audio: audioUrl,
-      audiodownload: audioUrl,
+      audiodownload: fallbackAudioUrl,
       license_ccurl: '',
       language: typeof raw?.language === 'string' ? cleanText(raw.language) : '',
       musicinfo: {

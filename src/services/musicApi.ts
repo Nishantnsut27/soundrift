@@ -71,10 +71,10 @@ export class MusicAPI {
     return body.data;
   }
 
-  static async getTrackById(id: string): Promise<Track | null> {
+  static async getTrackById(id: string, signal?: AbortSignal): Promise<Track | null> {
     try {
       const url = API_ENDPOINTS.SONG(id);
-      const body = await fetchJson<ApiResponse<Track>>(url);
+      const body = await fetchJson<ApiResponse<Track>>(url, { signal });
       return body.success ? body.data : null;
     } catch (error) {
       console.error('[MusicAPI] Get track by ID error:', error);

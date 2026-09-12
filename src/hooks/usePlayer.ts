@@ -2,12 +2,17 @@ import { useCallback, useEffect, useRef } from 'react';
 import type { Track } from '../types/types';
 import { STORAGE_KEYS } from '../config/constants';
 import { usePlayerStore } from '../store/playerStore';
+import { MusicAPI } from '../services/musicApi';
 
 let singletonAudio: HTMLAudioElement | null = null;
 let listenersAttached = false;
 
 let loadedSrc = '';
+let loadedTrackId = '';
 let srcGeneration = 0;
+
+let recoveryTrackId = '';
+let recoveryStage = 0;
 
 let lastReportedTime = -1;
 let suppressPauseEvent = false;
@@ -81,8 +86,7 @@ function attachAudioListeners(audio: HTMLAudioElement) {
     state.setBuffering(false);
     if (state.isPlaying && audio.paused && audio.currentSrc) {
       const generation = srcGeneration;
-      const src = state.currentTrack?.audio || state.currentTrack?.audiodownload || '';
-      if (src && src === loadedSrc && src === audio.currentSrc) {
+      if (loadedSrc && loadedSrc === audio.currentSrc) {
         void audio.play().catch((err) => {
           if (err?.name === 'AbortError' || generation !== srcGeneration) return;
           state.setPlaybackError('Playback could not start. Please try again.');
@@ -100,25 +104,74 @@ function attachAudioListeners(audio: HTMLAudioElement) {
     const state = store();
     const track = state.currentTrack;
     if (!track) return;
-    const candidates = [track.audio, track.audiodownload].filter(Boolean);
-    const current = audio.currentSrc;
-    const next = candidates.find((c) => c !== current);
-    if (next && next !== current) {
-      loadedSrc = next;
+
+    if (recoveryTrackId !== track.id) {
+      recoveryTrackId = track.id;
+      recoveryStage = 0;
+    }
+
+    const applySource = (nextSrc: string) => {
+      loadedSrc = nextSrc;
+      loadedTrackId = track.id;
       srcGeneration += 1;
       const generation = srcGeneration;
-      audio.src = next;
+      audio.src = nextSrc;
       audio.load();
-      if (state.isPlaying) {
+      if (usePlayerStore.getState().isPlaying) {
         void audio.play().catch((err) => {
           if (err?.name === 'AbortError' || generation !== srcGeneration) return;
-          state.setPlaybackError('Playback could not start. Please try again.');
+          usePlayerStore.getState().setPlaybackError('Playback could not start. Please try again.');
         });
       }
+    };
+
+    const fail = () => {
+      recoveryStage = 3;
+      const live = usePlayerStore.getState();
+      live.setBuffering(false);
+      live.setIsPlaying(false);
+      live.setPlaybackError('This stream is unavailable. Check your connection and retry.');
+    };
+
+    if (recoveryStage === 0) {
+      recoveryStage = 1;
+      const current = audio.currentSrc;
+      const alternate = [track.audio, track.audiodownload].filter(Boolean).find((c) => c !== current);
+      if (alternate) {
+        applySource(alternate);
+        return;
+      }
+    }
+
+    if (recoveryStage === 1) {
+      recoveryStage = 2;
+      const failedSrc = audio.currentSrc;
+      const generation = srcGeneration;
+      state.setBuffering(true);
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 8000);
+      void MusicAPI.getTrackById(track.id, controller.signal)
+        .then((fresh) => {
+          clearTimeout(timer);
+          const live = usePlayerStore.getState();
+          if (generation !== srcGeneration || live.currentTrack?.id !== track.id) return;
+          const refreshed = fresh?.audio || fresh?.audiodownload || '';
+          if (refreshed && refreshed !== failedSrc) {
+            applySource(refreshed);
+            return;
+          }
+          fail();
+        })
+        .catch(() => {
+          clearTimeout(timer);
+          const live = usePlayerStore.getState();
+          if (generation !== srcGeneration || live.currentTrack?.id !== track.id) return;
+          fail();
+        });
       return;
     }
-    state.setIsPlaying(false);
-    state.setPlaybackError('This stream is unavailable. Check your connection and retry.');
+
+    fail();
   });
 }
 
@@ -150,6 +203,9 @@ export function usePlayer() {
         audio.removeAttribute('src');
         audio.load();
         loadedSrc = '';
+        loadedTrackId = '';
+        recoveryTrackId = '';
+        recoveryStage = 0;
         srcGeneration += 1;
         queueMicrotask(() => { suppressPauseEvent = false; });
       }
@@ -157,12 +213,15 @@ export function usePlayer() {
     }
     updateMediaSession(currentTrack);
     const src = currentTrack.audio || currentTrack.audiodownload || '';
-    if (src && src === loadedSrc) {
+    if (src && loadedTrackId === currentTrack.id && loadedSrc) {
       setBuffering(isPlaying ? audio.readyState < HTMLMediaElement.HAVE_FUTURE_DATA : false);
       return;
     }
     srcGeneration += 1;
     loadedSrc = src;
+    loadedTrackId = currentTrack.id;
+    recoveryTrackId = currentTrack.id;
+    recoveryStage = 0;
     lastReportedTime = -1;
     suppressPauseEvent = true;
     audio.pause();
@@ -182,7 +241,7 @@ export function usePlayer() {
     const src = currentTrack.audio || currentTrack.audiodownload || '';
     if (!src) return;
     if (isPlaying) {
-      if (audio.src !== src) return;
+      if (!loadedSrc || audio.src !== loadedSrc) return;
       const generation = srcGeneration;
       setBuffering(audio.readyState < HTMLMediaElement.HAVE_FUTURE_DATA);
       void audio.play().catch((err) => {
@@ -211,5 +270,12 @@ export function usePlayer() {
   const play = useCallback((track?: Track) => { if (track) playTrack(track); else setIsPlaying(true); }, [playTrack, setIsPlaying]);
   const pause = useCallback(() => pauseTrack(), [pauseTrack]);
   const togglePlayPause = useCallback(() => { if (isPlaying) pause(); else play(); }, [isPlaying, pause, play]);
-  return { currentTrack, isPlaying, isBuffering: state.isBuffering, playbackError: state.playbackError, volume, isMuted, queue, currentIndex, isShuffling, repeatMode, play, pause, togglePlayPause, nextTrack, previousTrack, seek: seekAudio, changeVolume: setVolume, mute: toggleMute, retry: () => setIsPlaying(true), audioRef: { current: audio } };
+  const retry = useCallback(() => {
+    loadedTrackId = '';
+    recoveryTrackId = '';
+    recoveryStage = 0;
+    setPlaybackError(null);
+    setIsPlaying(true);
+  }, [setIsPlaying, setPlaybackError]);
+  return { currentTrack, isPlaying, isBuffering: state.isBuffering, playbackError: state.playbackError, volume, isMuted, queue, currentIndex, isShuffling, repeatMode, play, pause, togglePlayPause, nextTrack, previousTrack, seek: seekAudio, changeVolume: setVolume, mute: toggleMute, retry, audioRef: { current: audio } };
 }
