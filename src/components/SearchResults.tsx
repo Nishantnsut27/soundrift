@@ -2,7 +2,7 @@ import { TrackListModern } from './TrackListModern';
 import { SkeletonSearchResults } from './Skeletons';
 import { usePlayerStore } from '../store/playerStore';
 import { useAuthStore } from '../store/authStore';
-import type { QueueContext, Track } from '../types/types';
+import type { Track } from '../types/types';
 
 const FALLBACK_ART = '/Favicon.png';
 
@@ -40,14 +40,6 @@ export function SearchResults({
     .filter((playlist) => playlist.name.toLowerCase().includes(query.toLowerCase()))
     .slice(0, 4);
 
-  /* The top result and the Songs list are one ranking, so both queue the whole
-     of it: Next walks down the results and the radio takes over at the end. */
-  const searchContext: QueueContext = {
-    kind: 'section',
-    id: `search:${query}`,
-    name: `Results for ${query}`,
-  };
-
   const playTop = () => {
     const store = usePlayerStore.getState();
     if (store.currentTrack?.id === topResult.id) {
@@ -55,7 +47,7 @@ export function SearchResults({
       else store.setIsPlaying(true);
       return;
     }
-    store.playTrack(topResult, tracks, 0, searchContext);
+    store.playTrack(topResult);
   };
 
   const isTopCurrent = currentTrack?.id === topResult.id;
@@ -100,10 +92,8 @@ export function SearchResults({
           <h2 className="search-section-title">Songs</h2>
           <TrackListModern
             tracks={otherSongs}
-            playQueue={tracks}
             variant="list"
             showAddToPlaylist
-            queueContext={searchContext}
           />
         </section>
       )}
