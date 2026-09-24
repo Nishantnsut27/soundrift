@@ -15,6 +15,7 @@ import { STORAGE_KEYS, PLAYER_DEFAULTS } from '../config/constants';
 import { userApi } from '../services/userApi';
 import type { RawHistoryEntry } from '../services/userApi';
 import { useAuthStore } from './authStore';
+import { getNextQueuePosition } from '../utils/queuePlayback';
 
 /** One loose track: the only shape the suggestion engine is allowed to extend. */
 const SINGLE_CONTEXT: QueueContext = { kind: 'single' };
@@ -430,40 +431,13 @@ export const usePlayerStore = create<AppStore>()(
       const state = get();
       if (!state.currentTrack || state.queue.length === 0) return;
 
-      let nextIndex: number;
-      let playNext = true;
-
-      if (state.repeatMode === 'one') {
-        nextIndex = state.currentIndex;
-      } else if (state.isShuffling && state.shuffleOrder.length > 0) {
-        const nextPos = state.shufflePosition + 1;
-        if (nextPos >= state.shuffleOrder.length) {
-          if (state.repeatMode === 'all') {
-            nextIndex = 0;
-          } else {
-            playNext = false;
-            nextIndex = -1;
-          }
-        } else {
-          nextIndex = state.shuffleOrder[nextPos];
-          set({ shufflePosition: nextPos });
-        }
-      } else {
-        nextIndex = state.currentIndex + 1;
-        if (nextIndex >= state.queue.length) {
-          if (state.repeatMode === 'all') {
-            nextIndex = 0;
-          } else {
-            playNext = false;
-            nextIndex = -1;
-          }
-        }
-      }
-
-      if (!playNext || nextIndex < 0 || nextIndex === state.currentIndex) {
-        if (!playNext) set({ isPlaying: false });
+      const next = getNextQueuePosition(state);
+      if (!next) {
+        set({ isPlaying: false });
         return;
       }
+      const nextIndex = next.index;
+      if (nextIndex === state.currentIndex) return;
 
       const history = state.currentIndex >= 0
         ? [...state.playbackHistory, state.queue[state.currentIndex]].filter(Boolean) as QueueEntry[]
@@ -473,6 +447,7 @@ export const usePlayerStore = create<AppStore>()(
       set({
         currentTrack: nextTrack,
         currentIndex: nextIndex,
+        shufflePosition: next.shufflePosition,
         playbackHistory: history,
         currentTime: 0,
         duration: nextTrack.duration || 0,

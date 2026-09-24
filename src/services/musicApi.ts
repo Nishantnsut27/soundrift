@@ -71,10 +71,13 @@ export class MusicAPI {
     return body.data;
   }
 
-  static async getTrackById(id: string, signal?: AbortSignal): Promise<Track | null> {
+  static async getTrackById(id: string, signal?: AbortSignal, options: { refresh?: boolean } = {}): Promise<Track | null> {
     try {
-      const url = API_ENDPOINTS.SONG(id);
-      const body = await fetchJson<ApiResponse<Track>>(url, { signal });
+      const url = `${API_ENDPOINTS.SONG(id)}${options.refresh ? '?refresh=1' : ''}`;
+      const body = await fetchJson<ApiResponse<Track>>(url, {
+        signal,
+        ...(options.refresh ? { cache: 'no-store' as const } : {}),
+      });
       return body.success ? body.data : null;
     } catch (error) {
       console.error('[MusicAPI] Get track by ID error:', error);

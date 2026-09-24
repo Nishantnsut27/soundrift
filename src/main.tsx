@@ -4,6 +4,9 @@ import { Toaster } from 'sonner'
 import './index.css'
 import App from './App.tsx'
 import { PwaProvider } from './pwa/PwaProvider'
+import { initializePlayer } from './services/playerPlayback'
+
+initializePlayer()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

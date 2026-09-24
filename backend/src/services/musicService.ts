@@ -60,7 +60,7 @@ export class MusicService {
     }, MUSIC_ENGINE_CONFIG.searchCacheTtlMs);
   }
 
-  async getSongById(id: string): Promise<Song | null> {
+  async getSongById(id: string, refresh = false): Promise<Song | null> {
     if (!id) return null;
     const cacheKey = `song:${id}`;
 
@@ -71,7 +71,7 @@ export class MusicService {
       }
 
       return this.jamendoProvider.getSongById(id);
-    }, MUSIC_ENGINE_CONFIG.metadataCacheTtlMs);
+    }, MUSIC_ENGINE_CONFIG.metadataCacheTtlMs, refresh);
   }
 
   async getAlbumById(id: string): Promise<Album | null> {

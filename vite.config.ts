@@ -46,6 +46,12 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,woff,ttf}'],
         runtimeCaching: [
           {
+            // Stream recovery must reach the server rather than replay cached URLs.
+            urlPattern: ({ url }) => /\/api\/music\/song\/[^/]+$/.test(url.pathname)
+              && url.searchParams.get('refresh') === '1',
+            handler: 'NetworkOnly',
+          },
+          {
             urlPattern: /\/api\/auth\//i,
             handler: 'NetworkOnly',
           },

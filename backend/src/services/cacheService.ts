@@ -44,8 +44,8 @@ export class CacheService {
     this.inFlightMap.delete(key);
   }
 
-  public async getOrFetch<T>(key: string, fetchFn: () => Promise<T>, customTtlMs?: number): Promise<T> {
-    const cached = this.get<T>(key);
+  public async getOrFetch<T>(key: string, fetchFn: () => Promise<T>, customTtlMs?: number, refresh = false): Promise<T> {
+    const cached = refresh ? null : this.get<T>(key);
     if (cached !== null) {
       return cached;
     }

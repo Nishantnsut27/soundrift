@@ -100,7 +100,9 @@ export class MusicController {
         return;
       }
 
-      const song = await musicService.getSongById(songId);
+      const refresh = req.query.refresh === '1';
+      if (refresh) res.setHeader('Cache-Control', 'no-store');
+      const song = await musicService.getSongById(songId, refresh);
       if (!song) {
         res.status(404).json({
           success: false,
