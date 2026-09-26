@@ -741,6 +741,27 @@
     text-align: left;
   }
   
+  .header-search-container {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    max-width: none;
+    margin: 0 0.25rem;
+  }
+
+  .header-search-container .search-bar-form {
+    padding: 0 !important;
+  }
+
+  .header-search-container .search-bar-container {
+    max-width: none;
+    min-width: 0;
+  }
+
+  .content-search-container {
+    display: none !important;
+  }
+
   .header-actions {
     margin-left: 0;
   }
