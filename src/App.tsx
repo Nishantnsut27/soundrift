@@ -365,6 +365,19 @@ function App() {
     loadTrending();
   }, [trending.length, setTrending]);
 
+  // Keep the browser tab in sync with the selected track. This observes the shared
+  // player store, so manual skips, queue autoplay, and offline tracks use one path.
+  const currentTrack = usePlayerStore(state => state.currentTrack);
+  useEffect(() => {
+    const defaultTitle = 'Soundrift — Drift Into Your Next Favorite.';
+    const songTitle = currentTrack?.name?.trim();
+    document.title = songTitle ? `${songTitle} — Soundrift` : defaultTitle;
+
+    return () => {
+      document.title = defaultTitle;
+    };
+  }, [currentTrack?.name]);
+
   const theme = usePlayerStore(state => state.theme);
   useEffect(() => {
     // Soundrift is dark-only. This only mirrors the stored theme onto the root so
