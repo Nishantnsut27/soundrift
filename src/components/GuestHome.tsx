@@ -9,6 +9,7 @@ import { useTrackPlayback } from '../hooks/useTrackPlayback';
 import { usePlayerStore } from '../store/playerStore';
 import { requireAuth } from '../utils/requireAuth';
 import type { CuratedSection, QueueContext, Track } from '../types/types';
+import { useEffect, useMemo, useState } from 'react';
 
 /** One clean row per section; the phone rail scrolls through the rest. */
 const ROW_LENGTH = 6;
@@ -25,6 +26,8 @@ const TRENDING_CONTEXT: QueueContext = {
   id: TRENDING_ID,
   name: 'Trending now',
 };
+
+const FEATURE_ROTATION_MS = 12_000;
 
 /**
  * Guest Home: "what should I listen to?"
@@ -55,20 +58,61 @@ export function GuestHome() {
     (section) => !FEATURED_IDS.includes(section.sectionId) && section.tracks.length > 0,
   );
 
-  // The hero leads with real curated trending. If that section has not arrived,
-  // the trending list App already fetched stands in — same data source, no
-  // second request.
+  // Keep the hero sourced from the same live payload as the visible rows.
+  // Mixing sections makes the featured song useful for discovery instead of
+  // repeating the first Trending Now track indefinitely.
   const trendingTracks = trendingSection?.tracks ?? storeTrending;
-  const featured: Track | undefined = trendingTracks[0];
+  const featureSources = useMemo(() => {
+    const candidates: Array<{ track: Track; queue: Track[]; context: QueueContext }> = [];
+    const sourceSections = [
+      ...(trendingTracks.length ? [{ sectionId: TRENDING_ID, title: 'Trending now', tracks: trendingTracks }] : []),
+      ...(freshSection ? [freshSection] : []),
+      ...(editorsSection ? [editorsSection] : []),
+      ...extraSections,
+    ];
+    const seen = new Set<string>();
 
-  /* The hero is the top of the trending list, so playing it starts the list
-     there rather than stranding one track with nothing behind it. */
+    for (const section of sourceSections) {
+      for (const track of section.tracks) {
+        const id = String(track.id ?? '');
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        candidates.push({
+          track,
+          queue: section.tracks,
+          context: { kind: 'section', id: section.sectionId, name: section.title },
+        });
+      }
+    }
+
+    return candidates;
+  }, [trendingTracks, freshSection, editorsSection, extraSections]);
+
+  const [featureIndex, setFeatureIndex] = useState(0);
+  useEffect(() => {
+    setFeatureIndex(0);
+  }, [featureSources]);
+  useEffect(() => {
+    if (featureSources.length < 2) return;
+    const timer = window.setInterval(() => {
+      setFeatureIndex((current) => (current + 1) % featureSources.length);
+    }, FEATURE_ROTATION_MS);
+    return () => window.clearInterval(timer);
+  }, [featureSources.length]);
+
+  const featuredSource = featureSources[featureIndex % Math.max(featureSources.length, 1)];
+  const featured = featuredSource?.track;
+  const featureQueue = featuredSource?.queue ?? trendingTracks;
+  const featureContext = featuredSource?.context ?? TRENDING_CONTEXT;
+
+  // The feature's Play button must use the queue of the row it came from, so
+  // Next continues through Fresh Releases / Editor's Picks when appropriate.
   const { toggleTrack, currentTrackId, isPlaying } = useTrackPlayback(
-    trendingTracks,
-    TRENDING_CONTEXT,
+    featureQueue,
+    featureContext,
   );
 
-  const hasAnything = trendingTracks.length > 0 || Boolean(freshSection || editorsSection);
+  const hasAnything = featureSources.length > 0;
 
   if (isLoading && !hasAnything) {
     return (
