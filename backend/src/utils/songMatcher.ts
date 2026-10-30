@@ -103,23 +103,42 @@ export function findBestSongMatch(
   return best;
 }
 
+/** Unlike search normalization, retain parenthetical text and recording labels. */
+function normalizeStrictTitle(value: string): string {
+  return value.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+}
+
+function recordingLabels(value: string): string {
+  return [...new Set([...value.matchAll(/\(([^()]*)\)|\[([^\[\]]*)\]/g)]
+    .map(match => normalizeStrictTitle(match[1] ?? match[2]))
+    .filter(Boolean))].sort().join('|');
+}
+
 /** External web candidates must agree on title, artist and recording version independently. */
 export function findStrictSongMatch(title: string, artist: string, results: Song[]): SongMatch | null {
   const version = (value: string): string => [...new Set(
-    value.toLowerCase().match(/\b(?:remix|mashup|slowed|reverb|lo[ -]?fi|live|cover|karaoke|instrumental|acoustic|unplugged|sped[ -]?up|remaster(?:ed)?)\b/g) || []
+    (value.toLowerCase().match(/\b(?:remix|mashup|slowed|reverb|lo[ -]?fi|live|cover|karaoke|instrumental|acoustic|unplugged|sped[ -]?up|remaster(?:ed)?|radio[ -]?edit|reprise)\b/g) || [])
+      .map(normalizeStrictTitle)
   )].sort().join('|');
-  const candidates = results.filter(song => song && song.provider === 'jiosaavn' &&
-    version(song.name) === version(title) &&
-    similarity(normalizeName(title), normalizeName(song.name)) >= 0.85 &&
-    artistSimilarity(artist, song.artist_name) >= 0.8);
-  const matches = candidates.flatMap(song => {
-    const match = findBestSongMatch(title, artist, [song], 0.86, 0.8);
-    return match ? [match] : [];
+  const targetTitle = normalizeStrictTitle(title);
+  const targetVersion = version(title);
+  const targetLabels = recordingLabels(title);
+  const matches = results.flatMap(song => {
+    if (!song || song.provider !== 'jiosaavn' || !song.id || !song.audio || version(song.name) !== targetVersion) return [];
+    const songTitle = normalizeStrictTitle(song.name);
+    // Equal full titles may spell the same label with parentheses, brackets or a dash.
+    // Otherwise require labels to agree even when a long base title is very similar.
+    if (songTitle !== targetTitle && recordingLabels(song.name) !== targetLabels) return [];
+    const titleScore = similarity(targetTitle, songTitle);
+    const artistScore = artistSimilarity(artist, song.artist_name);
+    const confidence = titleScore * 0.7 + artistScore * 0.3 + 0.02;
+    if (titleScore < 0.85 || artistScore < 0.8 || confidence < 0.86) return [];
+    return [{ song, confidence }];
   }).sort((a, b) => b.confidence - a.confidence);
   const first = matches[0];
   if (!first) return null;
   const alternative = matches.find(match =>
-    normalizeName(match.song.name) !== normalizeName(first.song.name) ||
+    normalizeStrictTitle(match.song.name) !== normalizeStrictTitle(first.song.name) ||
     normalizeName(match.song.artist_name) !== normalizeName(first.song.artist_name));
   return alternative && first.confidence - alternative.confidence < 0.05 ? null : first;
 }

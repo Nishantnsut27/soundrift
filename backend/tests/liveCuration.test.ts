@@ -62,6 +62,52 @@ test('strict matching rejects wrong artists, versions and ambiguous titles', () 
   }
 });
 
+test('strict matching rejects missing or different recording labels in either direction', () => {
+  // A long base title must not let an unmatched label pass the fuzzy title threshold.
+  for (const title of ['New Song', 'The Beautiful Song We Will Always Remember']) {
+    for (const label of ['Radio Edit', 'Reprise', 'Alternate Take']) {
+      for (const labelled of [`${title} (${label})`, `${title} [${label}]`]) {
+        assert.equal(findStrictSongMatch(title, 'Sample Singer', [song('edit', { name: labelled })]), null, labelled);
+        assert.equal(findStrictSongMatch(labelled, 'Sample Singer', [song('original', { name: title })]), null, labelled);
+      }
+    }
+    for (const label of ['Radio Edit', 'Reprise']) {
+      const labelled = `${title} - ${label}`;
+      assert.equal(findStrictSongMatch(title, 'Sample Singer', [song('edit', { name: labelled })]), null, labelled);
+      assert.equal(findStrictSongMatch(labelled, 'Sample Singer', [song('original', { name: title })]), null, labelled);
+    }
+  }
+  assert.equal(findStrictSongMatch('New Song (Radio Edit)', 'Sample Singer', [song('reprise', { name: 'New Song (Reprise)' })]), null);
+});
+
+test('strict matching accepts the same recording label and selects the supported recording', () => {
+  const original = song('original', { name: 'New Song' });
+  for (const label of ['Radio Edit', 'Reprise', 'Alternate Take']) {
+    const labelled = song('labelled', { name: `New Song [${label.toUpperCase()}]` });
+    assert.equal(findStrictSongMatch(`New Song (${label})`, 'Sample Singer', [labelled])?.song.id, 'labelled');
+    assert.equal(findStrictSongMatch(`New Song - ${label}`, 'Sample Singer', [labelled])?.song.id, 'labelled');
+    for (const results of [[labelled, original], [original, labelled]]) {
+      assert.equal(findStrictSongMatch('New Song', 'Sample Singer', results)?.song.id, 'original');
+      assert.equal(findStrictSongMatch(`New Song (${label})`, 'Sample Singer', results)?.song.id, 'labelled');
+    }
+  }
+});
+
+test('live sections do not attach original recording evidence to radio edits or reprises', async () => {
+  for (const section of ['trending', 'fresh_releases'] as const) {
+    for (const label of ['Radio Edit', 'Reprise']) {
+      const service = new LiveCurationService({
+        getPlaylistById: async id => ({ id, name: 'Editorial', provider: 'jiosaavn', tracks: [song('base')] }),
+        search: async () => [song('different-recording', { name: `New Song (${label})` })]
+      }, { discover: async () => ({ candidates: [candidate], model: 'test', status: 'available', sourceCount: 1 }) });
+      const result = await service.generate(section, now);
+      assert.deepEqual(result.tracks.map(track => track.id), ['base']);
+      assert(result.provenance.every(item => item.kind === 'editorial'));
+      assert.equal(result.stats.unresolvedCount, 1);
+    }
+  }
+});
+
 test('agreement does not reorder editorial tracks; additions are unique and capped', () => {
   const editorial = Array.from({ length: 25 }, (_, index) => song(String(index)));
   const web = [editorial[24], ...Array.from({ length: 8 }, (_, index) => song(`web${index}`))];
