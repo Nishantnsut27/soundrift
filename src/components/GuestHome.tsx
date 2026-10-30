@@ -54,8 +54,12 @@ export function GuestHome() {
   // Anything else the curation engine returns (K-Pop, Worldwide, and whatever
   // is added server-side later) keeps its backend title and renders after the
   // three named rows.
-  const extraSections = sections.filter(
-    (section) => !FEATURED_IDS.includes(section.sectionId) && section.tracks.length > 0,
+  const extraSections = useMemo(
+    () =>
+      sections.filter(
+        (section) => !FEATURED_IDS.includes(section.sectionId) && section.tracks.length > 0,
+      ),
+    [sections],
   );
 
   // Keep the hero sourced from the same live payload as the visible rows.
