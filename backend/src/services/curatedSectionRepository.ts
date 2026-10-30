@@ -1,4 +1,4 @@
-import { CuratedSectionModel, type ICuratedSectionDoc, type ICuratedSectionStats } from '../models/curatedSection.model.js';
+import { CuratedSectionModel, type ICuratedSectionDoc, type ICuratedSectionStats, type ICuratedTrackEvidence } from '../models/curatedSection.model.js';
 import { CurationRefreshLockModel } from '../models/curationRefreshLock.model.js';
 import { ISongSubDoc } from '../models/playlist.model.js';
 import { CURATED_SECTIONS, type CuratedSectionId } from '../config/curationConfig.js';
@@ -14,6 +14,7 @@ export interface CuratedSectionRecord {
   generatedAt: Date;
   updatedAt: Date;
   refreshCount: number;
+  strategy: 'ai' | 'editorial_web';
 }
 
 function toRecord(doc: ICuratedSectionDoc): CuratedSectionRecord {
@@ -23,7 +24,8 @@ function toRecord(doc: ICuratedSectionDoc): CuratedSectionRecord {
     tracks: Array.isArray(doc.tracks) ? doc.tracks : [],
     generatedAt: doc.generatedAt ?? doc.updatedAt,
     updatedAt: doc.updatedAt,
-    refreshCount: doc.refreshCount ?? 0
+    refreshCount: doc.refreshCount ?? 0,
+    strategy: doc.strategy ?? 'ai'
   };
 }
 
@@ -85,20 +87,28 @@ export class CuratedSectionRepository {
     llmModel: string;
     stats: ICuratedSectionStats;
     generatedAt?: Date;
+    strategy: 'ai' | 'editorial_web';
+    webStatus: string;
+    provenance: ICuratedTrackEvidence[];
+    expectedRefreshCount: number | null;
   }): Promise<CuratedSectionRecord> {
+    const values = {
+      title: options.title, tracks: options.tracks,
+      generatedAt: options.generatedAt ?? new Date(), llmModel: options.llmModel,
+      stats: options.stats, strategy: options.strategy, webStatus: options.webStatus, provenance: options.provenance
+    };
+    if (options.expectedRefreshCount === null) {
+      // The unique sectionId index prevents a late first-run result replacing another writer.
+      const created = await CuratedSectionModel.create({ sectionId: options.sectionId, ...values, refreshCount: 1 });
+      return toRecord(created);
+    }
     const doc = await CuratedSectionModel.findOneAndUpdate(
-      { sectionId: options.sectionId },
+      { sectionId: options.sectionId, refreshCount: options.expectedRefreshCount },
       {
-        $set: {
-          title: options.title,
-          tracks: options.tracks,
-          generatedAt: options.generatedAt ?? new Date(),
-          llmModel: options.llmModel,
-          stats: options.stats
-        },
+        $set: values,
         $inc: { refreshCount: 1 }
       },
-      { new: true, upsert: true, setDefaultsOnInsert: true, runValidators: true }
+      { new: true, runValidators: true }
     ).exec();
 
     if (!doc) {

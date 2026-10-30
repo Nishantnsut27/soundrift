@@ -4,7 +4,9 @@ import { createJsonCompletion, GroqConfigurationError, isGroqConfigured } from '
 import { globalCacheService } from './cacheService.js';
 import { Song } from '../models/music.model.js';
 import { ISongSubDoc } from '../models/playlist.model.js';
-import type { ICuratedSectionStats } from '../models/curatedSection.model.js';
+import type { ICuratedSectionStats, ICuratedTrackEvidence } from '../models/curatedSection.model.js';
+import { isLiveSection, LIVE_CURATION_CONFIG } from '../config/liveCurationConfig.js';
+import { LiveCurationService } from './liveCurationService.js';
 import {
   CURATED_SECTIONS,
   CURATION_ENGINE_CONFIG,
@@ -34,6 +36,8 @@ export interface CuratedSectionPayload {
   initialVisibleCount: number;
   generatedAt: string;
   updatedAt: string;
+  stale: boolean;
+  strategy: 'ai' | 'editorial_web';
 }
 
 export interface SectionRefreshOutcome {
@@ -118,14 +122,16 @@ function toPayload(record: CuratedSectionRecord): CuratedSectionPayload {
     totalTracks: record.tracks.length,
     initialVisibleCount: CURATION_ENGINE_CONFIG.initialVisibleTracks,
     generatedAt: new Date(record.generatedAt).toISOString(),
-    updatedAt: new Date(record.updatedAt).toISOString()
+    updatedAt: new Date(record.updatedAt).toISOString(),
+    stale: Date.now() - new Date(record.generatedAt).getTime() > 36 * 60 * 60 * 1000,
+    strategy: record.strategy
   };
 }
 
 export class CurationService {
   private readonly musicService: MusicService;
 
-  constructor(musicService: MusicService = new MusicService()) {
+  constructor(musicService: MusicService = new MusicService(), private readonly liveCuration: Pick<LiveCurationService, 'generate'> = new LiveCurationService()) {
     this.musicService = musicService;
   }
 
@@ -158,7 +164,7 @@ export class CurationService {
 
     logger.info(SCOPE, 'Section generation started', { sectionId, title: definition.title });
 
-    if (!isGroqConfigured()) {
+    if (!isLiveSection(sectionId) && !isGroqConfigured()) {
       logger.warn(SCOPE, 'Section generation skipped: no Groq keys configured', { sectionId });
       return { sectionId, status: 'skipped', reason: 'groq_not_configured' };
     }
@@ -200,60 +206,24 @@ export class CurationService {
     refreshLockRenewal.unref?.();
 
     try {
+      const existing = await curatedSectionRepository.findBySectionId(sectionId);
       if (options.notBefore) {
-        const existing = await curatedSectionRepository.findBySectionId(sectionId);
         if (existing && existing.tracks.length > 0 && new Date(existing.generatedAt) >= options.notBefore) {
           logger.info(SCOPE, 'Section generation skipped: already refreshed for this slot', { sectionId });
           return { sectionId, status: 'skipped', reason: 'already_fresh' };
         }
       }
 
-      const completion = await createJsonCompletion({
-        systemPrompt: CURATION_SYSTEM_PROMPT,
-        userPrompt: buildCurationUserPrompt(sectionId),
-        label: sectionId
-      });
-
-      const extraction = extractCandidates(completion.content, CURATION_ENGINE_CONFIG.candidateLimit);
-
-      logger.info(SCOPE, 'Candidates extracted', {
-        sectionId,
-        keyIndex: completion.keyIndex,
-        rawCandidates: extraction.rawCount,
-        validCandidates: extraction.candidates.length,
-        invalidSkipped: extraction.invalidCount,
-        duplicatesRemoved: extraction.duplicateCount
-      });
-
-      if (extraction.candidates.length === 0) {
-        logger.warn(SCOPE, 'No valid candidates in LLM response, keeping previous data', { sectionId });
-        return { sectionId, status: 'kept_previous', reason: 'no_valid_candidates' };
-      }
-
-      const crossSectionKeys = await curatedSectionRepository.getTrackKeysForOverlapGroup(
-        definition.overlapGroup,
-        sectionId
-      );
-
-      const resolution = await this.resolveCandidates(sectionId, extraction.candidates, crossSectionKeys);
-
-      if (resolution.tracks.length < CURATION_ENGINE_CONFIG.minTracksToReplace) {
+      const generation = await this.generateSection(sectionId);
+      const required = isLiveSection(sectionId) ? LIVE_CURATION_CONFIG.minTracksToReplace : CURATION_ENGINE_CONFIG.minTracksToReplace;
+      if (generation.tracks.length < required) {
         logger.warn(SCOPE, 'Too few resolved tracks, keeping previous data', {
           sectionId,
-          resolved: resolution.tracks.length,
-          required: CURATION_ENGINE_CONFIG.minTracksToReplace
+          resolved: generation.tracks.length,
+          required
         });
         return { sectionId, status: 'kept_previous', reason: 'insufficient_resolved_tracks' };
       }
-
-      const stats: ICuratedSectionStats = {
-        rawCandidateCount: extraction.rawCount,
-        validCandidateCount: extraction.candidates.length,
-        duplicateCandidatesRemoved: extraction.duplicateCount,
-        resolvedCount: resolution.tracks.length,
-        unresolvedCount: resolution.unresolvedCount,
-        duplicateTracksRemoved: resolution.duplicateTracksRemoved
-      };
 
       if (refreshLockLost || !(await renewRefreshLock())) {
         logger.warn(SCOPE, 'Section generation abandoned: refresh lock ownership was lost', { sectionId });
@@ -263,25 +233,25 @@ export class CurationService {
       await curatedSectionRepository.replaceSection({
         sectionId,
         title: definition.title,
-        tracks: resolution.tracks.slice(0, CURATION_ENGINE_CONFIG.maxStoredTracks),
-        llmModel: completion.model,
-        stats
+        ...generation,
+        tracks: generation.tracks.slice(0, CURATION_ENGINE_CONFIG.maxStoredTracks),
+        expectedRefreshCount: existing?.refreshCount ?? null
       });
 
       this.invalidateReadCache();
 
       logger.info(SCOPE, 'Section generation completed', {
         sectionId,
-        savedTracks: Math.min(resolution.tracks.length, CURATION_ENGINE_CONFIG.maxStoredTracks),
-        unresolved: resolution.unresolvedCount,
-        duplicateTracksRemoved: resolution.duplicateTracksRemoved,
+        savedTracks: Math.min(generation.tracks.length, CURATION_ENGINE_CONFIG.maxStoredTracks),
+        unresolved: generation.stats.unresolvedCount,
+        duplicateTracksRemoved: generation.stats.duplicateTracksRemoved,
         durationMs: Date.now() - startedAt
       });
 
       return {
         sectionId,
         status: 'saved',
-        savedTracks: Math.min(resolution.tracks.length, CURATION_ENGINE_CONFIG.maxStoredTracks)
+        savedTracks: Math.min(generation.tracks.length, CURATION_ENGINE_CONFIG.maxStoredTracks)
       };
     } catch (error) {
       const reason =
@@ -308,6 +278,37 @@ export class CurationService {
         });
       });
     }
+  }
+
+  private async generateSection(sectionId: CuratedSectionId): Promise<{
+    tracks: ISongSubDoc[];
+    stats: ICuratedSectionStats;
+    llmModel: string;
+    strategy: 'ai' | 'editorial_web';
+    webStatus: string;
+    provenance: ICuratedTrackEvidence[];
+  }> {
+    if (isLiveSection(sectionId)) {
+      const result = await this.liveCuration.generate(sectionId);
+      return { ...result, tracks: result.tracks.map(toStoredTrack), strategy: 'editorial_web' };
+    }
+    const completion = await createJsonCompletion({
+      systemPrompt: CURATION_SYSTEM_PROMPT,
+      userPrompt: buildCurationUserPrompt(sectionId), label: sectionId
+    });
+    const extraction = extractCandidates(completion.content, CURATION_ENGINE_CONFIG.candidateLimit);
+    const crossSectionKeys = await curatedSectionRepository.getTrackKeysForOverlapGroup(
+      getCuratedSectionDefinition(sectionId).overlapGroup, sectionId
+    );
+    const result = await this.resolveCandidates(sectionId, extraction.candidates, crossSectionKeys);
+    return {
+      tracks: result.tracks, llmModel: completion.model, strategy: 'ai', webStatus: 'disabled', provenance: [],
+      stats: {
+        rawCandidateCount: extraction.rawCount, validCandidateCount: extraction.candidates.length,
+        duplicateCandidatesRemoved: extraction.duplicateCount, resolvedCount: result.tracks.length,
+        unresolvedCount: result.unresolvedCount, duplicateTracksRemoved: result.duplicateTracksRemoved
+      }
+    };
   }
 
   private async resolveCandidates(

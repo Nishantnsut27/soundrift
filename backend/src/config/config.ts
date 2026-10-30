@@ -68,6 +68,8 @@ export const config = {
   groqModel: process.env.GROQ_CURATION_MODEL || 'openai/gpt-oss-120b',
   groqRequestTimeoutMs: parseInt(process.env.GROQ_REQUEST_TIMEOUT_MS || '45000', 10),
 
+  tavilyApiKey: (process.env.TAVILY_API_KEY || '').trim(),
+
   curationSchedulerEnabled: (process.env.CURATION_SCHEDULER_ENABLED || 'true').toLowerCase() !== 'false',
   curationBackfillOnStartup: (process.env.CURATION_BACKFILL_ON_STARTUP || 'true').toLowerCase() !== 'false',
 };

@@ -1,3 +1,5 @@
+import './config.js';
+
 export const CURATED_SECTION_IDS = [
   'trending',
   'editors_picks',
@@ -27,9 +29,9 @@ export interface CuratedSectionDefinition {
  * fine and forcing them apart would only thin both rows out.
  */
 export const CURATED_SECTIONS: readonly CuratedSectionDefinition[] = [
-  { id: 'trending', title: 'Trending Now', overlapGroup: 'india' },
+  { id: 'trending', title: 'Trending Now', overlapGroup: 'trending' },
   { id: 'editors_picks', title: "Editor's Picks", overlapGroup: 'india' },
-  { id: 'fresh_releases', title: 'Fresh Releases', overlapGroup: 'india' },
+  { id: 'fresh_releases', title: 'Fresh Releases', overlapGroup: 'fresh_releases' },
   { id: 'kpop', title: 'K-Pop', overlapGroup: 'kpop' },
   { id: 'worldwide', title: 'Worldwide', overlapGroup: 'worldwide' },
   { id: 'old_hindi_gold', title: 'Golden Era Hindi', overlapGroup: 'hindi_era' },
@@ -58,8 +60,7 @@ export interface CycleStartTime {
 
 const DEFAULT_TIMEZONE = 'Asia/Kolkata';
 const DEFAULT_CYCLE_START_TIMES: CycleStartTime[] = [
-  { hour: 3, minute: 0 },
-  { hour: 13, minute: 15 }
+  { hour: 3, minute: 0 }
 ];
 
 /** Non-numeric or non-positive values fall back instead of becoming NaN timers and dates. */

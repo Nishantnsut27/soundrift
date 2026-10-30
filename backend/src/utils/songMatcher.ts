@@ -102,3 +102,24 @@ export function findBestSongMatch(
 
   return best;
 }
+
+/** External web candidates must agree on title, artist and recording version independently. */
+export function findStrictSongMatch(title: string, artist: string, results: Song[]): SongMatch | null {
+  const version = (value: string): string => [...new Set(
+    value.toLowerCase().match(/\b(?:remix|mashup|slowed|reverb|lo[ -]?fi|live|cover|karaoke|instrumental|acoustic|unplugged|sped[ -]?up|remaster(?:ed)?)\b/g) || []
+  )].sort().join('|');
+  const candidates = results.filter(song => song && song.provider === 'jiosaavn' &&
+    version(song.name) === version(title) &&
+    similarity(normalizeName(title), normalizeName(song.name)) >= 0.85 &&
+    artistSimilarity(artist, song.artist_name) >= 0.8);
+  const matches = candidates.flatMap(song => {
+    const match = findBestSongMatch(title, artist, [song], 0.86, 0.8);
+    return match ? [match] : [];
+  }).sort((a, b) => b.confidence - a.confidence);
+  const first = matches[0];
+  if (!first) return null;
+  const alternative = matches.find(match =>
+    normalizeName(match.song.name) !== normalizeName(first.song.name) ||
+    normalizeName(match.song.artist_name) !== normalizeName(first.song.artist_name));
+  return alternative && first.confidence - alternative.confidence < 0.05 ? null : first;
+}

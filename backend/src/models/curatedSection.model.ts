@@ -11,6 +11,17 @@ export interface ICuratedSectionStats {
   duplicateTracksRemoved: number;
 }
 
+export interface ICuratedTrackEvidence {
+  trackId: string;
+  kind: 'editorial' | 'web_release' | 'web_trend';
+  sourceRef: string;
+  sourceName: string;
+  observedAt: Date;
+  date?: string;
+  quote?: string;
+  matchConfidence?: number;
+}
+
 export interface ICuratedSectionDoc extends Document {
   sectionId: CuratedSectionId;
   title: string;
@@ -19,6 +30,9 @@ export interface ICuratedSectionDoc extends Document {
   refreshCount: number;
   llmModel: string;
   stats: ICuratedSectionStats;
+  strategy: 'ai' | 'editorial_web';
+  webStatus: string;
+  provenance: ICuratedTrackEvidence[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -65,6 +79,19 @@ const curatedSectionSchema = new Schema<ICuratedSectionDoc>(
       type: curatedSectionStatsSchema,
       default: () => ({}),
     },
+    strategy: { type: String, enum: ['ai', 'editorial_web'], default: 'ai' },
+    webStatus: { type: String, default: 'disabled' },
+    provenance: [{
+      _id: false,
+      trackId: { type: String, required: true },
+      kind: { type: String, enum: ['editorial', 'web_release', 'web_trend'], required: true },
+      sourceRef: { type: String, required: true },
+      sourceName: String,
+      observedAt: { type: Date, required: true },
+      date: String,
+      quote: String,
+      matchConfidence: Number
+    }],
   },
   {
     timestamps: true,

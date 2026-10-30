@@ -1,6 +1,5 @@
 import { curationService, type SectionRefreshOutcome } from './curationService.js';
 import { curatedSectionRepository } from './curatedSectionRepository.js';
-import { isGroqConfigured } from './groqService.js';
 import {
   CURATION_ENGINE_CONFIG,
   CURATION_SCHEDULE,
@@ -101,13 +100,6 @@ export class CurationScheduler {
 
     if (!config.curationSchedulerEnabled) {
       logger.info(SCOPE, 'Curation scheduler disabled by configuration');
-      return;
-    }
-
-    if (!isGroqConfigured()) {
-      logger.warn(SCOPE, 'Curation scheduler not started: no Groq API keys configured', {
-        expectedVariables: 'GROQ_API_1..GROQ_API_6'
-      });
       return;
     }
 
