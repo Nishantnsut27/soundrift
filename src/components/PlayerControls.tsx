@@ -140,7 +140,6 @@ export function PlayerControls() {
     window.addEventListener('soundrift-offline-library-changed', handleOfflineLibraryChange);
     return () => {
       active = false;
-      ++offlineStatusRequestRef.current;
       window.removeEventListener('soundrift-offline-library-changed', handleOfflineLibraryChange);
     };
   }, [currentTrack]);

@@ -142,6 +142,7 @@ export class MusicNormalizer {
       audiodownload: fallbackAudioUrl,
       license_ccurl: '',
       language: typeof raw?.language === 'string' ? cleanText(raw.language) : '',
+      releaseDate: typeof raw?.releaseDate === 'string' ? raw.releaseDate : undefined,
       musicinfo: {
         tags: {
           genres: rawGenres,
@@ -237,7 +238,10 @@ export class MusicNormalizer {
   static normalizeJioSaavnPlaylist(raw: any): Playlist {
     const image = extractBestImage(raw.image);
     const tracks = Array.isArray(raw.songs)
-      ? raw.songs.map((song: any) => this.normalizeJioSaavnSong(song))
+      ? raw.songs.flatMap((song: unknown) => {
+          if (!song || typeof song !== 'object') return [];
+          try { return [this.normalizeJioSaavnSong(song)]; } catch { return []; }
+        })
       : [];
 
     return {

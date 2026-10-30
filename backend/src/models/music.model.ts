@@ -26,6 +26,8 @@ export interface Song {
   audiodownload: string;
   license_ccurl: string;
   language?: string;
+  /** Catalogue release date, distinct from a playlist update or video publication date. */
+  releaseDate?: string;
   musicinfo: {
     tags: {
       genres: string[];
