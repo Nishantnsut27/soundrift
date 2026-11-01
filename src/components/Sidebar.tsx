@@ -4,6 +4,7 @@ import { useAuthStore } from '../store/authStore';
 import { useToastStore } from '../store/toastStore';
 import { ConfirmModal } from './ConfirmModal';
 import { PlaylistMenu } from './PlaylistMenu';
+import { PlaylistImportButton } from './PlaylistImportButton';
 import { InstallButton } from '../pwa/InstallButton';
 import { SUPPORT_EMAIL } from '../config/constants';
 import { requireAuth } from '../utils/requireAuth';
@@ -174,7 +175,6 @@ export function Sidebar() {
     deletePlaylist,
     renamePlaylist,
     exportPlaylist,
-    importPlaylist,
     isSidebarOpen,
     toggleSidebar,
     closeSidebar,
@@ -256,50 +256,6 @@ export function Sidebar() {
       title: 'Playlist Exported',
       message: 'Downloaded playlist JSON file',
     });
-    setShowImportExport(null);
-  };
-
-  const handleImportPlaylist = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const isJsonExtension = file.name.toLowerCase().endsWith('.json');
-      const isJsonMime = !file.type || file.type === 'application/json' || file.type === 'text/json';
-
-      if (!isJsonExtension || !isJsonMime) {
-        addToast({
-          type: 'error',
-          title: 'Import Failed',
-          message: 'Only .json playlist files are supported.',
-        });
-        e.target.value = '';
-        setShowImportExport(null);
-        return;
-      }
-
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const result = event.target?.result;
-        if (typeof result === 'string') {
-          try {
-            importPlaylist(result);
-            addToast({
-              type: 'success',
-              title: 'Playlist Imported',
-              message: 'Successfully imported playlist.',
-            });
-          } catch (err) {
-            const errorMsg = err instanceof Error ? err.message : 'Failed to import playlist.';
-            addToast({
-              type: 'error',
-              title: 'Import Failed',
-              message: errorMsg,
-            });
-          }
-        }
-      };
-      reader.readAsText(file);
-    }
-    e.target.value = '';
     setShowImportExport(null);
   };
 
@@ -484,23 +440,8 @@ export function Sidebar() {
                 )}
 
                 {/* Import Playlist button inside collapsible library */}
-                <div className="sidebar-import" style={{ marginTop: '0.75rem' }}>
-                  <label htmlFor="sidebar-import-playlist" className="btn btn-secondary btn-sm w-full" style={{ fontSize: '0.8rem', gap: '0.4rem', justifyContent: 'center' }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                      <polyline points="14,2 14,8 20,8" />
-                      <line x1="16" y1="13" x2="8" y2="13" />
-                      <line x1="16" y1="17" x2="8" y2="17" />
-                    </svg>
-                    Import Playlist (JSON)
-                  </label>
-                  <input
-                    id="sidebar-import-playlist"
-                    type="file"
-                    accept=".json"
-                    onChange={handleImportPlaylist}
-                    className="visually-hidden"
-                  />
+                <div className="sidebar-import">
+                  <PlaylistImportButton variant="sidebar" />
                 </div>
               </div>
             )}

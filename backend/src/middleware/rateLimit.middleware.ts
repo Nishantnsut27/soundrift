@@ -2,6 +2,14 @@ import { rateLimit } from 'express-rate-limit';
 import { slowDown } from 'express-slow-down';
 import { config } from '../config/config.js';
 
+export const spotifyImportLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many playlist imports. Please try again in 15 minutes.' },
+});
+
 export const searchLimiter = rateLimit({
   windowMs: config.rateLimitSearchWindowMs,
   max: config.rateLimitSearchMax,
