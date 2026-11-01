@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { mock, test } from 'node:test';
+import { setImmediate } from 'node:timers/promises';
 import { prepareSpotifyImport } from '../../src/services/spotifyImportApi.js';
 import { SpotifyImportService } from '../src/services/spotifyImportService.js';
 import type { Song } from '../src/models/music.model.js';
@@ -93,4 +94,95 @@ test('failed preparation releases its job and leaves the JSON store untouched', 
     assert.deepEqual(requests, ['POST', 'GET', 'DELETE']);
     assert.equal(usePlayerStore.getState().playlists.length, 0);
   } finally { http.mock.restore(); }
+});
+
+test('temporary progress failures retry the same job and return its completed result', async t => {
+  for (const failure of ['network', 'timeout', 'server', 'rate_limit']) {
+    await t.test(failure, async t => {
+      reset();
+      t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+      // Native AbortSignal timers are not controlled by MockTimers.
+      t.mock.method(AbortSignal, 'timeout', (delay: number) => {
+        const controller = new AbortController();
+        setTimeout(() => controller.abort(new DOMException('Timed out', 'TimeoutError')), delay);
+        return controller.signal;
+      });
+      const requests: string[] = [];
+      const urls: string[] = [];
+      let polls = 0;
+      const result = { playlist: { name: 'Prepared', tracks: [track] }, total: 1, duplicates: 0, missing: [] };
+      t.mock.method(globalThis, 'fetch', async (input, init) => {
+        const method = init?.method || 'GET'; requests.push(method);
+        if (method === 'POST') return response({ id: 'retry-job' });
+        if (method === 'DELETE') return response({});
+        urls.push(String(input));
+        if (++polls === 1) {
+          if (failure === 'network') throw new TypeError('Connection dropped');
+          if (failure === 'timeout') await new Promise((_resolve, reject) => {
+            init!.signal!.addEventListener('abort', () => reject(init!.signal!.reason), { once: true });
+          });
+          return response({}, failure === 'server' ? 503 : 429);
+        }
+        assert.equal(requests.includes('DELETE'), false);
+        return response({ status: 'complete', progress: { phase: 'matching', processed: 1, total: 1 }, result });
+      });
+      const pending = prepareSpotifyImport(link, new AbortController().signal, () => {});
+      // Attach a handler immediately so regressions do not produce unhandled rejections.
+      const completed = pending.then(value => ({ value }), error => ({ error }));
+      await setImmediate();
+      assert.deepEqual(requests, ['POST', 'GET']);
+      if (failure === 'timeout') { t.mock.timers.tick(20_000); await setImmediate(); }
+      t.mock.timers.tick(1200);
+      assert.deepEqual(await completed, { value: result });
+      assert.deepEqual(requests, ['POST', 'GET', 'GET', 'DELETE']);
+      assert.equal(urls[0], urls[1]);
+      assert.equal(usePlayerStore.getState().playlists.length, 0);
+    });
+  }
+});
+
+test('terminal progress errors are not retried', async t => {
+  reset();
+  const requests: string[] = [];
+  t.mock.method(globalThis, 'fetch', async (_input, init) => {
+    const method = init?.method || 'GET'; requests.push(method);
+    return response(method === 'POST' ? { id: 'expired-job' } : {}, method === 'GET' ? 404 : 200);
+  });
+  await assert.rejects(prepareSpotifyImport(link, new AbortController().signal, () => {}), { status: 404 });
+  assert.deepEqual(requests, ['POST', 'GET', 'DELETE']);
+});
+
+test('cancelling during retry backoff stops polling and releases the job', async t => {
+  reset();
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const controller = new AbortController();
+  const requests: string[] = [];
+  t.mock.method(globalThis, 'fetch', async (_input, init) => {
+    const method = init?.method || 'GET'; requests.push(method);
+    if (method === 'GET') throw new TypeError('Connection dropped');
+    return response({ id: 'cancelled-job' });
+  });
+  const cancelled = prepareSpotifyImport(link, controller.signal, () => {}).then(() => null, error => error as Error);
+  await setImmediate();
+  assert.deepEqual(requests, ['POST', 'GET']);
+  controller.abort();
+  assert.equal((await cancelled)?.name, 'AbortError');
+  t.mock.timers.tick(60_000);
+  assert.deepEqual(requests, ['POST', 'GET', 'DELETE']);
+});
+
+test('repeated temporary failures stop at the existing import deadline', async t => {
+  reset();
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const requests: string[] = [];
+  t.mock.method(globalThis, 'fetch', async (_input, init) => {
+    const method = init?.method || 'GET'; requests.push(method);
+    if (method === 'GET') return response({}, 503);
+    return response({ id: 'timed-out-job' });
+  });
+  const expired = prepareSpotifyImport(link, new AbortController().signal, () => {}).then(() => null, error => error as Error);
+  await setImmediate();
+  t.mock.timers.tick(11 * 60_000);
+  assert.match((await expired)?.message || '', /took too long/);
+  assert.deepEqual(requests, ['POST', 'GET', 'DELETE']);
 });

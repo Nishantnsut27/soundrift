@@ -1,6 +1,6 @@
 import { BACKEND_URL } from '../config/constants';
 import type { Track } from '../types/types';
-import { fetchJson } from './apiClient';
+import { ApiError, fetchJson } from './apiClient';
 
 export interface SpotifyImportProgress {
   phase: 'retrieving' | 'matching';
@@ -23,11 +23,11 @@ interface Job {
 }
 const BASE = `${BACKEND_URL}/api/user/playlist-imports/spotify`;
 
-function pause(signal: AbortSignal): Promise<void> {
+function pause(signal: AbortSignal, delay = 1200): Promise<void> {
   return new Promise((resolve, reject) => {
     signal.throwIfAborted();
     const abort = () => { clearTimeout(timer); reject(signal.reason); };
-    const timer = window.setTimeout(() => { signal.removeEventListener('abort', abort); resolve(); }, 1200);
+    const timer = setTimeout(() => { signal.removeEventListener('abort', abort); resolve(); }, delay);
     signal.addEventListener('abort', abort, { once: true });
   });
 }
@@ -43,15 +43,32 @@ export async function prepareSpotifyImport(
   const jobUrl = `${BASE}/${encodeURIComponent(start.data.id)}`;
   try {
     const deadline = Date.now() + 11 * 60_000;
+    let failures = 0;
     while (Date.now() < deadline) {
       signal.throwIfAborted();
-      const response = await fetchJson<{ data: Job }>(jobUrl, { signal: AbortSignal.any([signal, AbortSignal.timeout(20_000)]) }, 0);
+      const requestSignal = AbortSignal.any([signal, AbortSignal.timeout(Math.max(1, Math.min(20_000, deadline - Date.now())))]);
+      let response: { data: Job };
+      try {
+        // Retry here so every attempt has a fresh timeout and shares the overall deadline.
+        response = await fetchJson<{ data: Job }>(jobUrl, { signal: requestSignal }, 0);
+        requestSignal.throwIfAborted();
+      } catch (error) {
+        signal.throwIfAborted();
+        const temporary = requestSignal.aborted || (error instanceof ApiError &&
+          (error.status === 0 || error.status === 408 || error.status === 429 || (error.status >= 500 && error.status < 600)));
+        if (!temporary) throw error;
+        const remaining = deadline - Date.now();
+        if (remaining <= 0) break;
+        await pause(signal, Math.min(1200 * 2 ** Math.min(failures++, 4), 10_000, remaining));
+        continue;
+      }
       signal.throwIfAborted();
+      failures = 0;
       const job = response.data;
       onProgress(job.progress);
       if (job.status === 'failed') throw new Error(job.error || 'Could not import this playlist.');
       if (job.status === 'complete' && job.result) return job.result;
-      await pause(signal);
+      await pause(signal, Math.max(0, Math.min(1200, deadline - Date.now())));
     }
     throw new Error('The import took too long. Please try again.');
   } finally {

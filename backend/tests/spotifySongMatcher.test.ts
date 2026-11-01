@@ -38,6 +38,18 @@ test('all artist credits participate, including singers listed after a composer'
   assert.ok(spotifySearchQueries(target).includes('Aaj Se Teri Arijit Singh'));
 });
 
+test('shared composers or lyricists cannot substitute a conflicting singer, even in a lone candidate', () => {
+  for (const shared of [['Composer'], ['Lyricist'], ['Composer', 'Lyricist']]) {
+    const target = source('Same Song', [...shared, 'Singer Alpha'], 180);
+    const wrong = song('wrong', target.title, [...shared, 'Singer Beta'], 180);
+    const correct = song('correct', target.title, ['Singer Alpha'], 180);
+    assert.equal(findSpotifySongMatch(target, [wrong]), null);
+    assert.equal(findSpotifySongMatch(target, [{ ...wrong, artists: undefined }]), null);
+    assert.equal(findSpotifySongMatch(target, [wrong, correct]), correct);
+    assert.equal(findSpotifySongMatch({ ...target, artists: [...target.artists].reverse() }, [wrong]), null);
+  }
+});
+
 test('duo punctuation and credit order do not create false ambiguity', () => {
   const target = source('Ishq Bulaava', ['Vishal-Shekhar', 'Sanam Puri', 'Shipra Goyal'], 303.64, 'Hasee Toh Phasee');
   const first = song('original', 'Ishq Bulaava', ['Vishal & Shekhar', 'Sanam Puri', 'Shipra Goyal'], 303, 'Hasee Toh Phasee');

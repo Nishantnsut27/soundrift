@@ -66,7 +66,7 @@ export function findSpotifySongMatch(source: SpotifyTrackMetadata, songs: Song[]
   const title = spotifySearchTitle(source.title);
   const artists = artistKeys(source.artists);
   if (!title || !artists) return null;
-  const wanted = new Set(source.artists.map(artistKey));
+  const wanted = new Set(source.artists.map(artistKey).filter(Boolean));
   const album = albumKey(source.album);
   const targetVersion = recordingSignature(title);
   const targetTitle = titleKey(title);
@@ -79,6 +79,10 @@ export function findSpotifySongMatch(source: SpotifyTrackMetadata, songs: Song[]
       [...wanted].find(expected => sameArtistSpelling(key, expected)) || key))];
     const known = keys.filter(key => wanted.has(key));
     const unknown = keys.filter(key => !wanted.has(key)).sort();
+    // Spotify credits do not identify roles. A shared composer/lyricist cannot justify
+    // replacing another credit with a different singer. Permit omitted or added credits
+    // only when one complete credit set agrees with the other (after normalization).
+    if (!known.length || (unknown.length > 0 && known.length < wanted.size)) return [];
     const sameAlbum = !!album && albumKey(song.album_name) === album;
     const delta = source.durationMs ? Math.abs(song.duration * 1000 - source.durationMs) : Infinity;
     const version = recordingSignature(name);
