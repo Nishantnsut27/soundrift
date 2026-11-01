@@ -109,13 +109,16 @@ function normalizeStrictTitle(value: string): string {
 }
 
 function recordingLabels(value: string): string {
-  return [...new Set([...value.matchAll(/\(([^()]*)\)|\[([^\[\]]*)\]/g)]
+  return [...new Set([...value.matchAll(/\(([^()]*)\)|\[([^[\]]*)\]/g)]
     .map(match => normalizeStrictTitle(match[1] ?? match[2]))
     .filter(Boolean))].sort().join('|');
 }
 
 /** External web candidates must agree on title, artist and recording version independently. */
-export function findStrictSongMatch(title: string, artist: string, results: Song[]): SongMatch | null {
+export function findStrictSongMatch(
+  title: string, artist: string, results: Song[],
+  providers: readonly string[] = ['jiosaavn']
+): SongMatch | null {
   const version = (value: string): string => [...new Set(
     (value.toLowerCase().match(/\b(?:remix|mashup|slowed|reverb|lo[ -]?fi|live|cover|karaoke|instrumental|acoustic|unplugged|sped[ -]?up|remaster(?:ed)?|radio[ -]?edit|reprise)\b/g) || [])
       .map(normalizeStrictTitle)
@@ -124,7 +127,7 @@ export function findStrictSongMatch(title: string, artist: string, results: Song
   const targetVersion = version(title);
   const targetLabels = recordingLabels(title);
   const matches = results.flatMap(song => {
-    if (!song || song.provider !== 'jiosaavn' || !song.id || !song.audio || version(song.name) !== targetVersion) return [];
+    if (!song || !providers.includes(song.provider || '') || !song.id || !song.audio || version(song.name) !== targetVersion) return [];
     const songTitle = normalizeStrictTitle(song.name);
     // Equal full titles may spell the same label with parentheses, brackets or a dash.
     // Otherwise require labels to agree even when a long base title is very similar.

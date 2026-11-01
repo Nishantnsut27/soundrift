@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { PlaylistMenu } from '../PlaylistMenu';
+import { PlaylistImportButton } from '../PlaylistImportButton';
 import { ConfirmModal } from '../ConfirmModal';
 import { EmptyPlaylists } from '../EmptyState';
 import { usePlayerStore } from '../../store/playerStore';
@@ -122,6 +123,7 @@ export function PlaylistsPage() {
         </p>
 
         <div className="library-head-actions">
+          <PlaylistImportButton />
           {isCreating ? (
             <form className="library-create-form" onSubmit={handleCreate}>
               <input

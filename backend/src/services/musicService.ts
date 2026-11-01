@@ -38,20 +38,24 @@ export class MusicService {
     this.jamendoProvider = new JamendoProvider();
   }
 
-  async search(query: string, limit = 20): Promise<{ songs: Song[]; provider: string }> {
+  async search(query: string, limit = 20, options: { preserveRecordings?: boolean } = {}): Promise<{ songs: Song[]; provider: string }> {
     if (!query || !query.trim()) {
       return { songs: [], provider: 'jiosaavn' };
     }
 
     const trimmedQuery = normalizeQueryKey(query);
-    const cacheKey = `search:${trimmedQuery}:${limit}`;
+    const cacheKey = `${options.preserveRecordings ? 'import-search' : 'search'}:${trimmedQuery}:${limit}`;
 
     return globalCacheService.getOrFetch(cacheKey, async () => {
       try {
         const candidateLimit = Math.max(limit * MUSIC_ENGINE_CONFIG.searchResultLimitMultiplier, limit + 8);
         const songs = await this.jiosaavnProvider.search(trimmedQuery, candidateLimit);
-        const filtered = songs.filter(song => !isSearchNoise(song, trimmedQuery));
-        const deduped = deduplicateSongs(filtered);
+        const filtered = options.preserveRecordings ? songs : songs.filter(song => !isSearchNoise(song, trimmedQuery));
+        // Import matching needs separate original/remix/solo listings. General search deduplication
+        // intentionally collapses annotations and may otherwise hide the requested recording.
+        const deduped = options.preserveRecordings
+          ? [...new Map(filtered.map(song => [`${song.provider}:${song.id}`, song] as const)).values()]
+          : deduplicateSongs(filtered);
         const ranked = rankSongs(deduped, trimmedQuery);
 
         if (ranked.length > 0) {

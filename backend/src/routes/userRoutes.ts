@@ -2,6 +2,8 @@ import { Router, type RequestHandler } from 'express';
 import { UserController } from '../controllers/userController.js';
 import { authenticateUser } from '../middleware/auth.middleware.js';
 import { uploadAvatarMiddleware } from '../middleware/upload.middleware.js';
+import { SpotifyImportController } from '../controllers/spotifyImportController.js';
+import { spotifyImportLimiter, metadataLimiter } from '../middleware/rateLimit.middleware.js';
 
 export const userRouter = Router();
 
@@ -26,6 +28,9 @@ userRouter.delete('/favorites', UserController.clearFavorites as RequestHandler)
 userRouter.delete('/favorites/:trackId', UserController.removeFavorite as RequestHandler);
 
 // Playlists
+userRouter.post('/playlist-imports/spotify', spotifyImportLimiter, SpotifyImportController.start as RequestHandler);
+userRouter.get('/playlist-imports/spotify/:jobId', metadataLimiter, SpotifyImportController.get as RequestHandler);
+userRouter.delete('/playlist-imports/spotify/:jobId', metadataLimiter, SpotifyImportController.cancel as RequestHandler);
 userRouter.get('/playlists', UserController.getPlaylists as RequestHandler);
 userRouter.post('/playlists', UserController.createPlaylist as RequestHandler);
 userRouter.put('/playlists/:id', UserController.updatePlaylist as RequestHandler);
