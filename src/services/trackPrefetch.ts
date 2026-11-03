@@ -8,6 +8,7 @@ import { resetAudioBufferStatus, setAudioBufferStatus, type AudioBufferStatus } 
 
 export type { PreparedTrack } from './audioPreparation';
 const EXPIRED_STREAM_STATUSES = new Set([401, 403, 404, 410]);
+const READINESS_CHECK_INTERVAL_MS = 5_000;
 const SUPPORTED_AUDIO_TYPES = new Set([
   'audio/mpeg', 'audio/mp3', 'audio/mp4', 'audio/aac', 'audio/aacp',
   'audio/ogg', 'application/ogg', 'audio/wav', 'audio/x-wav', 'audio/flac', 'audio/webm',
@@ -74,10 +75,15 @@ export class TrackPrefetcher {
   private generation = 0;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private unsubscribeCache: (() => void) | null = null;
-  private publication = 0;
+  private validationVersion = 0;
+  private checkedVersion = -1;
+  private validationInFlight = false;
+  private validationDueAt = 0;
+  private cacheValidated = false;
 
   sync(plan: PrefetchPlan): void {
     this.unsubscribeCache ??= audioCache.subscribe(() => {
+      this.invalidateValidation();
       this.checked.clear();
       for (const [key, prepared] of this.ready) {
         if (prepared.storage === 'automatic' && !prepared.url.startsWith('blob:') && !audioCache.has(key)) {
@@ -108,7 +114,7 @@ export class TrackPrefetcher {
       this.releaseObsolete();
       for (const key of this.failures.keys()) if (!this.keep.has(key)) this.failures.delete(key);
       this.storageBlocked.clear();
-      this.publication++;
+      this.invalidateValidation();
       this.publishValidated(false);
       void audioCache.prune(this.keep).then(() => this.pump());
     }
@@ -144,6 +150,7 @@ export class TrackPrefetcher {
   }
 
   discard(track: Track): void {
+    this.invalidateValidation();
     const key = cacheKeyOf(track);
     this.ready.get(key)?.release();
     this.ready.delete(key);
@@ -153,6 +160,7 @@ export class TrackPrefetcher {
 
   retryFailed(): void {
     this.generation++;
+    this.invalidateValidation();
     this.failures.clear();
     this.storageBlocked.clear();
     this.checked.clear();
@@ -165,7 +173,7 @@ export class TrackPrefetcher {
 
   clear(): void {
     this.generation++;
-    this.publication++;
+    this.invalidateValidation();
     this.unsubscribeCache?.();
     this.unsubscribeCache = null;
     void audioCache.release();
@@ -200,12 +208,26 @@ export class TrackPrefetcher {
     for (const key of this.offlineReady) if (!this.keep.has(key)) this.offlineReady.delete(key);
   }
 
+  private invalidateValidation(): void {
+    this.validationVersion++;
+    this.cacheValidated = false;
+    this.validationDueAt = 0;
+  }
+
   private publish(): void {
     if (!this.plan) return;
-    const publication = ++this.publication;
+    // Position ticks can update UI state using the last checked index. They
+    // must not enqueue another disk scan while one is pending or still fresh.
+    this.publishValidated(this.cacheValidated);
+    if (this.validationInFlight || this.checkedVersion === this.validationVersion && Date.now() < this.validationDueAt) return;
+    this.validationInFlight = true;
+    const version = this.validationVersion;
+    let invalidated = false;
     void audioCache.validate(new Set(this.occurrenceKeys)).then(missing => {
-      if (publication !== this.publication || !this.plan) return;
-      let invalidated = false;
+      if (version !== this.validationVersion || !this.plan) return;
+      this.checkedVersion = version;
+      this.cacheValidated = true;
+      this.validationDueAt = Date.now() + READINESS_CHECK_INTERVAL_MS;
       for (const key of missing) { this.checked.delete(key); invalidated = true; }
       for (const [key, prepared] of this.ready) {
         if (prepared.storage === 'automatic' && !prepared.url.startsWith('blob:') && !audioCache.has(key)) {
@@ -213,14 +235,25 @@ export class TrackPrefetcher {
         }
       }
       this.publishValidated();
-      if (invalidated) this.pump();
+    }).catch(() => {
+      if (version !== this.validationVersion || !this.plan) return;
+      this.checkedVersion = version;
+      this.cacheValidated = false;
+      this.validationDueAt = Date.now() + READINESS_CHECK_INTERVAL_MS;
+      this.publishValidated(false);
+    }).finally(() => {
+      this.validationInFlight = false;
+      // Multiple changes during a slow check collapse into one check of the
+      // latest window. A cleared queue never starts another check.
+      if (this.plan && version !== this.validationVersion) this.publish();
+      else if (invalidated) this.pump();
     });
   }
 
   private publishValidated(verifiedCache = true): void {
     if (!this.plan) return;
     const available = this.occurrenceKeys.map(key => !!key && (
-      verifiedCache && (audioCache.has(key) || this.ready.has(key))
+      verifiedCache && audioCache.has(key)
       || this.ready.get(key)?.url.startsWith('blob:') || this.offlineReady.has(key)));
     const firstMissing = available.indexOf(false);
     setAudioBufferStatus({

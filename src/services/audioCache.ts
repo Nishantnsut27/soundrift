@@ -144,21 +144,22 @@ export class AudioCache {
   }
 
   async read(key: string): Promise<Blob | null> {
-    return this.exclusive(async () => {
-      const cache = await this.load();
-      try {
-        const response = await cache?.match(requestFor(key));
-        const blob = await response?.blob();
-        if (response && blob?.size) {
-          this.entries.set(key, { size: blob.size, usedAt: Date.now() });
-          return blob;
-        }
-      } catch {
-        // Drop the stale index; never delete a newer file another tab wrote.
+    // A frozen tab may hold the mutation lock indefinitely. Cache.match gives
+    // us a response snapshot, so playback reads need neither that lock nor the
+    // local mutation queue. A concurrent eviction cannot invalidate its Blob.
+    const cache = await this.load();
+    const entry = this.entries.get(key);
+    try {
+      const response = await cache?.match(requestFor(key));
+      const blob = await response?.blob();
+      if (blob?.size) {
+        if (entry) entry.usedAt = Date.now();
+        return blob;
       }
-      this.entries.delete(key);
-      return null;
-    });
+    } catch { /* Unreadable audio is a cache miss, allowing network fallback. */ }
+    // Do not let an old read erase the index entry of a concurrent replacement.
+    if (this.entries.get(key) === entry) this.entries.delete(key);
+    return null;
   }
 
   async write(key: string, blob: Blob, keep: ReadonlySet<string>): Promise<boolean> {

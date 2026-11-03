@@ -8,6 +8,7 @@ export class AudioCacheCoordination {
   private leaseName = '';
   private releaseLease: (() => Promise<void>) | null = null;
 
+  /** Serializes mutation/accounting work only; playback reads bypass this lock. */
   async run<T>(keep: ReadonlySet<string> | undefined,
     operation: (protectedKeys: ReadonlySet<string>, canEvict: boolean) => Promise<T>): Promise<T> {
     const locks = navigator.locks;

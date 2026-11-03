@@ -64,7 +64,7 @@ Soundrift can be installed as a Progressive Web App in supported browsers. Its s
 
 The PWA prepares a sliding buffer of four upcoming songs for normal queues and eight for playlists and albums. Complete audio files are cached within a 320 MiB automatic budget, separate from manually saved music. The queue shows how many consecutive upcoming songs are ready, and the service worker serves cached audio with byte-range support for playback and seeking.
 
-One persistent browser audio element handles playback and Media Session controls. Caching and bounded recovery help playback through network interruptions, but a PWA cannot guarantee continued playback when the browser or operating system freezes or discards its page. See [background playback behavior and validation](BACKGROUND_PLAYBACK.md) for the implementation, storage policy, and device checks.
+One persistent browser audio element handles playback and Media Session controls. Caching and bounded recovery help playback through network interruptions, but a PWA cannot guarantee continued playback when the browser or operating system freezes or discards its page.
 
 ## How Soundrift Works
 
