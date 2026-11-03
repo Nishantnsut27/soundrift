@@ -3,7 +3,6 @@ import { useAuthStore } from '../store/authStore';
 import { getLibraryOwner } from './tokenStorage';
 import { OFFLINE_CACHE_NAME, prepareBlob, prepareCached, sourceOf, type PreparedTrack } from './audioPreparation';
 import { canServeCachedAudio } from './cachedAudioRoute';
-import { nativeOffline, usesNativeOffline } from './nativeOffline';
 
 const CACHE_NAME = OFFLINE_CACHE_NAME;
 const STORAGE_PREFIX = 'soundrift-offline-library-v1:';
@@ -205,8 +204,6 @@ async function fetchAudio(source: string, signal: AbortSignal, onProgress?: (pro
   return new Blob(chunks, { type });
 }
 export async function isOfflineSaved(track: Track): Promise<boolean> {
-  if (usesNativeOffline()) return (await nativeOffline.offlineList()).records.some(record =>
-    record.track.id === track.id && record.track.provider === track.provider);
   const record = findRecord(track);
   if (!record) return false;
   const cache = await openCache();
@@ -242,7 +239,6 @@ export async function getOfflinePrepared(track: Track): Promise<PreparedTrack | 
 }
 
 export async function getOfflineTracks(): Promise<Track[]> {
-  if (usesNativeOffline()) return (await nativeOffline.offlineList()).records.sort((a, b) => b.savedAt - a.savedAt).map(record => record.track);
   hydrate();
   const cache = await openCache();
   if (!cache) return [];
@@ -257,10 +253,6 @@ export async function getOfflineTracks(): Promise<Track[]> {
   return [...valid].sort((a,b) => b.savedAt - a.savedAt).map((record) => record.track);
 }
 export async function getOfflineStorageStats() {
-  if (usesNativeOffline()) {
-    const { records } = await nativeOffline.offlineList();
-    return { count: records.length, bytes: records.reduce((sum, record) => sum + record.size, 0), maxBytes: MAX_TRACK_BYTES * 20 };
-  }
   hydrate();
   await getOfflineTracks();
   return {
@@ -270,12 +262,6 @@ export async function getOfflineStorageStats() {
   };
 }
 export async function saveOfflineTrack(track: Track, onProgress?: (progress: OfflineDownloadProgress) => void): Promise<void> {
-  if (usesNativeOffline()) {
-    onProgress?.({ loaded: 0, total: null });
-    await nativeOffline.offlineSave({ track });
-    window.dispatchEvent(new Event('soundrift-offline-library-changed'));
-    return;
-  }
   hydrate();
   if (findRecord(track) && await isOfflineSaved(track)) return;
   const source = track.audio || track.audiodownload;
@@ -305,11 +291,6 @@ export async function saveOfflineTrack(track: Track, onProgress?: (progress: Off
   }
 }
 export async function removeOfflineTrack(track: Track): Promise<void> {
-  if (usesNativeOffline()) {
-    await nativeOffline.offlineRemove({ track });
-    window.dispatchEvent(new Event('soundrift-offline-library-changed'));
-    return;
-  }
   hydrate();
   const cache = await openCache();
   try { await cache?.delete(requestFor(track)); } catch { /* best effort */ }
@@ -321,11 +302,6 @@ export async function removeOfflineTrack(track: Track): Promise<void> {
   window.dispatchEvent(new Event('soundrift-offline-library-changed'));
 }
 export async function clearOfflineTracks(): Promise<void> {
-  if (usesNativeOffline()) {
-    await nativeOffline.offlineClear();
-    window.dispatchEvent(new Event('soundrift-offline-library-changed'));
-    return;
-  }
   hydrate();
   const cache = await openCache();
   if (cache) for (const record of records) {

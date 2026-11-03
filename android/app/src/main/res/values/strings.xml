@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">Soundrift</string>
-    <string name="title_activity_main">Soundrift</string>
-    <string name="package_name">tech.soundrift.app</string>
-    <string name="custom_url_scheme">tech.soundrift.app</string>
-</resources>

@@ -9,7 +9,6 @@ import { prefetchTarget } from './audioPreparation';
 import { initializeCachedAudioRoute, subscribeCachedAudioRoute } from './cachedAudioRoute';
 import { getAudioBufferStatus } from './audioBufferStatus';
 import { recordPlaybackDiagnostic, initializePlaybackDiagnostics } from './playbackDiagnostics';
-import { initializeNativePlayback, retryNativePlayback, seekNativePlayback, usesNativePlayback } from './nativePlayback';
 import { getPlaybackDuration } from '../utils/playbackPosition';
 
 let singletonAudio: HTMLAudioElement | null = null;
@@ -55,7 +54,6 @@ export function getAudio(): HTMLAudioElement {
 export function seekAudio(targetTime: number) {
   const state = usePlayerStore.getState();
   if (!Number.isFinite(targetTime) || !state.currentTrack) return;
-  if (seekNativePlayback(targetTime)) return;
   const audio = getAudio();
   const sourceReady = loadedTrack === state.currentTrack && !!loadedSrc && !resolvingSource && audio.readyState > 0;
   const max = getPlaybackDuration(sourceReady ? audio.duration : undefined, state.duration, state.currentTrack.duration);
@@ -83,12 +81,10 @@ export function seekBy(seconds: number) {
   if (!state.currentTrack || state.playbackError || !Number.isFinite(seconds)) return;
   let position = state.currentTime;
   let duration = getPlaybackDuration(state.duration, state.currentTrack.duration);
-  if (!usesNativePlayback()) {
-    const audio = getAudio();
-    if (loadedTrack === state.currentTrack && loadedSrc && !resolvingSource && audio.readyState > 0 && !pendingSeek) {
-      position = audio.currentTime;
-      duration = getPlaybackDuration(audio.duration, duration);
-    }
+  const audio = getAudio();
+  if (loadedTrack === state.currentTrack && loadedSrc && !resolvingSource && audio.readyState > 0 && !pendingSeek) {
+    position = audio.currentTime;
+    duration = getPlaybackDuration(audio.duration, duration);
   }
   if (!duration || !Number.isFinite(position)) return;
   const start = Math.max(0, Math.min(duration, position));
@@ -578,7 +574,6 @@ function attachMediaSession() {
 export function initializePlayer() {
   if (initialized) return;
   initialized = true;
-  if (initializeNativePlayback()) return;
   initializeCachedAudioRoute();
   subscribeCachedAudioRoute(() => trackPrefetcher.retryFailed());
   initializePlaybackDiagnostics(() => {
@@ -651,4 +646,4 @@ function restartPlayback(automatic: boolean) {
   automaticResumeUsed = automatic;
 }
 
-export function retryPlayback() { if (!retryNativePlayback()) restartPlayback(false); }
+export function retryPlayback() { restartPlayback(false); }

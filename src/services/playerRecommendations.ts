@@ -1,7 +1,6 @@
 import { AUDIO_POLICY } from './audioPreparation';
 import { usePlayerStore } from '../store/playerStore';
 import { MusicAPI } from './musicApi';
-import { usesNativePlayback } from './nativePlayback';
 
 // Top up while every prefetched song is still ahead, so the continuation is
 // known and downloaded before the queue runs out on a locked phone.
@@ -10,7 +9,6 @@ const REQUEST_BATCH = 10;
 
 /** Queue maintenance must continue when React isn't rendering a hidden page. */
 export function subscribeToRecommendations() {
-  if (usesNativePlayback()) return () => {};
   let generation = 0;
   let lastRequestKey = '';
 

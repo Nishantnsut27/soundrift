@@ -33,7 +33,3 @@ playwright-report/
 /tests/
 /vitest.config.ts
 /playwright.config.ts
-
-native/playback/.build/
-native/playback/.swiftpm/
-native/playback/android/.gradle/

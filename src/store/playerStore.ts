@@ -29,8 +29,8 @@ const queueInstanceId = Date.now().toString(36) + Math.random().toString(36).sli
 /**
  * Stamps a track with an identity for its position in the queue.
  *
- * A page-specific prefix prevents collisions when reconnecting to a native
- * queue that survived a WebView reload. The counter distinguishes repeats.
+ * A page-specific prefix keeps identities distinct across sessions.
+ * The counter distinguishes repeated songs in the same queue.
  */
 function toQueueEntry(track: Track): QueueEntry {
   queueEntryCounter += 1;
