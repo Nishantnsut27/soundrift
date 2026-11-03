@@ -172,6 +172,11 @@
   }
 }
 
+/* Narrow phones give the timestamps their own line below all seven controls. */
+@media (max-width: 480px) {
+  :root { --player-height: 96px; }
+}
+
 * {
   margin: 0;
   padding: 0;

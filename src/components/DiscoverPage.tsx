@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ContentSection } from './ContentSection';
 import { ErrorBoundary } from './ErrorBoundary';
 import { CollectionCard } from './CollectionCard';
@@ -44,6 +44,17 @@ export function DiscoverPage() {
   );
 
   const [openId, setOpenId] = useState<string | null>(null);
+  const [collectionSelection, setCollectionSelection] = useState(0);
+  const collectionRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (!collectionSelection) return;
+    const frame = requestAnimationFrame(() => {
+      collectionRef.current?.scrollIntoView({
+        behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'start',
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [collectionSelection]);
   /* Defaults to the first collection so the page opens with real music on it,
      while a click still moves elsewhere. */
   const openCollection: CuratedSection | undefined =
@@ -132,7 +143,10 @@ export function DiscoverPage() {
                 key={section.sectionId}
                 section={section}
                 isOpen={openCollection?.sectionId === section.sectionId}
-                onOpen={() => setOpenId(section.sectionId)}
+                onOpen={() => {
+                  setOpenId(section.sectionId);
+                  setCollectionSelection(selection => selection + 1);
+                }}
                 panelId="discover-collection-panel"
               />
             ))}
@@ -140,11 +154,15 @@ export function DiscoverPage() {
 
           {openCollection && (
             <div
+              ref={collectionRef}
               className="discover-collection-panel"
               id="discover-collection-panel"
               role="region"
               aria-label={openCollection.title}
             >
+              <div className="section-header-row">
+                <h3 className="section-title">{openCollection.title}</h3>
+              </div>
               <TrackCardGrid
                 tracks={openCollection.tracks}
                 queueContext={{

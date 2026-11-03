@@ -6,6 +6,8 @@ import { useToastStore } from '../store/toastStore';
 import { formatDuration, formatArtistNames } from '../utils/formatters';
 import { requireAuth } from '../utils/requireAuth';
 import { AudioVisualizer } from './AudioVisualizer';
+import { TrackContextMenu } from './TrackContextMenu';
+import { getPlaybackDuration } from '../utils/playbackPosition';
 import { isOfflineSaved, removeOfflineTrack, saveOfflineTrack } from '../services/offlineLibrary';
 
 export function PlayerControls() {
@@ -62,6 +64,7 @@ export function PlayerControls() {
     nextTrack,
     previousTrack,
     seek,
+    seekBy,
     changeVolume,
     mute,
     retry,
@@ -84,12 +87,12 @@ export function PlayerControls() {
   const isDraggingProgress = useRef(false);
   const isDraggingVolume = useRef(false);
 
-  const effectiveDuration = (duration && !isNaN(duration) && duration > 0)
-    ? duration
-    : (currentTrack?.duration || 0);
+  const effectiveDuration = getPlaybackDuration(duration, currentTrack?.duration);
+  const effectiveTime = Number.isFinite(currentTime) ? Math.max(0, currentTime) : 0;
+  const canSeek = !!currentTrack && effectiveDuration > 0 && Number.isFinite(currentTime) && !playbackError;
 
-  const progress = effectiveDuration > 0 && !isNaN(currentTime) ? 
-    Math.max(0, Math.min(100, (currentTime / effectiveDuration) * 100)) : 0;
+  const progress = effectiveDuration > 0 ?
+    Math.max(0, Math.min(100, (effectiveTime / effectiveDuration) * 100)) : 0;
   const volumePercent = isMuted ? 0 : volume;
 
   const isFavorite = currentTrack ? favorites.some(f => f.id === currentTrack.id) : false;
@@ -380,11 +383,9 @@ export function PlayerControls() {
       aria-valuemax={100}
       tabIndex={0}
       onKeyDown={(e) => {
-        if (!currentTrack || effectiveDuration === 0) return;
-        if (e.key === 'ArrowRight') {
-          seek(Math.min(effectiveDuration, currentTime + 5));
-        } else if (e.key === 'ArrowLeft') {
-          seek(Math.max(0, currentTime - 5));
+        if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+          e.preventDefault();
+          if (canSeek) seekBy(e.key === 'ArrowRight' ? 5 : -5);
         }
       }}
     >
@@ -455,6 +456,17 @@ export function PlayerControls() {
           </button>
 
           <button
+            type="button"
+            className="control-btn seek-step-btn"
+            onClick={() => seekBy(-5)}
+            disabled={!canSeek || effectiveTime <= 0}
+            title="Back 5 seconds"
+            aria-label="Back 5 seconds"
+          >
+            <SeekStepIcon direction="back" />
+          </button>
+
+          <button
             className="control-btn play-btn"
             onClick={togglePlayPause}
             title={isBuffering ? 'Pause while buffering' : (isPlaying ? 'Pause' : 'Play')}
@@ -472,6 +484,17 @@ export function PlayerControls() {
                 <polygon points="6,3 20,12 6,21" />
               </svg>
             )}
+          </button>
+
+          <button
+            type="button"
+            className="control-btn seek-step-btn"
+            onClick={() => seekBy(5)}
+            disabled={!canSeek || effectiveTime >= effectiveDuration}
+            title="Forward 5 seconds"
+            aria-label="Forward 5 seconds"
+          >
+            <SeekStepIcon direction="forward" />
           </button>
 
           <button className="control-btn" onClick={nextTrack} title="Next track" aria-label="Next track">
@@ -498,7 +521,7 @@ export function PlayerControls() {
         </div>
 
         <div className="player-seek">
-          <span className="timetext time_now">{formatDuration(currentTime)}</span>
+          <span className="timetext time_now">{formatDuration(effectiveTime)}</span>
           {seekBar}
           <span className="timetext time_full">{formatDuration(effectiveDuration)}</span>
         </div>
@@ -630,6 +653,14 @@ export function PlayerControls() {
           </div>
         </div>
 
+        <TrackContextMenu
+          track={currentTrack}
+          onPlay={(track) => {
+            const store = usePlayerStore.getState();
+            if (store.currentTrack?.id === track.id && store.currentTrack.provider === track.provider) store.setIsPlaying(true);
+          }}
+        />
+
         <button
           className="control-btn close-btn"
           onClick={handleClosePlayer}
@@ -643,5 +674,17 @@ export function PlayerControls() {
         </button>
       </div>
     </div>
+  );
+}
+
+function SeekStepIcon({ direction }: { direction: 'back' | 'forward' }) {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+      <g transform={direction === 'forward' ? 'translate(24 0) scale(-1 1)' : undefined}>
+        <path d="M12 4a8 8 0 1 1-8 8" />
+        <path d="m12 1-3 3 3 3" />
+      </g>
+      <text x="12" y="15.5" textAnchor="middle" fill="currentColor" stroke="none" fontFamily="Arial, sans-serif" fontSize="9.5" fontWeight="700">5</text>
+    </svg>
   );
 }

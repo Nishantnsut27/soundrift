@@ -1,11 +1,15 @@
 import type { QueueEntry, Track } from '../types/types';
-import { PLAYER_DEFAULTS, STORAGE_KEYS } from '../config/constants';
+import { STORAGE_KEYS } from '../config/constants';
 import { usePlayerStore } from '../store/playerStore';
 import { MusicAPI } from './musicApi';
 import { TrackPrefetcher, type PreparedTrack } from './trackPrefetch';
 import { getUpcomingQueueIndexes } from '../utils/queuePlayback';
 import { FALLBACK_ART } from '../utils/artwork';
-import { getOfflineBlob } from './offlineLibrary';
+import { prefetchTarget } from './audioPreparation';
+import { initializeCachedAudioRoute, subscribeCachedAudioRoute } from './cachedAudioRoute';
+import { getAudioBufferStatus } from './audioBufferStatus';
+import { recordPlaybackDiagnostic, initializePlaybackDiagnostics } from './playbackDiagnostics';
+import { getPlaybackDuration } from '../utils/playbackPosition';
 
 let singletonAudio: HTMLAudioElement | null = null;
 let initialized = false;
@@ -24,6 +28,7 @@ let healthyProgress = 0;
 let progressMark = -1;
 let lastReportedTime = -1;
 let restorePosition = 0;
+let pendingSeek: { track: Track; session: number; position: number } | null = null;
 const trackPrefetcher = new TrackPrefetcher();
 let activePreparedTrack: PreparedTrack | null = null;
 let syncingPlayback = false;
@@ -31,6 +36,10 @@ let interruptedPlayback: { track: Track; session: number } | null = null;
 let automaticResumeUsed = false;
 let reportingFailure = false;
 let offlineResolutionId = 0;
+let resolvingSource = false;
+let lastProgressAt = Date.now();
+let lastObservedPosition = -1;
+let lastPersistedAt = 0;
 
 export function getAudio(): HTMLAudioElement {
   if (!singletonAudio) {
@@ -43,20 +52,58 @@ export function getAudio(): HTMLAudioElement {
 }
 
 export function seekAudio(targetTime: number) {
-  const audio = getAudio();
   const state = usePlayerStore.getState();
-  const max = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : state.duration || state.currentTrack?.duration || 0;
-  const time = Math.max(0, max ? Math.min(targetTime, max) : targetTime);
-  if (!Number.isFinite(time) || !state.currentTrack) return;
+  if (!Number.isFinite(targetTime) || !state.currentTrack) return;
+  const audio = getAudio();
+  const sourceReady = loadedTrack === state.currentTrack && !!loadedSrc && !resolvingSource && audio.readyState > 0;
+  const max = getPlaybackDuration(sourceReady ? audio.duration : undefined, state.duration, state.currentTrack.duration);
+  if (!max) return;
+  const time = Math.max(0, Math.min(targetTime, max));
+  pendingSeek = { track: state.currentTrack, session: state.sessionId, position: time };
+  if (!sourceReady) {
+    state.setCurrentTime(time);
+    return;
+  }
   try {
     audio.currentTime = time;
+    pendingSeek = null;
+    restorePosition = 0;
     state.setCurrentTime(time);
   } catch {
-    // Metadata may not have arrived yet.
+    // Some engines expose metadata before accepting a seek; retry on canplay.
+    state.setCurrentTime(time);
   }
 }
 
-function persistPlayback() {
+/** Read at activation time, so repeated presses never reuse a rendered position. */
+export function seekBy(seconds: number) {
+  const state = usePlayerStore.getState();
+  if (!state.currentTrack || state.playbackError || !Number.isFinite(seconds)) return;
+  let position = state.currentTime;
+  let duration = getPlaybackDuration(state.duration, state.currentTrack.duration);
+  const audio = getAudio();
+  if (loadedTrack === state.currentTrack && loadedSrc && !resolvingSource && audio.readyState > 0 && !pendingSeek) {
+    position = audio.currentTime;
+    duration = getPlaybackDuration(audio.duration, duration);
+  }
+  if (!duration || !Number.isFinite(position)) return;
+  const start = Math.max(0, Math.min(duration, position));
+  seekAudio(Math.max(0, Math.min(duration, start + seconds)));
+}
+
+function applyPendingSeek() {
+  const state = usePlayerStore.getState();
+  if (!pendingSeek) return;
+  if (pendingSeek.track !== state.currentTrack || pendingSeek.session !== state.sessionId) {
+    pendingSeek = null;
+    return;
+  }
+  seekAudio(pendingSeek.position);
+}
+
+function persistPlayback(force = true) {
+  if (!force && Date.now() - lastPersistedAt < 5_000) return;
+  lastPersistedAt = Date.now();
   const { currentTrack, currentTime } = usePlayerStore.getState();
   try {
     if (currentTrack) sessionStorage.setItem(STORAGE_KEYS.PLAYBACK, JSON.stringify({ track: currentTrack, position: currentTime }));
@@ -92,7 +139,7 @@ function invalidatePlay() {
 function requestPlay() {
   const audio = getAudio();
   const state = usePlayerStore.getState();
-  if (!state.currentTrack || !state.isPlaying || !loadedSrc || pendingPlay !== null) return;
+  if (!state.currentTrack || !state.isPlaying || !loadedSrc || resolvingSource || pendingPlay !== null) return;
 
   const attempt = ++playAttempt;
   const generation = sourceGeneration;
@@ -103,6 +150,7 @@ function requestPlay() {
   void audio.play().catch((error: unknown) => {
     if (attempt !== playAttempt || generation !== sourceGeneration) return;
     const name = error instanceof Error ? error.name : '';
+    recordPlaybackDiagnostic('play-rejected', { name, generation });
     if (audio.error) return; // Media errors have their own recovery path.
     if (name === 'AbortError') {
       // Our own pauses and source changes invalidate the attempt first, so this is
@@ -130,6 +178,12 @@ function applySource(src: string, prepared: PreparedTrack | null = null) {
   loadedSrc = new URL(src, document.baseURI).href;
   const previousPrepared = activePreparedTrack;
   activePreparedTrack = prepared;
+  resolvingSource = false;
+  lastProgressAt = Date.now();
+  lastObservedPosition = -1;
+  if (prepared && !prepared.url.startsWith('blob:')) audio.crossOrigin = 'anonymous';
+  else audio.removeAttribute('crossorigin');
+  recordPlaybackDiagnostic('source', { storage: prepared?.storage || 'network', generation: sourceGeneration });
   // Keep the same user-activated element. Assigning src starts resource loading;
   // pause() + removing src + load() creates an unnecessary empty media session.
   audio.src = loadedSrc;
@@ -148,7 +202,8 @@ function syncNextTrackPreparation() {
   if (syncingPlayback) return;
   const state = usePlayerStore.getState();
   if (!state.currentTrack) { trackPrefetcher.clear(); return; }
-  const upcoming = getUpcomingQueueIndexes(state, PLAYER_DEFAULTS.PREFETCH_TRACK_COUNT)
+  const target = prefetchTarget(state.queueContext);
+  const upcoming = getUpcomingQueueIndexes(state, target)
     // Replaying the loaded occurrence from a local file needs no second copy.
     .filter(index => index !== state.currentIndex || !activePreparedTrack)
     .map(index => state.queue[index]);
@@ -170,7 +225,10 @@ function syncNextTrackPreparation() {
         || (Number.isFinite(audio.duration) && end >= audio.duration - 0.25);
     }
   }
-  trackPrefetcher.sync({ current: state.currentTrack, upcoming, history: state.playbackHistory, canDownload });
+  const limited = navigator.onLine === false ? 'offline'
+    : connection?.saveData || connection?.effectiveType?.includes('2g') ? 'data-saver'
+    : !state.isPlaying ? 'paused' : !canDownload ? 'buffering' : null;
+  trackPrefetcher.sync({ current: state.currentTrack, upcoming, history: state.playbackHistory, target, canDownload, limited });
 }
 
 function syncPlaybackState() {
@@ -179,7 +237,10 @@ function syncPlaybackState() {
   audio.volume = state.isMuted ? 0 : Math.max(0, Math.min(1, state.volume / 100));
 
   if (!state.currentTrack) {
+    pendingSeek = null;
+    restorePosition = 0;
     offlineResolutionId += 1;
+    resolvingSource = false;
     interruptedPlayback = null;
     automaticResumeUsed = false;
     trackPrefetcher.clear();
@@ -203,6 +264,7 @@ function syncPlaybackState() {
   // Clearing Up Next invalidates recommendations, but must not reload the song.
   if (loadedTrack !== state.currentTrack || (loadedSession !== state.sessionId && !state.autoQueueSuppressed)
     || (state.isPlaying && recoveryStage === 'failed')) {
+    pendingSeek = null;
     const prepared = trackPrefetcher.take(state.currentTrack);
     automaticResumeUsed = false;
     interruptedPlayback = null;
@@ -233,16 +295,18 @@ function syncPlaybackState() {
       applySource(prepared.url, prepared);
       updateMediaSession(track);
     } else {
-      void getOfflineBlob(track).then((blob) => {
-        if (resolutionId !== offlineResolutionId || usePlayerStore.getState().currentTrack !== track) return;
-        if (blob) {
-          const url = URL.createObjectURL(blob);
-          const localPrepared: PreparedTrack = {
-            source: src,
-            url,
-            release: () => URL.revokeObjectURL(url),
-          };
-          applySource(url, localPrepared);
+      resolvingSource = true;
+      invalidatePlay();
+      loadedSrc = '';
+      state.setBuffering(state.isPlaying);
+      void trackPrefetcher.resolve(track).then((localPrepared) => {
+        if (resolutionId !== offlineResolutionId || usePlayerStore.getState().currentTrack !== track) {
+          localPrepared?.release();
+          return;
+        }
+        resolvingSource = false;
+        if (localPrepared) {
+          applySource(localPrepared.url, localPrepared);
         } else if (src) {
           applySource(src);
         } else {
@@ -251,6 +315,7 @@ function syncPlaybackState() {
         updateMediaSession(track);
       }).catch(() => {
         if (resolutionId !== offlineResolutionId || usePlayerStore.getState().currentTrack !== track) return;
+        resolvingSource = false;
         if (src) applySource(src);
         else usePlayerStore.setState({ isPlaying: false, isBuffering: false, playbackError: 'This track could not be loaded.' });
         updateMediaSession(track);
@@ -269,17 +334,18 @@ function syncPlaybackState() {
   }
 }
 
-function recoverStream() {
+function recoverStream(forcedCode?: number) {
   const audio = getAudio();
   const track = usePlayerStore.getState().currentTrack;
-  if (!track || !loadedSrc || !audio.error) return;
+  if (!track || !loadedSrc || resolvingSource || (!audio.error && forcedCode === undefined)) return;
   healthyProgress = 0;
   progressMark = -1;
 
-  const errorCode = audio.error.code;
+  const errorCode = forcedCode ?? audio.error!.code;
+  recordPlaybackDiagnostic('recovery', { errorCode, stage: recoveryStage, generation: sourceGeneration });
   const retrySource = activePreparedTrack?.source || loadedSrc;
   const usedPreparedTrack = activePreparedTrack !== null;
-  if (usedPreparedTrack && (errorCode === 3 || errorCode === 4)) trackPrefetcher.discard(track);
+  if (activePreparedTrack?.storage === 'automatic' && (errorCode === 3 || errorCode === 4)) trackPrefetcher.discard(track);
   // Preserve a partially played song when reloading its stream.
   restorePosition = Math.max(restorePosition, audio.currentTime);
 
@@ -382,6 +448,13 @@ function replayFromStart() {
 
 function attachAudioListeners(audio: HTMLAudioElement) {
   audio.addEventListener('timeupdate', () => {
+    // The previous source can still emit events while its replacement resolves.
+    if (resolvingSource || !loadedSrc || loadedTrack !== usePlayerStore.getState().currentTrack || pendingSeek) return;
+    if (Math.abs(audio.currentTime - lastObservedPosition) > 0.05) {
+      lastObservedPosition = audio.currentTime;
+      lastProgressAt = Date.now();
+      if (!audio.paused && audio.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) usePlayerStore.getState().setBuffering(false);
+    }
     if (recoveryStage === 'retry' || recoveryStage === 'alternate' || recoveryStage === 'refreshed') {
       // Small forward steps only: a seek or a restored position is not playback.
       const step = audio.currentTime - progressMark;
@@ -404,20 +477,28 @@ function attachAudioListeners(audio: HTMLAudioElement) {
         // Position reporting is optional on some browsers.
       }
     }
-    persistPlayback();
+    persistPlayback(false);
   });
   audio.addEventListener('loadedmetadata', () => {
+    if (resolvingSource || !loadedSrc || loadedTrack !== usePlayerStore.getState().currentTrack) return;
     if (Number.isFinite(audio.duration) && audio.duration > 0) usePlayerStore.getState().setDuration(audio.duration);
-    if (restorePosition > 0) seekAudio(restorePosition);
+    if (pendingSeek) applyPendingSeek();
+    else if (restorePosition > 0) seekAudio(restorePosition);
     restorePosition = 0;
   });
   audio.addEventListener('progress', syncNextTrackPreparation);
-  const buffering = () => usePlayerStore.getState().setBuffering(usePlayerStore.getState().isPlaying);
+  const buffering = (event: Event) => {
+    recordPlaybackDiagnostic(event.type);
+    usePlayerStore.getState().setBuffering(usePlayerStore.getState().isPlaying);
+  };
   audio.addEventListener('waiting', buffering);
   audio.addEventListener('stalled', buffering);
   audio.addEventListener('canplay', () => {
+    applyPendingSeek();
     usePlayerStore.getState().setBuffering(false);
-    if (audio.paused) requestPlay();
+    // Seeking to the end can emit canplay before ended. play() here would reset
+    // the position to zero and swallow the normal queue/repeat transition.
+    if (audio.paused && !audio.ended) requestPlay();
   });
   audio.addEventListener('playing', () => {
     if (audio.paused) return;
@@ -431,9 +512,10 @@ function attachAudioListeners(audio: HTMLAudioElement) {
     usePlayerStore.setState({ isPlaying: false, isBuffering: false });
     setMediaPlaybackState('paused');
   });
-  audio.addEventListener('ended', () => {
+  const advanceAtEnd = () => {
     const before = usePlayerStore.getState();
-    if (!before.isPlaying) return;
+    if (!before.isPlaying || !audio.ended || resolvingSource) return;
+    recordPlaybackDiagnostic('ended', { generation: sourceGeneration });
     if (before.repeatMode === 'one') {
       replayFromStart();
       return;
@@ -444,8 +526,27 @@ function attachAudioListeners(audio: HTMLAudioElement) {
       // Repeat-all with one queue entry, or none left, leaves the selection unchanged.
       replayFromStart();
     }
-  });
-  audio.addEventListener('error', recoverStream);
+  };
+  audio.addEventListener('ended', advanceAtEnd);
+  audio.addEventListener('error', () => recoverStream());
+  // Timers are only recovery opportunities, never a background execution promise.
+  window.setInterval(() => {
+    const state = usePlayerStore.getState();
+    if (!state.isPlaying || !state.currentTrack || resolvingSource || audio.seeking) return;
+    if (audio.ended) { advanceAtEnd(); return; }
+    if (Math.abs(audio.currentTime - lastObservedPosition) > 0.05) {
+      lastObservedPosition = audio.currentTime;
+      lastProgressAt = Date.now();
+      return;
+    }
+    if (Date.now() - lastProgressAt >= 20_000 && recoveryStage !== 'refreshing' && recoveryStage !== 'failed') {
+      lastProgressAt = Date.now();
+      // A late download may now have the current file locally.
+      const prepared = !activePreparedTrack && trackPrefetcher.take(state.currentTrack);
+      if (prepared) { restorePosition = audio.currentTime; applySource(prepared.url, prepared); }
+      else recoverStream(2);
+    }
+  }, 5_000);
 }
 
 function attachMediaSession() {
@@ -473,6 +574,14 @@ function attachMediaSession() {
 export function initializePlayer() {
   if (initialized) return;
   initialized = true;
+  initializeCachedAudioRoute();
+  subscribeCachedAudioRoute(() => trackPrefetcher.retryFailed());
+  initializePlaybackDiagnostics(() => {
+    const state = usePlayerStore.getState();
+    return { trackId: state.currentTrack?.id, session: state.sessionId, playing: state.isPlaying,
+      readyState: getAudio().readyState, networkState: getAudio().networkState,
+      position: getAudio().currentTime, buffer: getAudioBufferStatus() };
+  });
   const audio = getAudio();
   attachAudioListeners(audio);
   attachMediaSession();
@@ -500,6 +609,8 @@ export function initializePlayer() {
   }
   syncPlayback();
   const resumeIfRequested = () => {
+    recordPlaybackDiagnostic('resume');
+    lastProgressAt = Date.now();
     const state = usePlayerStore.getState();
     if (interruptedPlayback && navigator.onLine && state.currentTrack === interruptedPlayback.track
       && state.sessionId === interruptedPlayback.session && !state.isPlaying) {
@@ -507,16 +618,23 @@ export function initializePlayer() {
       restartPlayback(true);
       return;
     }
-    if (usePlayerStore.getState().isPlaying && audio.paused && !audio.ended) requestPlay();
+    if (usePlayerStore.getState().isPlaying && audio.ended) audio.dispatchEvent(new Event('ended'));
+    else if (usePlayerStore.getState().isPlaying && audio.paused) requestPlay();
     syncNextTrackPreparation();
   };
   document.addEventListener('visibilitychange', () => {
+    recordPlaybackDiagnostic('visibility');
     persistPlayback();
     if (document.visibilityState === 'visible') { trackPrefetcher.retryFailed(); resumeIfRequested(); }
   });
   window.addEventListener('pageshow', resumeIfRequested);
   window.addEventListener('online', () => { trackPrefetcher.retryFailed(); resumeIfRequested(); });
-  window.addEventListener('pagehide', persistPlayback);
+  window.addEventListener('offline', syncNextTrackPreparation);
+  window.addEventListener('pagehide', () => { recordPlaybackDiagnostic('pagehide'); persistPlayback(); });
+  document.addEventListener('freeze', () => { recordPlaybackDiagnostic('freeze'); persistPlayback(); });
+  document.addEventListener('resume', () => { trackPrefetcher.retryFailed(); resumeIfRequested(); });
+  window.addEventListener('soundrift-offline-library-changed', () => trackPrefetcher.retryFailed());
+  (navigator as Navigator & { connection?: EventTarget }).connection?.addEventListener('change', syncNextTrackPreparation);
 }
 
 function restartPlayback(automatic: boolean) {

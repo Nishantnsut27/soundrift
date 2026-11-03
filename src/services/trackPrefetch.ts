@@ -1,240 +1,364 @@
 import type { Track } from '../types/types';
 import { MusicAPI } from './musicApi';
 import { audioCache } from './audioCache';
+import { getOfflineBlob, getOfflinePrepared, isOfflineSaved } from './offlineLibrary';
+import { canServeCachedAudio } from './cachedAudioRoute';
+import { AUDIO_POLICY, audioCacheUrl, cacheKeyOf, prepareBlob, prepareCached, sourceOf, type PreparedTrack } from './audioPreparation';
+import { resetAudioBufferStatus, setAudioBufferStatus, type AudioBufferStatus } from './audioBufferStatus';
 
-const MAX_TRACK_BYTES = 24 * 1024 * 1024;
-const DOWNLOAD_TIMEOUT_MS = 120000;
+export type { PreparedTrack } from './audioPreparation';
 const EXPIRED_STREAM_STATUSES = new Set([401, 403, 404, 410]);
+const READINESS_CHECK_INTERVAL_MS = 5_000;
 const SUPPORTED_AUDIO_TYPES = new Set([
   'audio/mpeg', 'audio/mp3', 'audio/mp4', 'audio/aac', 'audio/aacp',
   'audio/ogg', 'application/ogg', 'audio/wav', 'audio/x-wav', 'audio/flac', 'audio/webm',
 ]);
 
-export interface PreparedTrack {
-  source: string;
-  url: string;
-  release: () => void;
-}
-
 export interface PrefetchPlan {
   current: Track | null;
-  /** In play order, already limited to the lookahead. */
   upcoming: readonly Track[];
   history: readonly Track[];
+  target: number;
   canDownload: boolean;
+  limited: AudioBufferStatus['limited'];
 }
+interface WantedTrack { key: string; track: Track }
+interface Failure { attempts: number; retryAt: number }
 
-interface WantedTrack {
-  key: string;
-  track: Track;
-}
-
-class DownloadError extends Error {
+export class DownloadError extends Error {
   readonly status: number;
-
-  constructor(status: number) {
-    super(`Audio download failed with status ${status}.`);
-    this.status = status;
-  }
+  constructor(status: number) { super('Audio download failed with status ' + status + '.'); this.status = status; }
 }
 
-const cacheKeys = new WeakMap<Track, string>();
-
-function sourceOf(track: Track): string {
-  const source = track.audio || track.audiodownload;
-  if (!source) return '';
-  try { return new URL(source, document.baseURI).href; } catch { return ''; }
-}
-
-function qualityOf(source: string): string {
-  const url = new URL(source);
-  return url.pathname.match(/_(\d{2,3})\.\w+$/)?.[1] || url.searchParams.get('format') || 'default';
-}
-
-/** Track id + quality, so a refreshed stream URL for the same file still hits. */
-function cacheKeyOf(track: Track): string {
-  let key = cacheKeys.get(track);
-  if (key === undefined) {
-    const source = sourceOf(track);
-    key = /^https?:/.test(source) ? `${track.provider || 'default'}:${track.id}:${qualityOf(source)}` : '';
-    cacheKeys.set(track, key);
-  }
-  return key;
-}
-
-function toPrepared(source: string, blob: Blob): PreparedTrack {
-  const url = URL.createObjectURL(blob);
-  let released = false;
-  return { source, url, release: () => {
-    if (!released) { released = true; URL.revokeObjectURL(url); }
-  } };
-}
-
-async function downloadAudio(source: string, signal: AbortSignal): Promise<Blob> {
-  // Direct CDN fetch: no API auth headers or cookies. A CORS refusal leaves the
-  // normal HTMLAudioElement streaming path in place.
+export async function downloadAudio(source: string, signal: AbortSignal): Promise<Blob> {
   const response = await fetch(source, { signal, mode: 'cors', credentials: 'omit' });
   const type = (response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
   const length = Number(response.headers.get('content-length'));
-  if (response.status !== 200 || !response.body || !SUPPORTED_AUDIO_TYPES.has(type) || length > MAX_TRACK_BYTES) {
+  if (response.status !== 200 || !response.body || !SUPPORTED_AUDIO_TYPES.has(type) || length > AUDIO_POLICY.maxTrackBytes) {
     await response.body?.cancel().catch(() => undefined);
     throw new DownloadError(response.status);
   }
   const reader = response.body.getReader();
   const chunks: BlobPart[] = [];
   let size = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    size += value.byteLength;
-    if (size > MAX_TRACK_BYTES) {
-      await reader.cancel().catch(() => undefined);
-      throw new DownloadError(response.status);
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > AUDIO_POLICY.maxTrackBytes) throw new DownloadError(response.status);
+      chunks.push(new Uint8Array(value));
     }
-    chunks.push(new Uint8Array(value));
-  }
-  if (!size) throw new DownloadError(response.status);
-  return new Blob(chunks, { type });
+    if (!size || (length > 0 && !response.headers.get('content-encoding') && size !== length)) throw new DownloadError(response.status);
+    return new Blob(chunks, { type });
+  } catch (error) {
+    await reader.cancel().catch(() => undefined);
+    throw error;
+  } finally { reader.releaseLock(); }
 }
 
-/**
- * Downloads the songs that will play next onto the device while there is
- * network, and keeps the very next one as a ready object URL so the `ended`
- * handler can switch to it synchronously, with no request at the handoff.
- */
+/** A sliding disk window. At most two upcoming files are held as page Blob URLs. */
 export class TrackPrefetcher {
   private signature = '';
   private wanted: WantedTrack[] = [];
+  private occurrenceKeys: string[] = [];
+  private currentKey = '';
   private keep: ReadonlySet<string> = new Set();
-  private canDownload = false;
+  private plan: PrefetchPlan | null = null;
   private download: { key: string; controller: AbortController } | null = null;
-  private ready: { key: string; prepared: PreparedTrack } | null = null;
-  private readingKey = '';
-  private readonly failed = new Set<string>();
+  private readonly ready = new Map<string, PreparedTrack>();
+  private readonly offlineReady = new Set<string>();
+  private readonly warming = new Map<string, number>();
+  private readonly checked = new Set<string>();
+  private readonly failures = new Map<string, Failure>();
+  private readonly storageBlocked = new Set<string>();
+  private generation = 0;
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  private unsubscribeCache: (() => void) | null = null;
+  private validationVersion = 0;
+  private checkedVersion = -1;
+  private validationInFlight = false;
+  private validationDueAt = 0;
+  private cacheValidated = false;
 
-  /** Cheap enough for every store update: real work only happens when the plan changes. */
-  sync(plan: PrefetchPlan) {
-    this.canDownload = plan.canDownload;
-    const currentKey = plan.current ? cacheKeyOf(plan.current) : '';
+  sync(plan: PrefetchPlan): void {
+    this.unsubscribeCache ??= audioCache.subscribe(() => {
+      this.invalidateValidation();
+      this.checked.clear();
+      for (const [key, prepared] of this.ready) {
+        if (prepared.storage === 'automatic' && !prepared.url.startsWith('blob:') && !audioCache.has(key)) {
+          prepared.release();
+          this.ready.delete(key);
+        }
+      }
+      this.storageBlocked.clear();
+      audioCache.retryWrites();
+      this.pump();
+    });
+    this.plan = plan;
+    this.currentKey = plan.current ? cacheKeyOf(plan.current) : '';
+    this.occurrenceKeys = plan.upcoming.map(cacheKeyOf);
     const wanted: WantedTrack[] = [];
     for (const track of plan.upcoming) {
       const key = cacheKeyOf(track);
       if (key && !wanted.some(entry => entry.key === key)) wanted.push({ key, track });
     }
-    const signature = `${currentKey}|${wanted.map(entry => entry.key).join(',')}|${plan.history.length}`;
+    const recent = plan.history.slice(-AUDIO_POLICY.history).map(cacheKeyOf);
+    const signature = JSON.stringify([this.currentKey, wanted.map(entry => entry.key), recent]);
     if (signature !== this.signature) {
       this.signature = signature;
       this.wanted = wanted;
-      const wantedKeys = new Set(wanted.map(entry => entry.key));
-      if (this.download && !wantedKeys.has(this.download.key)) {
-        this.download.controller.abort();
-        this.download = null;
-      }
-      if (this.ready && this.ready.key !== wanted[0]?.key) this.releaseReady();
-      for (const key of this.failed) if (!wantedKeys.has(key)) this.failed.delete(key);
-      const recent = plan.history.slice(-2).map(cacheKeyOf);
-      this.keep = new Set([currentKey, ...wantedKeys, ...recent].filter(Boolean));
-      const stale = new Set(plan.history.slice(0, -2).map(cacheKeyOf));
-      void audioCache.prune(this.keep, stale);
+      this.keep = new Set([this.currentKey, ...wanted.map(entry => entry.key), ...recent].filter(Boolean));
+      // Keep a download which just became current; its completed file can recover playback.
+      if (this.download && !this.keep.has(this.download.key)) this.download.controller.abort();
+      this.releaseObsolete();
+      for (const key of this.failures.keys()) if (!this.keep.has(key)) this.failures.delete(key);
+      this.storageBlocked.clear();
+      this.invalidateValidation();
+      this.publishValidated(false);
+      void audioCache.prune(this.keep).then(() => this.pump());
     }
     this.pump();
   }
 
-  /** Hands the ready file to the player, which then owns (and releases) its URL. */
+  /** Works for any cached queue entry, including rapid skips and Previous. */
   take(track: Track): PreparedTrack | null {
-    const ready = this.ready;
-    if (!ready || ready.key !== cacheKeyOf(track)) return null;
-    this.ready = null;
-    return ready.prepared;
+    const key = cacheKeyOf(track);
+    const ready = this.ready.get(key);
+    // Only resident bytes are safe to hand off synchronously. Cache URLs must
+    // be revalidated asynchronously; a stale index is never a playable source.
+    if (ready?.url.startsWith('blob:')) { this.ready.delete(key); this.checked.delete(key); return ready; }
+    return null;
   }
 
-  /** A stored file the media element could not decode must not be offered again. */
-  discard(track: Track) {
+  /** A missed warm-up must still consult the automatic cache before the CDN. */
+  async resolve(track: Track): Promise<PreparedTrack | null> {
+    return this.resolvePrepared(track, true);
+  }
+
+  private async resolvePrepared(track: Track, memory: boolean): Promise<PreparedTrack | null> {
+    const ready = this.take(track);
+    if (ready) return ready;
+    const savedBlob = memory ? await getOfflineBlob(track) : null;
+    const saved = savedBlob ? prepareBlob(sourceOf(track), savedBlob, 'offline') : await getOfflinePrepared(track);
+    if (saved) return saved;
     const key = cacheKeyOf(track);
+    if (!key) return null;
+    if (!memory && canServeCachedAudio() && await audioCache.contains(key)) return prepareCached(sourceOf(track), audioCacheUrl(key), 'automatic');
+    const blob = await audioCache.read(key);
+    return blob ? prepareBlob(sourceOf(track), blob, 'automatic') : null;
+  }
+
+  discard(track: Track): void {
+    this.invalidateValidation();
+    const key = cacheKeyOf(track);
+    this.ready.get(key)?.release();
+    this.ready.delete(key);
+    this.checked.delete(key);
     if (key) void audioCache.remove(key);
   }
 
-  retryFailed() {
-    this.failed.clear();
+  retryFailed(): void {
+    this.generation++;
+    this.invalidateValidation();
+    this.failures.clear();
+    this.storageBlocked.clear();
+    this.checked.clear();
+    this.offlineReady.clear();
+    for (const prepared of this.ready.values()) prepared.release();
+    this.ready.clear();
+    audioCache.retryWrites();
     this.pump();
   }
 
-  clear() {
+  clear(): void {
+    this.generation++;
+    this.invalidateValidation();
+    this.unsubscribeCache?.();
+    this.unsubscribeCache = null;
+    void audioCache.release();
     this.signature = '';
+    this.plan = null;
     this.wanted = [];
-    this.readingKey = '';
+    this.occurrenceKeys = [];
+    this.keep = new Set();
     this.download?.controller.abort();
     this.download = null;
-    this.releaseReady();
+    this.warming.clear();
+    this.checked.clear();
+    this.failures.clear();
+    this.storageBlocked.clear();
+    for (const prepared of this.ready.values()) prepared.release();
+    this.ready.clear();
+    this.offlineReady.clear();
+    this.cancelRetry();
+    resetAudioBufferStatus();
   }
 
-  private releaseReady() {
-    this.ready?.prepared.release();
-    this.ready = null;
-  }
-
-  private setReady(entry: WantedTrack, blob: Blob) {
-    this.releaseReady();
-    this.ready = { key: entry.key, prepared: toPrepared(sourceOf(entry.track), blob) };
-  }
-
-  private pump() {
-    if (!audioCache.isLoaded) {
-      if (this.wanted.length) void audioCache.load().then(() => this.pump());
-      return;
+  private releaseObsolete(): void {
+    const memoryKeys = new Set(this.wanted.slice(0, 2).map(entry => entry.key));
+    for (const [key, prepared] of this.ready) {
+      if (!this.keep.has(key) || prepared.url.startsWith('blob:') && !memoryKeys.has(key) && key !== this.currentKey) {
+        prepared.release();
+        this.ready.delete(key);
+        this.checked.delete(key);
+      }
     }
-    const next = this.wanted[0];
-    if (next && this.ready?.key !== next.key && this.readingKey !== next.key && audioCache.has(next.key)) {
-      void this.readStored(next);
+    for (const key of this.checked) if (!this.keep.has(key)) this.checked.delete(key);
+    for (const key of this.offlineReady) if (!this.keep.has(key)) this.offlineReady.delete(key);
+  }
+
+  private invalidateValidation(): void {
+    this.validationVersion++;
+    this.cacheValidated = false;
+    this.validationDueAt = 0;
+  }
+
+  private publish(): void {
+    if (!this.plan) return;
+    // Position ticks can update UI state using the last checked index. They
+    // must not enqueue another disk scan while one is pending or still fresh.
+    this.publishValidated(this.cacheValidated);
+    if (this.validationInFlight || this.checkedVersion === this.validationVersion && Date.now() < this.validationDueAt) return;
+    this.validationInFlight = true;
+    const version = this.validationVersion;
+    let invalidated = false;
+    void audioCache.validate(new Set(this.occurrenceKeys)).then(missing => {
+      if (version !== this.validationVersion || !this.plan) return;
+      this.checkedVersion = version;
+      this.cacheValidated = true;
+      this.validationDueAt = Date.now() + READINESS_CHECK_INTERVAL_MS;
+      for (const key of missing) { this.checked.delete(key); invalidated = true; }
+      for (const [key, prepared] of this.ready) {
+        if (prepared.storage === 'automatic' && !prepared.url.startsWith('blob:') && !audioCache.has(key)) {
+          prepared.release(); this.ready.delete(key); this.checked.delete(key); invalidated = true;
+        }
+      }
+      this.publishValidated();
+    }).catch(() => {
+      if (version !== this.validationVersion || !this.plan) return;
+      this.checkedVersion = version;
+      this.cacheValidated = false;
+      this.validationDueAt = Date.now() + READINESS_CHECK_INTERVAL_MS;
+      this.publishValidated(false);
+    }).finally(() => {
+      this.validationInFlight = false;
+      // Multiple changes during a slow check collapse into one check of the
+      // latest window. A cleared queue never starts another check.
+      if (this.plan && version !== this.validationVersion) this.publish();
+      else if (invalidated) this.pump();
+    });
+  }
+
+  private publishValidated(verifiedCache = true): void {
+    if (!this.plan) return;
+    const available = this.occurrenceKeys.map(key => !!key && (
+      verifiedCache && audioCache.has(key)
+      || this.ready.get(key)?.url.startsWith('blob:') || this.offlineReady.has(key)));
+    const firstMissing = available.indexOf(false);
+    setAudioBufferStatus({
+      target: this.plan.target, total: available.length, ready: available.filter(Boolean).length,
+      contiguousReady: firstMissing < 0 ? available.length : firstMissing,
+      downloading: !!this.download, failed: this.occurrenceKeys.filter(key => this.failures.has(key)).length,
+      bytes: audioCache.bytes, limited: this.plan.limited || (this.storageBlocked.size ? 'storage' : null),
+    });
+  }
+
+  private pump(): void {
+    this.cancelRetry();
+    if (!this.plan) return;
+    if (!audioCache.isLoaded) { void audioCache.load().then(() => this.pump()); return; }
+    const nearest = new Set(this.wanted.slice(0, 2).map(entry => entry.key));
+    for (const entry of this.wanted) {
+      const needsMemory = nearest.has(entry.key) && !this.ready.get(entry.key)?.url.startsWith('blob:')
+        && (audioCache.has(entry.key) || this.offlineReady.has(entry.key));
+      if (!this.warming.has(entry.key) && (needsMemory || !this.ready.has(entry.key) && !this.checked.has(entry.key))) void this.warm(entry);
     }
-    if (this.download || !this.canDownload) return;
-    // Without on-device storage only the very next song can be held, in memory.
-    const candidates = audioCache.isWritable ? this.wanted : this.wanted.slice(0, 1);
-    const target = candidates.find(({ key }) => !audioCache.has(key) && this.ready?.key !== key && !this.failed.has(key));
-    if (target) void this.fetchTrack(target);
+    if (!this.download && this.plan.canDownload) {
+      const candidates = audioCache.isWritable ? this.wanted : this.wanted.slice(0, 1);
+      const target = candidates.find(({ key }) => !audioCache.has(key) && !this.ready.has(key) && !this.offlineReady.has(key)
+        && !this.storageBlocked.has(key)
+        && (!this.failures.has(key) || this.failures.get(key)!.retryAt <= Date.now()));
+      if (target && !this.warming.has(target.key)) void this.fetchTrack(target);
+      else this.scheduleRetry();
+    }
+    this.publish();
   }
 
-  private async readStored(entry: WantedTrack) {
-    this.readingKey = entry.key;
-    const blob = await audioCache.read(entry.key);
-    if (this.readingKey !== entry.key) return;
-    this.readingKey = '';
-    if (!blob) this.pump();
-    else if (this.wanted[0]?.key === entry.key && this.ready?.key !== entry.key) this.setReady(entry, blob);
+  private async warm(entry: WantedTrack): Promise<void> {
+    const generation = this.generation;
+    this.warming.set(entry.key, generation);
+    try {
+      const prepare = canServeCachedAudio() || this.wanted.slice(0, 2).some(item => item.key === entry.key);
+      const saved = !prepare && !audioCache.has(entry.key) ? await isOfflineSaved(entry.track) : false;
+      const memory = !canServeCachedAudio() || this.wanted.slice(0, 2).some(item => item.key === entry.key);
+      const prepared = prepare ? await this.resolvePrepared(entry.track, memory) : null;
+      if (this.generation !== generation) { prepared?.release(); return; }
+      this.checked.add(entry.key);
+      if (saved || prepared?.storage === 'offline') this.offlineReady.add(entry.key);
+      else this.offlineReady.delete(entry.key);
+      if (prepared) {
+        if (this.keep.has(entry.key)) { this.ready.get(entry.key)?.release(); this.ready.set(entry.key, prepared); }
+        else prepared.release();
+      }
+    } catch {
+      if (this.generation === generation) this.checked.add(entry.key);
+    } finally {
+      if (this.warming.get(entry.key) === generation) this.warming.delete(entry.key);
+      this.releaseObsolete();
+      this.pump();
+    }
   }
 
-  private async fetchTrack(entry: WantedTrack) {
+  private async fetchTrack(entry: WantedTrack): Promise<void> {
     const controller = new AbortController();
     this.download = { key: entry.key, controller };
-    let timedOut = false;
-    const timer = setTimeout(() => { timedOut = true; controller.abort(); }, DOWNLOAD_TIMEOUT_MS);
+    const timer = setTimeout(() => controller.abort(new DOMException('Download timed out', 'TimeoutError')), AUDIO_POLICY.downloadTimeoutMs);
     try {
       let blob: Blob;
-      try {
-        blob = await downloadAudio(sourceOf(entry.track), controller.signal);
-      } catch (error) {
+      let source = sourceOf(entry.track);
+      try { blob = await downloadAudio(source, controller.signal); }
+      catch (error) {
         if (!(error instanceof DownloadError) || !EXPIRED_STREAM_STATUSES.has(error.status)) throw error;
-        // Resolve a fresh stream URL now, while the network is available, rather
-        // than through stream recovery at the handoff.
         const fresh = await MusicAPI.getTrackById(entry.track.id, controller.signal, { refresh: true });
-        const refreshed = fresh ? sourceOf(fresh) : '';
-        if (!refreshed || refreshed === sourceOf(entry.track)) throw error;
-        blob = await downloadAudio(refreshed, controller.signal);
+        if (!fresh || cacheKeyOf(fresh) !== entry.key) throw error;
+        source = sourceOf(fresh);
+        blob = await downloadAudio(source, controller.signal);
       }
-      if (this.download?.controller !== controller) return;
-      const stored = await audioCache.write(entry.key, blob, this.keep);
-      if (this.wanted[0]?.key === entry.key) this.setReady(entry, blob);
-      else if (!stored) this.failed.add(entry.key);
-    } catch {
-      // Prefetch must never change the selected track, show a playback error, or
-      // block the normal stream. A failed song is retried on reconnect or return.
-      if (timedOut || !controller.signal.aborted) this.failed.add(entry.key);
+      if (controller.signal.aborted || this.download?.controller !== controller) return;
+      // History is expendable when storage is scarce; upcoming audio wins.
+      const protectedKeys = new Set([this.currentKey, ...this.wanted.map(item => item.key)]);
+      const stored = await audioCache.write(entry.key, blob, protectedKeys);
+      if (controller.signal.aborted || this.download?.controller !== controller) return;
+      this.failures.delete(entry.key);
+      if (!stored) this.storageBlocked.add(entry.key);
+      if (this.keep.has(entry.key)) {
+        const nearest = this.wanted.slice(0, 2).some(item => item.key === entry.key) || entry.key === this.currentKey;
+        const prepared = nearest ? prepareBlob(source, blob, stored ? 'automatic' : 'memory')
+          : stored && canServeCachedAudio() ? prepareCached(source, audioCacheUrl(entry.key), 'automatic') : null;
+        if (prepared) { this.ready.get(entry.key)?.release(); this.ready.set(entry.key, prepared); }
+      }
+    } catch (error) {
+      if (!controller.signal.aborted || controller.signal.reason?.name === 'TimeoutError') {
+        const attempts = (this.failures.get(entry.key)?.attempts || 0) + 1;
+        const delay = AUDIO_POLICY.retryDelaysMs[attempts - 1];
+        const permanent = error instanceof DownloadError && error.status === 200;
+        this.failures.set(entry.key, { attempts, retryAt: !permanent && delay !== undefined ? Date.now() + delay : Infinity });
+      }
     } finally {
       clearTimeout(timer);
-      if (this.download?.controller === controller) {
-        this.download = null;
-        this.pump();
-      }
+      if (this.download?.controller === controller) { this.download = null; this.pump(); }
     }
+  }
+
+  private cancelRetry(): void {
+    if (this.retryTimer !== null) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
+  }
+
+  private scheduleRetry(): void {
+    const due = this.wanted.map(({ key }) => this.failures.get(key)?.retryAt ?? Infinity).filter(time => time > Date.now());
+    const next = Math.min(...due);
+    if (Number.isFinite(next)) this.retryTimer = setTimeout(() => { this.retryTimer = null; this.pump(); }, Math.max(1, next - Date.now()));
   }
 }

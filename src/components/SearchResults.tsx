@@ -1,4 +1,5 @@
 import { TrackListModern } from './TrackListModern';
+import { TrackContextMenu } from './TrackContextMenu';
 import { SkeletonSearchResults } from './Skeletons';
 import { usePlayerStore } from '../store/playerStore';
 import { useAuthStore } from '../store/authStore';
@@ -41,7 +42,7 @@ export function SearchResults({
 
   const playTop = () => {
     const store = usePlayerStore.getState();
-    if (store.currentTrack?.id === topResult.id) {
+    if (store.currentTrack?.id === topResult.id && store.currentTrack.provider === topResult.provider) {
       if (store.isPlaying) store.pauseTrack();
       else store.setIsPlaying(true);
       return;
@@ -49,41 +50,51 @@ export function SearchResults({
     store.playTrack(topResult);
   };
 
-  const isTopCurrent = currentTrack?.id === topResult.id;
+  const isTopCurrent = currentTrack?.id === topResult.id && currentTrack.provider === topResult.provider;
 
   return (
     <div className="search-results">
       <section className="search-section">
         <h2 className="search-section-title">Top result</h2>
-        <button
-          type="button"
-          className={`search-top-result${isTopCurrent ? ' is-current' : ''}`}
-          onClick={playTop}
-          aria-label={
-            isTopCurrent && isPlaying
-              ? `Pause ${topResult.name}`
-              : `Play ${topResult.name} by ${topResult.artist_name}`
-          }
-        >
-          <span className="search-top-result-art">
-            <img
-              src={topResult.album_image || topResult.image || FALLBACK_ART}
-              alt=""
-              loading="lazy"
-              decoding="async"
-              onError={showFallbackArt}
-            />
-            <span className="search-play-badge" aria-hidden="true">
-              {isTopCurrent && isPlaying ? <PauseGlyph /> : <PlayGlyph />}
+        <div className={`search-top-result${isTopCurrent ? ' is-current' : ''}`}>
+          <button
+            type="button"
+            className="search-top-result-play"
+            onClick={playTop}
+            aria-label={
+              isTopCurrent && isPlaying
+                ? `Pause ${topResult.name}`
+                : `Play ${topResult.name} by ${topResult.artist_name}`
+            }
+          >
+            <span className="search-top-result-art">
+              <img
+                src={topResult.album_image || topResult.image || FALLBACK_ART}
+                alt=""
+                loading="lazy"
+                decoding="async"
+                onError={showFallbackArt}
+              />
+              <span className="search-play-badge" aria-hidden="true">
+                {isTopCurrent && isPlaying ? <PauseGlyph /> : <PlayGlyph />}
+              </span>
             </span>
-          </span>
-          <span className="search-top-result-text">
-            <span className="search-top-result-name truncate">{topResult.name}</span>
-            <span className="search-top-result-meta truncate">
-              Song · {topResult.artist_name}
+            <span className="search-top-result-text">
+              <span className="search-top-result-name truncate">{topResult.name}</span>
+              <span className="search-top-result-meta truncate">
+                Song · {topResult.artist_name}
+              </span>
             </span>
-          </span>
-        </button>
+          </button>
+          <TrackContextMenu
+            track={topResult}
+            onPlay={(track) => {
+              const store = usePlayerStore.getState();
+              if (store.currentTrack?.id === track.id && store.currentTrack.provider === track.provider) store.setIsPlaying(true);
+              else store.playTrack(track);
+            }}
+          />
+        </div>
       </section>
 
       {otherSongs.length > 0 && (
