@@ -1,7 +1,7 @@
 import type { Track } from '../types/types';
 import { MusicAPI } from './musicApi';
 import { audioCache } from './audioCache';
-import { getOfflinePrepared, isOfflineSaved } from './offlineLibrary';
+import { getOfflineBlob, getOfflinePrepared, isOfflineSaved } from './offlineLibrary';
 import { canServeCachedAudio } from './cachedAudioRoute';
 import { AUDIO_POLICY, audioCacheUrl, cacheKeyOf, prepareBlob, prepareCached, sourceOf, type PreparedTrack } from './audioPreparation';
 import { resetAudioBufferStatus, setAudioBufferStatus, type AudioBufferStatus } from './audioBufferStatus';
@@ -73,8 +73,22 @@ export class TrackPrefetcher {
   private readonly storageBlocked = new Set<string>();
   private generation = 0;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  private unsubscribeCache: (() => void) | null = null;
+  private publication = 0;
 
   sync(plan: PrefetchPlan): void {
+    this.unsubscribeCache ??= audioCache.subscribe(() => {
+      this.checked.clear();
+      for (const [key, prepared] of this.ready) {
+        if (prepared.storage === 'automatic' && !prepared.url.startsWith('blob:') && !audioCache.has(key)) {
+          prepared.release();
+          this.ready.delete(key);
+        }
+      }
+      this.storageBlocked.clear();
+      audioCache.retryWrites();
+      this.pump();
+    });
     this.plan = plan;
     this.currentKey = plan.current ? cacheKeyOf(plan.current) : '';
     this.occurrenceKeys = plan.upcoming.map(cacheKeyOf);
@@ -94,6 +108,8 @@ export class TrackPrefetcher {
       this.releaseObsolete();
       for (const key of this.failures.keys()) if (!this.keep.has(key)) this.failures.delete(key);
       this.storageBlocked.clear();
+      this.publication++;
+      this.publishValidated(false);
       void audioCache.prune(this.keep).then(() => this.pump());
     }
     this.pump();
@@ -103,23 +119,26 @@ export class TrackPrefetcher {
   take(track: Track): PreparedTrack | null {
     const key = cacheKeyOf(track);
     const ready = this.ready.get(key);
-    if (ready) { this.ready.delete(key); this.checked.delete(key); return ready; }
-    if (key && audioCache.has(key) && canServeCachedAudio()) {
-      return prepareCached(sourceOf(track), audioCacheUrl(key), 'automatic');
-    }
+    // Only resident bytes are safe to hand off synchronously. Cache URLs must
+    // be revalidated asynchronously; a stale index is never a playable source.
+    if (ready?.url.startsWith('blob:')) { this.ready.delete(key); this.checked.delete(key); return ready; }
     return null;
   }
 
   /** A missed warm-up must still consult the automatic cache before the CDN. */
   async resolve(track: Track): Promise<PreparedTrack | null> {
+    return this.resolvePrepared(track, true);
+  }
+
+  private async resolvePrepared(track: Track, memory: boolean): Promise<PreparedTrack | null> {
     const ready = this.take(track);
     if (ready) return ready;
-    const saved = await getOfflinePrepared(track);
+    const savedBlob = memory ? await getOfflineBlob(track) : null;
+    const saved = savedBlob ? prepareBlob(sourceOf(track), savedBlob, 'offline') : await getOfflinePrepared(track);
     if (saved) return saved;
     const key = cacheKeyOf(track);
     if (!key) return null;
-    await audioCache.load();
-    if (audioCache.has(key) && canServeCachedAudio()) return prepareCached(sourceOf(track), audioCacheUrl(key), 'automatic');
+    if (!memory && canServeCachedAudio() && await audioCache.contains(key)) return prepareCached(sourceOf(track), audioCacheUrl(key), 'automatic');
     const blob = await audioCache.read(key);
     return blob ? prepareBlob(sourceOf(track), blob, 'automatic') : null;
   }
@@ -146,6 +165,10 @@ export class TrackPrefetcher {
 
   clear(): void {
     this.generation++;
+    this.publication++;
+    this.unsubscribeCache?.();
+    this.unsubscribeCache = null;
+    void audioCache.release();
     this.signature = '';
     this.plan = null;
     this.wanted = [];
@@ -179,7 +202,26 @@ export class TrackPrefetcher {
 
   private publish(): void {
     if (!this.plan) return;
-    const available = this.occurrenceKeys.map(key => !!key && (audioCache.has(key) || this.ready.has(key) || this.offlineReady.has(key)));
+    const publication = ++this.publication;
+    void audioCache.validate(new Set(this.occurrenceKeys)).then(missing => {
+      if (publication !== this.publication || !this.plan) return;
+      let invalidated = false;
+      for (const key of missing) { this.checked.delete(key); invalidated = true; }
+      for (const [key, prepared] of this.ready) {
+        if (prepared.storage === 'automatic' && !prepared.url.startsWith('blob:') && !audioCache.has(key)) {
+          prepared.release(); this.ready.delete(key); this.checked.delete(key); invalidated = true;
+        }
+      }
+      this.publishValidated();
+      if (invalidated) this.pump();
+    });
+  }
+
+  private publishValidated(verifiedCache = true): void {
+    if (!this.plan) return;
+    const available = this.occurrenceKeys.map(key => !!key && (
+      verifiedCache && (audioCache.has(key) || this.ready.has(key))
+      || this.ready.get(key)?.url.startsWith('blob:') || this.offlineReady.has(key)));
     const firstMissing = available.indexOf(false);
     setAudioBufferStatus({
       target: this.plan.target, total: available.length, ready: available.filter(Boolean).length,
@@ -195,8 +237,9 @@ export class TrackPrefetcher {
     if (!audioCache.isLoaded) { void audioCache.load().then(() => this.pump()); return; }
     const nearest = new Set(this.wanted.slice(0, 2).map(entry => entry.key));
     for (const entry of this.wanted) {
-      const needsMemory = !canServeCachedAudio() && nearest.has(entry.key) && (audioCache.has(entry.key) || this.offlineReady.has(entry.key));
-      if (!this.ready.has(entry.key) && !this.warming.has(entry.key) && (!this.checked.has(entry.key) || needsMemory)) void this.warm(entry);
+      const needsMemory = nearest.has(entry.key) && !this.ready.get(entry.key)?.url.startsWith('blob:')
+        && (audioCache.has(entry.key) || this.offlineReady.has(entry.key));
+      if (!this.warming.has(entry.key) && (needsMemory || !this.ready.has(entry.key) && !this.checked.has(entry.key))) void this.warm(entry);
     }
     if (!this.download && this.plan.canDownload) {
       const candidates = audioCache.isWritable ? this.wanted : this.wanted.slice(0, 1);
@@ -215,7 +258,8 @@ export class TrackPrefetcher {
     try {
       const prepare = canServeCachedAudio() || this.wanted.slice(0, 2).some(item => item.key === entry.key);
       const saved = !prepare && !audioCache.has(entry.key) ? await isOfflineSaved(entry.track) : false;
-      const prepared = prepare ? await this.resolve(entry.track) : null;
+      const memory = !canServeCachedAudio() || this.wanted.slice(0, 2).some(item => item.key === entry.key);
+      const prepared = prepare ? await this.resolvePrepared(entry.track, memory) : null;
       if (this.generation !== generation) { prepared?.release(); return; }
       this.checked.add(entry.key);
       if (saved || prepared?.storage === 'offline') this.offlineReady.add(entry.key);
@@ -257,8 +301,8 @@ export class TrackPrefetcher {
       if (!stored) this.storageBlocked.add(entry.key);
       if (this.keep.has(entry.key)) {
         const nearest = this.wanted.slice(0, 2).some(item => item.key === entry.key) || entry.key === this.currentKey;
-        const prepared = stored && canServeCachedAudio() ? prepareCached(source, audioCacheUrl(entry.key), 'automatic')
-          : nearest ? prepareBlob(source, blob, stored ? 'automatic' : 'memory') : null;
+        const prepared = nearest ? prepareBlob(source, blob, stored ? 'automatic' : 'memory')
+          : stored && canServeCachedAudio() ? prepareCached(source, audioCacheUrl(entry.key), 'automatic') : null;
         if (prepared) { this.ready.get(entry.key)?.release(); this.ready.set(entry.key, prepared); }
       }
     } catch (error) {

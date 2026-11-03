@@ -53,6 +53,20 @@ local URLs it cannot serve. Without a capable worker, only the nearest two
 prepared files use page Blob URLs. Readiness checks still cover the full
 upcoming window and manually saved tracks.
 
+Active queue windows are protected across tabs using browser-owned Web Locks.
+Cache mutations rebuild their index under a shared mutation lock before
+eviction, so one tab cannot prune another tab's upcoming songs. Locks are
+released when a queue is cleared or a tab closes; a frozen tab retains its
+protection. The 320 MiB and 11-file limits apply to the shared cache. When
+protected windows fill that budget, further disk preparation stops instead
+of deleting another listener's buffer. Without Web Locks, automatic shared
+eviction is disabled.
+
+Readiness rechecks Cache Storage, and cross-tab changes invalidate stale local
+indexes. Only the nearest two upcoming tracks keep page Blob URLs, including
+when a capable worker is installed, so synchronous handoffs already have their
+bytes. Other cached tracks are checked and read before playback uses them.
+
 The same audio element advances directly from media events and store
 notifications. A missed handoff checks disk storage. A 20-second lack of
 progress triggers bounded recovery; explicit Pause and denied autoplay are

@@ -1106,10 +1106,17 @@
 /* The disclosed collection. A rule rather than a box: the tracks belong to the
    grid above them, so a second bordered container would read as a new section. */
 .discover-collection-panel {
+  scroll-margin-top: 1rem;
   margin-top: 1.25rem;
   padding-top: 1.25rem;
   border-top: 1px solid var(--line-subtle);
   min-width: 0;
+}
+
+@media (max-width: 768px) {
+  .discover-collection-panel {
+    scroll-margin-top: calc(var(--header-height) + 1rem);
+  }
 }
 
 /* ------------------------------------------------------------------ *
