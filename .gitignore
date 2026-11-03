@@ -26,3 +26,14 @@ Thumbs.db
 report.md
 interview.md
 .claude/
+test-results/
+playwright-report/
+
+# Local playback tests and their configuration
+/tests/
+/vitest.config.ts
+/playwright.config.ts
+
+native/playback/.build/
+native/playback/.swiftpm/
+native/playback/android/.gradle/

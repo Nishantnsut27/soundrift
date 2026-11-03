@@ -1,11 +1,7 @@
-const CACHE_NAME = 'soundrift-audio-v1';
-// Synthetic same-origin keys: they are only ever matched in Cache Storage and
-// never requested, so the service worker cannot intercept or cache them.
-const KEY_PATH = '/__soundrift-audio__/';
+import { AUDIO_CACHE_NAME, AUDIO_CACHE_PATH, AUDIO_POLICY, audioCacheUrl } from './audioPreparation';
+
 const SIZE_HEADER = 'x-soundrift-size';
 const STORED_AT_HEADER = 'x-soundrift-stored-at';
-const MAX_ENTRIES = 6;
-const MAX_BYTES = 80 * 1024 * 1024;
 
 interface CacheEntry {
   size: number;
@@ -13,13 +9,13 @@ interface CacheEntry {
 }
 
 function requestFor(key: string): Request {
-  return new Request(new URL(`${KEY_PATH}${encodeURIComponent(key)}`, window.location.origin).href);
+  return new Request(audioCacheUrl(key));
 }
 
 function keyOf(request: Request): string {
   const { pathname } = new URL(request.url);
-  if (!pathname.startsWith(KEY_PATH)) return '';
-  try { return decodeURIComponent(pathname.slice(KEY_PATH.length)); } catch { return ''; }
+  if (!pathname.startsWith(AUDIO_CACHE_PATH)) return '';
+  try { return decodeURIComponent(pathname.slice(AUDIO_CACHE_PATH.length)); } catch { return ''; }
 }
 
 function isQuotaError(error: unknown): boolean {
@@ -34,11 +30,26 @@ function isQuotaError(error: unknown): boolean {
  * failures surface as a plain rejected put(). Metadata lives in the stored
  * response headers, so the index rebuilds from the cache alone after a reload.
  */
-class AudioCache {
+export class AudioCache {
   private opening: Promise<Cache | null> | null = null;
   private readonly entries = new Map<string, CacheEntry>();
   private loaded = false;
   private writable = true;
+  private available = false;
+  private mutations: Promise<unknown> = Promise.resolve();
+  private byteBudget: number = AUDIO_POLICY.maxBytes;
+
+  get size() { return this.entries.size; }
+  get bytes() { return [...this.entries.values()].reduce((sum, entry) => sum + entry.size, 0); }
+
+  /** A later foreground/reconnect/window change may have freed device storage. */
+  retryWrites() { this.writable = this.available; }
+
+  private exclusive<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.mutations.then(operation);
+    this.mutations = result.catch(() => undefined);
+    return result;
+  }
 
   get isLoaded() { return this.loaded; }
 
@@ -53,7 +64,7 @@ class AudioCache {
   private async open(): Promise<Cache | null> {
     try {
       if (typeof caches === 'undefined') throw new Error('Cache Storage is unavailable.');
-      const cache = await caches.open(CACHE_NAME);
+      const cache = await caches.open(AUDIO_CACHE_NAME);
       for (const request of await cache.keys()) {
         const key = keyOf(request);
         const response = key ? await cache.match(request) : undefined;
@@ -63,6 +74,7 @@ class AudioCache {
           usedAt: Number(response.headers.get(STORED_AT_HEADER)) || 0,
         });
       }
+      this.available = true;
       return cache;
     } catch {
       this.writable = false;
@@ -94,8 +106,25 @@ class AudioCache {
   }
 
   async write(key: string, blob: Blob, keep: ReadonlySet<string>): Promise<boolean> {
+    return this.exclusive(() => this.writeEntry(key, blob, keep));
+  }
+
+  private async writeEntry(key: string, blob: Blob, keep: ReadonlySet<string>): Promise<boolean> {
     const cache = await this.load();
-    if (!cache || !this.writable || !(await this.makeRoom(blob.size, keep))) return false;
+    if (!cache || !this.writable || !blob.size || blob.size > AUDIO_POLICY.maxTrackBytes) return false;
+    try {
+      const estimate = await navigator.storage?.estimate();
+      if (estimate?.quota && estimate.usage !== undefined) {
+        this.byteBudget = Math.min(AUDIO_POLICY.maxBytes, Math.max(0,
+          Math.floor((estimate.quota - estimate.usage + this.bytes) * 0.85)));
+      }
+    } catch { /* The configured cap still applies without storage estimates. */ }
+    if (!(await this.makeRoom(blob.size, keep, key))) {
+      // Wait for a window/storage change before spending data on more files
+      // that cannot be retained. The nearest file can still live in memory.
+      this.writable = false;
+      return false;
+    }
     const put = () => cache.put(requestFor(key), new Response(blob, {
       headers: {
         'Content-Type': blob.type,
@@ -120,28 +149,40 @@ class AudioCache {
   }
 
   async remove(key: string): Promise<void> {
+    return this.exclusive(() => this.removeEntry(key));
+  }
+
+  private async removeEntry(key: string): Promise<void> {
+    const cache = await this.load();
     this.entries.delete(key);
-    try { await (await this.load())?.delete(requestFor(key)); } catch {
+    try { await cache?.delete(requestFor(key)); } catch {
       // A missing or unreachable entry is already as good as removed.
     }
   }
 
   /** Drops songs well behind the listener, then the least recently used beyond the caps. */
-  async prune(keep: ReadonlySet<string>, stale: ReadonlySet<string>): Promise<void> {
-    if (!this.loaded) await this.load();
-    await Promise.all([...stale].filter(key => !keep.has(key) && this.entries.has(key)).map(key => this.remove(key)));
-    await this.makeRoom(0, keep);
+  async prune(keep: ReadonlySet<string>): Promise<void> {
+    return this.exclusive(async () => {
+      if (!this.loaded) await this.load();
+      // Also remove obsolete queue windows; unchanged overlapping songs stay put.
+      for (const key of [...this.entries.keys()]) {
+        if (!keep.has(key)) await this.removeEntry(key);
+      }
+      await this.makeRoom(0, keep);
+      this.retryWrites();
+    });
   }
 
   /** Evicts until one more file of `size` bytes fits. False when kept files alone exceed the caps. */
-  private async makeRoom(size: number, keep: ReadonlySet<string>): Promise<boolean> {
-    const extra = size > 0 ? 1 : 0;
+  private async makeRoom(size: number, keep: ReadonlySet<string>, replacing = ''): Promise<boolean> {
+    const existing = this.entries.get(replacing);
+    const extra = size > 0 && !existing ? 1 : 0;
     const overLimit = () => {
-      let bytes = size;
+      let bytes = size - (existing?.size || 0);
       for (const entry of this.entries.values()) bytes += entry.size;
-      return this.entries.size + extra > MAX_ENTRIES || bytes > MAX_BYTES;
+      return this.entries.size + extra > AUDIO_POLICY.maxEntries || bytes > this.byteBudget;
     };
-    await this.evict(keep, overLimit);
+    await this.evict(new Set([...keep, replacing]), overLimit);
     return !overLimit();
   }
 
@@ -149,7 +190,7 @@ class AudioCache {
     const candidates = [...this.entries].filter(([key]) => !keep.has(key)).sort((a, b) => a[1].usedAt - b[1].usedAt);
     for (const [key] of candidates) {
       if (!shouldEvict()) return;
-      await this.remove(key);
+      await this.removeEntry(key);
     }
   }
 }

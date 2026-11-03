@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { usePlayerStore } from '../store/playerStore';
-import { seekAudio } from './usePlayer';
+import { seekBy } from './usePlayer';
 
 export function useKeyboardShortcuts() {
   useEffect(() => {
@@ -37,28 +37,13 @@ export function useKeyboardShortcuts() {
 
       if (key === 'ArrowLeft') {
         event.preventDefault();
-        if (store.currentTrack) {
-          seekAudio(Math.max(0, store.currentTime - 5));
-        }
+        seekBy(-5);
         return;
       }
 
       if (key === 'ArrowRight') {
         event.preventDefault();
-        if (store.currentTrack) {
-          const targetTime = store.currentTime + 5;
-          const duration = store.duration || 0;
-
-          if (duration > 0 && targetTime >= duration) {
-            if (store.repeatMode === 'one') {
-              seekAudio(0);
-            } else {
-              store.nextTrack();
-            }
-          } else {
-            seekAudio(targetTime);
-          }
-        }
+        seekBy(5);
         return;
       }
 

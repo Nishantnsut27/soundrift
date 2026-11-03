@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { Track } from '../types/types';
+import type { QueueEntry, Track } from '../types/types';
 import { usePlayerStore } from '../store/playerStore';
 import { useAuthStore } from '../store/authStore';
 import { useToastStore } from '../store/toastStore';
@@ -48,6 +48,25 @@ export function TrackContextMenu({
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
   const [offlineSaved, setOfflineSaved] = useState(false);
   const [offlineBusy, setOfflineBusy] = useState(false);
+  const [offlinePending, setOfflinePending] = useState(true);
+  const [offlineUnavailable, setOfflineUnavailable] = useState(false);
+  const operationRef = useRef(0);
+  const trackRef = useRef(track);
+  const identity = JSON.stringify([track.provider, String(track.id), (track as Partial<QueueEntry>).queueEntryId]);
+
+  useLayoutEffect(() => { trackRef.current = track; }, [track]);
+  useLayoutEffect(() => {
+    if (menuRef.current?.contains(document.activeElement)) triggerRef.current?.focus();
+    setIsOpen(false);
+    setIsPlaylistsOpen(false);
+    setIsCreating(false);
+    setNewPlaylistName('');
+    setOfflineSaved(false);
+    setOfflineBusy(false);
+    setOfflinePending(true);
+    // Invalidate an old song's asynchronous work, including on unmount.
+    return () => { operationRef.current += 1; };
+  }, [identity]);
 
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const playlists = usePlayerStore((state) => state.playlists);
@@ -65,11 +84,27 @@ export function TrackContextMenu({
   useEffect(() => {
     if (!isOpen) return;
     let active = true;
-    void isOfflineSaved(track).then((saved) => {
-      if (active) setOfflineSaved(saved);
-    });
-    return () => { active = false; };
-  }, [isOpen, track]);
+    let request = 0;
+    const refresh = async () => {
+      const current = ++request;
+      setOfflinePending(true);
+      setOfflineUnavailable(false);
+      try {
+        const saved = await isOfflineSaved(trackRef.current);
+        if (active && current === request) setOfflineSaved(saved);
+      } catch {
+        if (active && current === request) setOfflineUnavailable(true);
+      } finally {
+        if (active && current === request) setOfflinePending(false);
+      }
+    };
+    void refresh();
+    window.addEventListener('soundrift-offline-library-changed', refresh);
+    return () => {
+      active = false;
+      window.removeEventListener('soundrift-offline-library-changed', refresh);
+    };
+  }, [isOpen, identity]);
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth <= MOBILE_BREAKPOINT);
@@ -226,26 +261,31 @@ export function TrackContextMenu({
   }
 
   async function handleToggleOffline() {
+    if (offlineBusy || offlinePending || offlineUnavailable) return;
+    const operation = ++operationRef.current;
     setOfflineBusy(true);
     try {
       if (offlineSaved) {
         await removeOfflineTrack(track);
+        if (operation !== operationRef.current) return;
         setOfflineSaved(false);
         addToast({ type: 'info', message: `Removed from offline music: ${track.name}` });
       } else {
         await saveOfflineTrack(track);
+        if (operation !== operationRef.current) return;
         setOfflineSaved(true);
         addToast({ type: 'success', message: `Available offline: ${track.name}` });
       }
       closeAndRestoreFocus();
     } catch (error) {
+      if (operation !== operationRef.current) return;
       addToast({
         type: 'error',
         title: 'Offline save failed',
         message: error instanceof Error ? error.message : 'Soundrift could not save this track offline.',
       });
     } finally {
-      setOfflineBusy(false);
+      if (operation === operationRef.current) setOfflineBusy(false);
     }
   }
 
@@ -303,9 +343,9 @@ export function TrackContextMenu({
 
           <div className="action-menu-divider" role="separator" />
 
-          <button type="button" role="menuitem" data-menu-item className="action-menu-item" disabled={offlineBusy} onClick={() => void handleToggleOffline()}>
+          <button type="button" role="menuitem" data-menu-item className="action-menu-item" disabled={offlineBusy || offlinePending || offlineUnavailable} onClick={() => void handleToggleOffline()}>
             <DownloadIcon />
-            <span>{offlineBusy ? 'Saving offline…' : offlineSaved ? 'Remove from offline' : 'Make available offline'}</span>
+            <span>{offlineBusy ? 'Saving offline…' : offlinePending ? 'Checking offline status…' : offlineUnavailable ? 'Offline status unavailable' : offlineSaved ? 'Remove from offline' : 'Make available offline'}</span>
           </button>
 
           <button type="button" role="menuitem" data-menu-item className="action-menu-item" onClick={() => run(handleToggleFavorite)}>

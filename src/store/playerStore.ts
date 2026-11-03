@@ -24,17 +24,17 @@ import { getSkipQueuePosition, stepBackInShuffle } from '../utils/queuePlayback'
 const SINGLE_CONTEXT: QueueContext = { kind: 'single' };
 
 let queueEntryCounter = 0;
+const queueInstanceId = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
 /**
  * Stamps a track with an identity for its position in the queue.
  *
- * A counter rather than a uuid because the queue is session state that is never
- * persisted or sent anywhere — uniqueness only has to hold for this tab's
- * lifetime, and a counter is cheaper and easier to read while debugging.
+ * A page-specific prefix prevents collisions when reconnecting to a native
+ * queue that survived a WebView reload. The counter distinguishes repeats.
  */
 function toQueueEntry(track: Track): QueueEntry {
   queueEntryCounter += 1;
-  return { ...track, queueEntryId: `q${queueEntryCounter}` };
+  return { ...track, queueEntryId: `${queueInstanceId}:q${queueEntryCounter}` };
 }
 
 function toQueueEntries(tracks: Track[]): QueueEntry[] {

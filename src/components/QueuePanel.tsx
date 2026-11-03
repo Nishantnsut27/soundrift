@@ -3,6 +3,7 @@ import { usePlayerStore } from '../store/playerStore';
 import { formatDuration, formatArtistNames } from '../utils/formatters';
 import { FALLBACK_ART } from '../utils/artwork';
 import type { QueueContext, QueueEntry } from '../types/types';
+import { AudioBufferStatus } from './AudioBufferStatus';
 
 function contextLabel(context: QueueContext): string {
   switch (context.kind) {
@@ -118,6 +119,7 @@ export function QueuePanel() {
           <div className="queue-panel-titles">
             <h2 className="queue-panel-title">Queue</h2>
             <p className="queue-panel-context truncate">{contextLabel(queueContext)}</p>
+            <AudioBufferStatus />
           </div>
 
           <div className="queue-panel-head-actions">

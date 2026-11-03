@@ -39,6 +39,4 @@ export const PLAYER_DEFAULTS = {
   SEARCH_DEBOUNCE_MS: 500,
   DEFAULT_SEARCH_LIMIT: 20,
   DEFAULT_TRENDING_LIMIT: 25,
-  /** Upcoming songs downloaded to the device so a locked phone can play on. */
-  PREFETCH_TRACK_COUNT: 3,
 } as const;

@@ -43,6 +43,7 @@ export default defineConfig({
         ],
       },
       workbox: {
+        importScripts: ['/audio-cache-worker.js'],
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,woff,ttf}'],
         runtimeCaching: [
           {
