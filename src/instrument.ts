@@ -28,4 +28,12 @@ if (sentryEnabled) {
       stackFrameVariables: false,
     },
   })
+
+  // Temporary production verification; only the explicit test URL triggers this.
+  if (window.location.hash === '#sentry-verify-20261104-c93a74b1') {
+    window.history.replaceState(window.history.state, '', window.location.pathname + window.location.search)
+    window.setTimeout(() => {
+      throw new Error('Soundrift frontend Sentry verification 20261104-c93a74b1')
+    }, 1000)
+  }
 }
