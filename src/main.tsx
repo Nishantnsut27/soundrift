@@ -1,5 +1,7 @@
+import { sentryEnabled } from './instrument'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { reactErrorHandler } from '@sentry/react'
 import { Toaster } from 'sonner'
 import './index.css'
 import App from './App.tsx'
@@ -8,7 +10,15 @@ import { initializePlayer } from './services/playerPlayback'
 
 initializePlayer()
 
-createRoot(document.getElementById('root')!).render(
+createRoot(document.getElementById('root')!, sentryEnabled ? {
+  onUncaughtError: reactErrorHandler((error, errorInfo) => {
+    console.error('Unhandled React Error:', error, errorInfo)
+  }),
+  onCaughtError: reactErrorHandler(),
+  onRecoverableError: reactErrorHandler((error, errorInfo) => {
+    console.error('Recoverable React Error:', error, errorInfo)
+  }),
+} : undefined).render(
   <StrictMode>
     <PwaProvider />
     <App />

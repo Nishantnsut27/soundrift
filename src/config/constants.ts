@@ -1,6 +1,6 @@
 /* The one backend host for music, auth and user calls. Auth cookies are set by
    this host (the Google OAuth callback lives there), so the fallback must match it. */
-export const BACKEND_URL = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env?.VITE_API_URL || 'https://notify-music.onrender.com';
+export const BACKEND_URL = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env?.VITE_API_URL || 'https://api.soundrift.tech';
 export const API_BASE_URL = `${BACKEND_URL}/api/music`;
 
 export const API_ENDPOINTS = {

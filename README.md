@@ -252,6 +252,30 @@ Set `VITE_API_URL` to the deployed backend origin before building the frontend. 
 
 The backend process runs scheduled curation, so refresh timing depends on it being awake. Startup catch-up handles missed slots after restarts or host suspension. PWA installation and offline caching require a secure browser context, such as HTTPS or localhost.
 
+### Sentry monitoring
+
+The React frontend and Express backend report to separate projects in the `nishant-or` Sentry organization: `soundrift-frontend` and `soundrift-backend`. Reporting is enabled when each service's DSN is set.
+
+Add these values in the hosting dashboards' environment-variable settings, then redeploy:
+
+| Host | Variable | Value |
+| --- | --- | --- |
+| Vercel | `VITE_SENTRY_DSN` | Frontend project's DSN from Sentry Client Keys |
+| Vercel | `VITE_SENTRY_ENVIRONMENT` | `production` |
+| Vercel | `VITE_SENTRY_TRACES_SAMPLE_RATE` | `0.1` |
+| Vercel | `SENTRY_ORG` | `nishant-or` |
+| Vercel | `SENTRY_PROJECT` | `soundrift-frontend` |
+| Vercel | `SENTRY_AUTH_TOKEN` | Organization auth token for source-map/release uploads |
+| Render | `SENTRY_DSN` | Backend project's DSN from Sentry Client Keys |
+| Render | `SENTRY_ENVIRONMENT` | `production` |
+| Render | `SENTRY_TRACES_SAMPLE_RATE` | `0.1` |
+
+Keep `SENTRY_AUTH_TOKEN` secret and never prefix it with `VITE_`. The frontend build uploads source maps to Sentry and deletes the maps from `dist/` afterward. Missing upload credentials produce a build warning; error reporting still works, but minified browser stack traces will not be readable.
+
+Use `npm start` as Render's start command, with `backend/` as the service root. It preloads Sentry before Express and enables Node source maps; retain the generated backend `.map` files. Releases use `VERCEL_GIT_COMMIT_SHA` and `RENDER_GIT_COMMIT` automatically. `VITE_SENTRY_RELEASE` and `SENTRY_RELEASE` are optional overrides.
+
+For local development, use the root `.env` for frontend values and `backend/.env` for backend values, with the Sentry environment set to `development`. Restart the app after changing these values. Error events are not sampled; the trace sample rate only controls performance data. Expected backend 4xx errors are excluded from error reporting.
+
 ## Keyboard Shortcuts
 
 | Key | Action |

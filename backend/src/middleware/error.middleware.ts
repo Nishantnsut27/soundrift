@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import mongoose from 'mongoose';
 import multer from 'multer';
+import * as Sentry from '@sentry/node';
 import { AppError } from '../utils/AppError.js';
 
 const GENERIC_ERROR_MESSAGE = 'An internal server error occurred while processing your request.';
@@ -39,12 +40,15 @@ const classifyError = (err: any): { statusCode: number; message: string; code?: 
 export function errorHandlerMiddleware(err: any, _req: Request, res: Response, next: NextFunction): void {
   console.error('[BackendServerError]', err?.name || 'Error', err?.message || err);
 
+  const { statusCode, message, code } = classifyError(err);
+  if (statusCode >= 500) {
+    Sentry.captureException(err);
+  }
+
   if (res.headersSent) {
     next(err);
     return;
   }
-
-  const { statusCode, message, code } = classifyError(err);
 
   res.status(statusCode).json({
     success: false,

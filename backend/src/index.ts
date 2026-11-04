@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
+import * as Sentry from '@sentry/node';
 import { config, validateConfig } from './config/config.js';
 import { connectDatabase, disconnectDatabase, getDatabaseState } from './config/database.js';
 import { musicRouter } from './routes/musicRoutes.js';
@@ -53,7 +54,7 @@ const corsOptions: cors.CorsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'sentry-trace', 'baggage', 'traceparent'],
   maxAge: 86400,
 };
 
@@ -122,13 +123,18 @@ const startServer = async () => {
       curationScheduler.stop();
       setTimeout(() => process.exit(1), SHUTDOWN_TIMEOUT_MS).unref();
       server.close(() => {
-        disconnectDatabase().finally(() => process.exit(0));
+        disconnectDatabase().finally(async () => {
+          await Sentry.close(2000);
+          process.exit(0);
+        });
       });
     };
     process.once('SIGINT', shutdown);
     process.once('SIGTERM', shutdown);
   } catch (err) {
+    Sentry.captureException(err);
     console.error('💥 Fatal Startup Failure:', err);
+    await Sentry.flush(2000);
     process.exit(1);
   }
 };

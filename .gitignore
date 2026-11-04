@@ -28,6 +28,7 @@ interview.md
 .claude/
 test-results/
 playwright-report/
+/.sentry-local/
 
 # Local playback tests and their configuration
 /tests/
