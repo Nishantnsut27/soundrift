@@ -86,25 +86,6 @@ app.get('/health', healthLimiter, (_req, res) => {
   });
 });
 
-// Temporary production verification; remove after confirming the Sentry event.
-const sentryVerificationPath = '/api/__sentry_verify_20261104_c93a74b1';
-let sentryVerificationTriggered = false;
-app.get(sentryVerificationPath, healthLimiter, (_req, res) => {
-  res.json({ enabled: Sentry.isEnabled(), triggered: sentryVerificationTriggered });
-});
-app.post(sentryVerificationPath, healthLimiter, (_req, res) => {
-  if (!Sentry.isEnabled()) {
-    res.status(503).json({ error: 'Sentry is not enabled in this backend process.' });
-    return;
-  }
-  if (sentryVerificationTriggered) {
-    res.status(409).json({ error: 'Verification already triggered in this backend process.' });
-    return;
-  }
-  sentryVerificationTriggered = true;
-  throw new Error('Soundrift backend Sentry verification 20261104-c93a74b1');
-});
-
 // API Routes
 app.use('/api/auth', authRouter);
 app.use('/api/user', userRouter);
